@@ -150,3 +150,12 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
 - **Busca por significado**: lista de sinónimos de serie (minino/gato, medicina/pastilla, móvil/teléfono…) y sinónimos
   que aprende: tú con `parecido: minino = gato, felino`, o el **modelo del móvil** cuando no encuentra una palabra
   en una pregunta sobre tus cosas (nunca gasta Claude para esto). Cada palabra se pregunta una sola vez y se guarda.
+
+## Estudio: Kira aprende sola, sin la API (nuevo)
+- `estudio_kira.py`: `estudia: tema` lee los resúmenes de la Wikipedia en español que mejor encajan y los guarda en el
+  baúl con su fuente. `estudia python` / `estudia python: json` guarda la documentación de Python que trae el propio
+  móvil (sin internet; solo módulos de una lista segura). `aprende sola` recorre un plan de 40 temas (programación,
+  sistemas, redes, ciberseguridad, IA, vídeo…) a razón de uno cada 10 minutos mientras la app está abierta.
+- Lo aprendido se responde desde el baúl sin preguntar a ninguna IA. Lo bajado de internet nunca se pasa a una IA.
+- `red_kira.py`: https con los certificados de `certifi` (en Android Python a veces no encuentra los del sistema).
+- Pruebas: `tests/test_estudio.py`.

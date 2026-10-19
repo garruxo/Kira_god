@@ -64,8 +64,12 @@ class KiraGodCore:
             import recuerdos_kira
             self.recuerdos = recuerdos_kira.Recuerdos(os.path.join(self.dir, "recuerdos"))
             self.recuerdos.ampliar = self._ampliar_con_modelo
+            import estudio_kira
+            self.estudio = estudio_kira.Estudiante(self.recuerdos, os.path.join(self.dir, "estudio.json"))
+            self.estudio.arrancar()                # si le dijiste «aprende sola», sigue estudiando
         except Exception as e:
             self.recuerdos = None
+            self.estudio = None
             logger.error(f"No se pudo abrir el baúl de recuerdos: {e}")
         self.cargar_modulos()
 
@@ -426,7 +430,8 @@ class KiraGodCore:
             headers={"content-type": "application/json", "x-api-key": clave,
                      "anthropic-version": "2023-06-01"})
         try:
-            with urllib.request.urlopen(req, timeout=90) as r:
+            import red_kira
+            with red_kira.abrir(req, timeout=90) as r:
                 datos = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"La API respondió {e.code} (revisa clave y modelo)")
@@ -480,6 +485,41 @@ class KiraGodCore:
         if m:
             return recuerdos_kira.texto_lista(rec.buscar(m.group(1), n=5))
         return rec.estado_texto()
+
+    def _orden_estudio(self, command, cmd_lower):
+        est = getattr(self, "estudio", None)
+        if est is None:
+            return "[x] No puedo estudiar: el baúl de recuerdos no está disponible."
+        if cmd_lower.startswith("aprende sola"):
+            est.poner_sola(True)
+            return ("[OK] Voy a estudiar sola: un tema del plan cada 10 minutos mientras la app esté abierta, y lo "
+                    "guardo en mi baúl. «deja de aprender» para parar; «plan de estudio» para ver por dónde voy.")
+        if cmd_lower.startswith("deja de aprender"):
+            est.poner_sola(False)
+            return "[OK] Dejo de estudiar sola. Lo aprendido se queda en mi baúl."
+        if cmd_lower.startswith("plan de estudio"):
+            return est.texto_plan()
+        m = re.match(r"^estudia\s+python\s*:?\s*([a-z_.]*)\s*$", cmd_lower)
+        if m:
+            try:
+                n = est.estudiar_python(m.group(1) or None)
+            except ValueError as e:
+                return f"[x] {e}"
+            return (f"[OK] He leído la documentación de Python{' de ' + m.group(1) if m.group(1) else ''} que trae el "
+                    f"móvil: {n} ficha(s) nuevas. Pregúntame, por ejemplo: «qué hace json.loads».")
+        m = re.match(r"^estudia\s*:?\s*(.+)$", command.strip(), re.I)
+        if m:
+            try:
+                titulos = est.estudiar(m.group(1))
+            except ValueError as e:
+                return f"[x] {e}"
+            except Exception as e:
+                return f"[x] No pude conectar con la Wikipedia ({str(e)[:120]}). ¿Hay internet?"
+            if not titulos:
+                return "[i] No he encontrado nada nuevo sobre eso (o ya lo sabía)."
+            return ("[OK] He estudiado y guardado: " + "; ".join(titulos) + ". (Fuente: Wikipedia.) "
+                    "Pregúntame sobre ello cuando quieras.")
+        return est.estado_texto() + "\n" + (self.recuerdos.estado_texto() if self.recuerdos else "")
 
     # ---------- acciones con confirmación ----------
     def _ejecutar_pendiente(self):
@@ -616,6 +656,8 @@ class KiraGodCore:
         elif cmd_lower in ("recuerdos", "baul", "baúl", "baúl de recuerdos", "baul de recuerdos") or \
                 re.match(r"^(?:guarda recuerdo|qu[eé] recuerdas de|recuerdos de|busca en tus recuerdos|olvida recuerdo|parecido)\b", cmd_lower):
             return self._orden_recuerdos(command, cmd_lower)
+        elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):
+            return self._orden_estudio(command, cmd_lower)
         elif cmd_lower in ("capacidades", "que te falta", "qué te falta"):
             import capacidades_kira as cap
             return cap.texto_informe(cap.informe(self.hechos_capacidades()))

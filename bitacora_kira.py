@@ -175,6 +175,8 @@ MAPA = {
     "herramientas_pc/comprobar_antes_de_compilar.py": "revisión rápida antes de compilar",
     "cerebro_ia_kira.py": "elige el cerebro de IA: modelo local (llama.cpp) o Claude",
     "mejoras_ia_kira.py": "ayudas para que la IA escriba bien las mejoras (ejemplos, revisión previa)",
+    "estudio_kira.py": "Kira estudia sola: Wikipedia, documentación de Python del móvil y plan de estudio",
+    "red_kira.py": "conexiones https con los certificados correctos en Android",
     "recuerdos_kira.py": "baúl de recuerdos en disco: índice, firmas, buscar sin cargar todo en la RAM",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }

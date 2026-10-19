@@ -49,7 +49,7 @@ PARADA = set(
     "estos está están estás estoy se me te mi mis tu tus su sus nos por para con sin lo le les como cómo cual cuál "
     "cuales quien quién quienes sobre mas más muy ya no si sí hay pero porque cuando donde dónde cuanto cuánto "
     "dime di sabes sabe puedes puede hola gracias vale bueno pues tambien también algo eso esa ese ahi ahí aqui aquí "
-    "yo tú él ella ellos usted kira".split())
+    "yo tú él ella ellos usted kira hace hacer hacen sirve sirven funciona significa explica explícame cuenta".split())
 
 
 # ---------- palabras ----------

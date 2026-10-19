@@ -186,7 +186,8 @@ def _pedir_json(url, timeout=8):
     if not url.startswith("https://es.wikipedia.org/"):
         raise ValueError("dominio no permitido")
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    import red_kira
+    with red_kira.abrir(req, timeout=timeout) as r:
         return json.loads(r.read(MAX_BYTES).decode("utf-8"))
 
 
