@@ -1,0 +1,5 @@
+__pycache__/
+datos/
+token_lab.txt
+sellos.json
+*.log

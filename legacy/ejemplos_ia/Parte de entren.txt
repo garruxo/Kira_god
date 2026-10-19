@@ -1,0 +1,40 @@
+﻿Parte de entrenamiento ia
+
+from transformers import AutoTokenizer
+
+def preparar_texto_para_ia(texto: str, nombre_modelo: str = "bert-base-uncased") -> dict:
+    """
+    Descarga un tokenizador industrial y transforma texto plano en tensores numéricos.
+    """
+    # 1. Descargar el tokenizador oficial del modelo (ej. BERT)
+    tokenizer = AutoTokenizer.from_pretrained(nombre_modelo)
+    
+    # 2. Procesar el texto
+    # truncation: Corta el texto si es muy largo.
+    # padding: Rellena con ceros si el texto es corto para que todos midan lo mismo.
+    resultado_tokens = tokenizer(
+        texto,
+        padding="max_length",
+        max_length=12,
+        truncation=True,
+        return_tensors="pt" # Devuelve tensores de PyTorch
+    )
+    
+    return {
+        "texto_original": texto,
+        "tokens": tokenizer.tokenize(texto),
+        "input_ids": resultado_tokens["input_ids"][0].tolist(),
+        "tensor_final": resultado_tokens["input_ids"]
+    }
+
+# --- Ejecución del código de procesamiento ---
+if __name__ == "__main__":
+    frase_usuario = "I love learning artificial intelligence."
+    
+    datos_procesados = preparar_texto_para_ia(frase_usuario)
+    
+    print(f"1. Texto original: '{datos_procesados['texto_original']}'\n")
+    print(f"2. Fragmentación en Tokens:\n{datos_procesados['tokens']}\n")
+    print(f"3. IDs numéricos (Lo que la IA realmente lee):\n{datos_procesados['input_ids']}")
+
+

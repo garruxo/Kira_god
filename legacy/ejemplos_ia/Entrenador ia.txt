@@ -1,0 +1,45 @@
+﻿Entrenador ia
+
+import torch
+import torch.nn.functional as F
+
+@torch.no_grad() # Desactiva el cálculo matemático de entrenamiento (ahorra RAM y velocidad)
+def predecir_sentimiento_ia(modelo, texto_tokenizado) -> dict:
+    """
+    Toma un modelo de IA y datos nuevos para generar una predicción final.
+    """
+    # 1. Asegurar que el modelo esté en modo evaluación (Inferencia)
+    modelo.eval()
+    
+    # 2. Pasar el tensor por la red neuronal
+    predicciones_crudas = modelo(texto_tokenizado)
+    
+    # 3. Convertir las salidas crudas (logits) en probabilidades porcentuales (0% a 100%)
+    probabilidades = F.softmax(predicciones_crudas, dim=-1)
+    
+    # 4. Obtener la clase con la probabilidad más alta
+    clase_predicha = torch.argmax(probabilidades, dim=-1).item()
+    
+    resultado = {
+        "clase_id": clase_predicha,
+        "etiqueta": "Positivo" if clase_predicha == 1 else "Negativo",
+        "confianza": probabilidades[clase_predicha].item() * 100
+    }
+    
+    return resultado
+
+# --- Simulación de Inferencia ---
+if __name__ == "__main__":
+    # Importamos el modelo simulado que creamos en los pasos anteriores
+    from __main__ import modelo_ia
+    
+    # Simulamos un texto ya procesado listo para entrar a la IA
+    tensor_de_entrada = torch.randint(0, 5000, (1, 10)) 
+    
+    # Ejecutamos la predicción
+    diagnostico_ia = predecir_sentimiento_ia(modelo_ia, tensor_de_entrada)
+    
+    print("--- Resultado de la Inferencia de la IA ---")
+    print(f"Predicción del modelo: {diagnostico_ia['etiqueta']}")
+    print(f"Nivel de certeza física: {diagnostico_ia['confianza']:.2f}%")
+

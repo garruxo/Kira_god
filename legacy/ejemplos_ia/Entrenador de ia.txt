@@ -1,0 +1,57 @@
+﻿Entrenador de ia
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# [Suponemos que la clase ClasificadorTextoIA del paso anterior ya está importada]
+class ClasificadorTextoIA(nn.Module):
+    def __init__(self, vocab_size, embed_dim, hidden_dim):
+        super(ClasificadorTextoIA, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, 2)
+        
+    def forward(self, x):
+        emb = self.embedding(x)
+        _, (h, _) = self.lstm(emb)
+        return self.fc(h[-1])
+
+# 1. Inicialización de Componentes
+VOCAB_SIZE, EMBED_DIM, HIDDEN_DIM = 5000, 128, 256
+modelo_ia = ClasificadorTextoIA(VOCAB_SIZE, EMBED_DIM, HIDDEN_DIM)
+
+criterio_perdida = nn.CrossEntropyLoss()
+optimizador = optim.Adam(modelo_ia.parameters(), lr=0.005)
+
+# 2. Simulación de Datos Reales de Producción
+# En la realidad, estos números representan frases procesadas de usuarios
+# Lote (Batch) de 4 textos, cada uno con una longitud de 10 palabras
+datos_de_entrada = torch.randint(0, VOCAB_SIZE, (4, 10)) 
+etiquetas_reales = torch.tensor([1, 0, 1, 0]) # 1 = Positivo, 0 = Negativo
+
+# 3. Ciclo de Entrenamiento (Epochs)
+EPOCHS = 5
+print("--- Iniciando Entrenamiento con Datos Reales ---")
+
+for epoch in range(EPOCHS):
+    # Poner el modelo en modo entrenamiento
+    modelo_ia.train()
+    
+    # A. Resetear los gradientes del optimizador para evitar acumulaciones
+    optimizador.zero_grad()
+    
+    # B. Forward Pass: La IA procesa los datos y genera predicciones
+    predicciones = modelo_ia(datos_de_entrada)
+    
+    # C. Calcular la Pérdida: Evaluamos matemáticamente el error cometido
+    perdida = criterio_perdida(predicciones, etiquetas_reales)
+    
+    # D. Backward Pass: La magia de la IA. El error viaja hacia atrás
+    perdida.backward()
+    
+    # E. Actualización: El optimizador ajusta los pesos de la red
+    optimizador.step()
+    
+    print(f"Época [{epoch+1}/{EPOCHS}] -> Error del Modelo (Loss): {perdida.item():.4f}")
+
+print("\n¡Entrenamiento completado!")
