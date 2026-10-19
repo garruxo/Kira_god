@@ -262,7 +262,13 @@ if KIVY_AVAILABLE:
                 return consola
 
         def on_pause(self):
+            if hasattr(self, "kira_god"):
+                self.kira_god.en_segundo_plano = True     # sigue oyendo y contesta por voz (servicio «siempre activa»)
             return True                       # al cambiar de app, Kira se pausa (no se cierra)
+
+        def on_resume(self):
+            if hasattr(self, "kira_god"):
+                self.kira_god.en_segundo_plano = False
 
         def on_stop(self):
             for pieza in ("cerebro_propio", "oido"):

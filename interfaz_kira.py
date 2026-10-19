@@ -321,7 +321,25 @@ def construir_interfaz(core, consola=None):
         return ajustes.oido_propio and oido.disponible()
 
     def al_frase_oido(texto):                          # llega desde el hilo de Java: se pasa al de la pantalla
+        if getattr(core, "en_segundo_plano", False):    # estás en otra app: la pantalla de Kira está en pausa
+            threading.Thread(target=frase_en_segundo_plano, args=(texto,), daemon=True).start()
+            return
         Clock.schedule_once(lambda _dt, t_=texto: procesar_frase(t_), 0)
+
+    def frase_en_segundo_plano(texto):
+        """Kira te oye mientras usas otra app: contesta en voz alta, sin tocar la pantalla."""
+        que, orden = escucha.oir(texto)
+        if que == "atenta":
+            voz.hablar("¿Sí? Dime.")
+        elif que == "orden":
+            try:
+                oido.pausar(True)
+                r, _via = conv.preguntar(orden)
+                voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
+            except Exception as e:
+                voz.hablar(f"No he podido: {e}")
+            finally:
+                oido.pausar(False)
 
     def arrancar_escucha():
         if st["esc_reloj"] is not None:

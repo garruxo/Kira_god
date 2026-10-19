@@ -17,6 +17,7 @@ def montar_cerebro(sm, p):
     boton, texto_largo, pantalla = p["boton"], p["texto_largo"], p["pantalla"]
     TXT, TENUE, GRIS, VERDE, ROJO, NEON, FUENTE = (p[k] for k in ("TXT", "TENUE", "GRIS", "VERDE", "ROJO", "NEON", "FUENTE"))
     core, oido, ajustes = p["core"], p["oido"], p["ajustes"]
+    vista = core.vista
     cerebro = core.cerebro_propio
     est = {"reloj": None, "aviso": ""}
 
@@ -58,6 +59,22 @@ def montar_cerebro(sm, p):
     fila3.add_widget(btn_oid)
     fila3.add_widget(btn_uso)
     c.add_widget(fila3)
+    c.add_widget(titulo("SIEMPRE ACTIVA Y VER LA PANTALLA"))
+    lb_vis = etiqueta(56)
+    c.add_widget(lb_vis)
+    fila4 = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+    btn_siempre = boton("", lambda: alternar_siempre(), GRIS, alto=44)
+    btn_ver = boton("Dejar que vea la pantalla", lambda: pedir_ver(), GRIS, alto=44)
+    fila4.add_widget(btn_siempre)
+    fila4.add_widget(btn_ver)
+    c.add_widget(fila4)
+    fila5 = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+    btn_acc = boton("Permiso para saber qué app usas", lambda: vista.java and vista.java.abrir_ajustes_uso(), GRIS, alto=44)
+    fila5.add_widget(btn_acc)
+    fila5.add_widget(boton("Apps privadas", lambda: setattr(ayuda, "text", core.procesar_orden("apps privadas")
+                                                             + "\n\nPara añadir otra: ábrela y di «Kira, no mires esta app»."),
+                           GRIS, alto=44))
+    c.add_widget(fila5)
     sv, ayuda = texto_largo(
         "Con el cerebro propio Kira charla y programa SIN internet, sin clave y sin Termux. Se descarga UNA vez "
         "(mejor con WiFi y el móvil enchufado) y se enciende sola cada vez que abres Kira. El ligero responde antes; "
@@ -94,6 +111,20 @@ def montar_cerebro(sm, p):
             lb_oid.text = "Sin oído propio: Kira usa el reconocedor de Android (con sus pitidos)."
         btn_oid.disabled = oido.modelo_instalado() or oido.estado == "descargando"
         btn_uso.text = "Usar oído propio: " + ("SÍ" if ajustes.oido_propio else "NO")
+        btn_siempre.text = "Siempre activa: " + ("SÍ" if vista.siempre_activa else "NO")
+        if not vista.disponible():
+            lb_vis.text = "Esto solo funciona en el móvil."
+        else:
+            ver = vista.puede_ver()
+            uso = False
+            try:
+                uso = vista.java.acceso_uso()
+            except Exception:
+                pass
+            lb_vis.text = ("Puede ver la pantalla cuando se lo pidas («Kira, ¿qué ves?»)." if ver else
+                           "No ve la pantalla (Android te pedirá permiso).") + \
+                          (f" Apps privadas: {len(vista.privadas)}." + ("" if uso else " Falta el permiso para saber qué app usas."))
+            btn_ver.disabled = ver
 
     def descargar(id_):
         if cerebro.modelo_instalado(id_):
@@ -139,6 +170,28 @@ def montar_cerebro(sm, p):
                 pass
         threading.Thread(target=trabajo, daemon=True).start()
         pintar()
+
+    def permiso_notificaciones():
+        try:
+            from android.permissions import Permission, check_permission, request_permissions
+            if hasattr(Permission, "POST_NOTIFICATIONS") and not check_permission(Permission.POST_NOTIFICATIONS):
+                request_permissions([Permission.POST_NOTIFICATIONS])
+        except Exception:
+            pass
+
+    def alternar_siempre():
+        permiso_notificaciones()
+        vista.poner_siempre_activa(not vista.siempre_activa)
+        pintar()
+
+    def pedir_ver():
+        if vista.java is None:
+            return
+        permiso_notificaciones()
+        est["aviso"] = "Android te va a pedir permiso para que Kira vea la pantalla."
+        vista.java.pedir_permiso(lambda ok: Clock.schedule_once(lambda _dt: (est.update(
+            aviso="Ya puedo ver la pantalla cuando me lo pidas." if ok else "No me diste permiso para ver la pantalla."),
+            pintar()), 0.5))
 
     def alternar_oido():
         ajustes.alternar_oido()

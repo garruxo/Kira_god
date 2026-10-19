@@ -66,6 +66,14 @@ class KiraGodCore:
         self.cerebro_ia = cerebro_ia_kira.Cerebro(self.dir)
         import lector_kira                       # lee texto y código de imágenes (Tesseract, dentro del móvil)
         self.lector = lector_kira.Lector(self.dir)
+        import vista_kira                        # ver la pantalla (con tu permiso) y estar siempre activa
+        self.vista = vista_kira.Vista(self.dir, vista_kira.java_android())
+        self.en_segundo_plano = False
+        if self.vista.siempre_activa and self.vista.disponible():
+            try:
+                self.vista.poner_siempre_activa(True)
+            except Exception as e:
+                logger.error(f"No se pudo activar el servicio: {e}")
         import cerebro_propio_kira               # el cerebro DENTRO de la app (sin Termux ni API)
         self.cerebro_propio = cerebro_propio_kira.CerebroPropio(self.dir)
         if self.cerebro_propio.auto and self.cerebro_propio.modelo_instalado() and self.cerebro_propio.tiene_motor():
@@ -491,6 +499,34 @@ class KiraGodCore:
         c = self._clave_para("codigo")
         return "local" if c == cerebro_ia_kira.LOCAL else ("claude" if c else None)
 
+    def _orden_vista(self, cmd_lower):
+        import lector_kira as lk
+        import vista_kira as vk
+        v = self.vista
+        if cmd_lower.startswith("apps") or cmd_lower.startswith("app "):
+            return "Apps privadas (Kira no las mira):\n" + "\n".join("- " + p for p in v.privadas)
+        if cmd_lower.startswith(("no mires", "puedes mirar")):
+            app = v.app_actual()
+            if not app:
+                return ("[i] No sé qué app tienes abierta: dame «Acceso a datos de uso» en Menú > Cerebro y oído, "
+                        "o añádela desde allí.")
+            if cmd_lower.startswith("no mires"):
+                v.anadir_privada(app)
+                return f"[OK] Vale, no miraré {app}."
+            v.quitar_privada(app)
+            return f"[OK] Vale, ya puedo mirar {app} cuando me lo pidas."
+        try:
+            texto, app = v.mirar(self.lector)
+        except (vk.VistaError, lk.LectorError) as e:
+            return f"[x] {e}"
+        if cmd_lower.startswith(("explícame", "explicame", "explica")):
+            try:
+                return self.conversar("Explícame, de forma clara y corta, lo que hay en mi pantalla:\n" + texto[:1500])
+            except RuntimeError as e:
+                return f"[x] {e}"
+        return (f"En tu pantalla pone:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}\n\n"
+                "Puedes decir «explícame lo leído», «guarda lo leído» o «abre lo leído en el editor».")
+
     def _orden_lector(self, cmd_lower):
         import lector_kira as lk
         lec = self.lector
@@ -755,6 +791,9 @@ class KiraGodCore:
             return self._orden_cerebro_propio(cmd_lower)
         elif re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura\b|^(?:abre|guarda|explícame|explicame|explica) lo le[ií]do\b|^lector$", cmd_lower):
             return self._orden_lector(cmd_lower)
+        elif re.match(r"^(?:mira|lee|léeme|explícame|explicame|explica)(?: la| mi)? pantalla\b|^qu[eé] (?:ves|hay en (?:la|mi) pantalla)\b"
+                      r"|^(?:no mires|puedes mirar) (?:esta app|aqu[ií])\b|^apps? privadas?$", cmd_lower):
+            return self._orden_vista(cmd_lower)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()
             if not pend:
