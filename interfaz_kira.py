@@ -818,7 +818,16 @@ def construir_interfaz(core, consola=None):
         return False
     Window.bind(on_keyboard=tecla)
 
+    def revisar_avisos(_dt):
+        avisos = getattr(core, "avisos", None)
+        if avisos is None or st["ocupado"]:
+            return
+        for _modulo, texto in avisos.vencidos():
+            decir(texto)                                 # se ve en la burbuja y se oye
+            break
+
     sm.control, sm.ir = ctl, ir
     ir("inicio")
     Clock.schedule_once(saludar, 0.8)
+    Clock.schedule_interval(revisar_avisos, 1.0)
     return sm

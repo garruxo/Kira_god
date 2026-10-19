@@ -56,6 +56,9 @@ class KiraGodCore:
         self.accion_pendiente = None   # ('destruir', ruta) o ('matar', nombre)
         self.comandos_modulos = {}
         self.errores_modulos = {}
+        self.juegos_modulos = {}              # juegos que añaden las mejoras: {nombre: ClaseJuego}
+        import api_modulos_kira
+        self.avisos = api_modulos_kira.Avisos()
         import bitacora_kira
         self.bitacora = bitacora_kira.Bitacora(os.path.join(self.dir, "bitacora.json"))
         import cerebro_ia_kira
@@ -150,7 +153,7 @@ class KiraGodCore:
     # ---------- módulos aprobados ----------
     def cargar_modulos(self):
         """Carga KIRA_DATA_DIR/modulos/*.py. Cada módulo define registrar() -> {prefijo: funcion(texto)->str}."""
-        self.comandos_modulos, self.errores_modulos = {}, {}
+        self.comandos_modulos, self.errores_modulos, self.juegos_modulos = {}, {}, {}
         carpeta = os.path.join(self.dir, "modulos")
         if not os.path.isdir(carpeta):
             return 0
@@ -169,8 +172,17 @@ class KiraGodCore:
                 if not isinstance(tabla, dict):
                     raise TypeError("registrar() debe devolver un diccionario")
                 for prefijo, fn in tabla.items():
-                    if isinstance(prefijo, str) and prefijo.strip() and callable(fn):
-                        self.comandos_modulos[prefijo.strip().lower()] = (nombre, fn)
+                    if not (isinstance(prefijo, str) and prefijo.strip() and callable(fn)):
+                        continue
+                    prefijo = prefijo.strip().lower()
+                    if prefijo.startswith("juego "):          # {"juego naves": crear(motor) -> clase de Juego}
+                        import motor_juegos_kira as mj
+                        clase = fn(mj)
+                        if not (isinstance(clase, type) and issubclass(clase, mj.Juego)):
+                            raise TypeError(f"'{prefijo}' debe devolver una clase que herede de motor.Juego")
+                        self.juegos_modulos[prefijo[6:].strip()] = clase
+                    else:
+                        self.comandos_modulos[prefijo] = (nombre, fn)
             except Exception as e:
                 self.errores_modulos[nombre] = repr(e)
                 logger.error(f"Módulo '{nombre}' no cargó: {e}")
@@ -195,13 +207,19 @@ class KiraGodCore:
         except (TypeError, ValueError):
             return False
 
+    def api_para(self, nombre):
+        """El objeto 'kira' que recibe un módulo: herramientas + sus datos, recuerdos y avisos (con límites)."""
+        import api_modulos_kira
+        return api_modulos_kira.ApiModulo(nombre, self.herramientas, self.dir, getattr(self, "recuerdos", None),
+                                          getattr(self, "avisos", None))
+
     def _comando_modulo(self, cmd_lower, command):
         for prefijo, (nombre, fn) in self.comandos_modulos.items():
             if cmd_lower.startswith(prefijo):
                 try:
                     texto = command[len(prefijo):].strip()
                     if self._acepta_kira(fn):
-                        return str(fn(texto, self.herramientas))
+                        return str(fn(texto, self.api_para(nombre)))
                     return str(fn(texto))
                 except Exception as e:
                     logger.error(f"Módulo '{nombre}' falló: {e}")
@@ -658,6 +676,12 @@ class KiraGodCore:
             return self._orden_recuerdos(command, cmd_lower)
         elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):
             return self._orden_estudio(command, cmd_lower)
+        elif cmd_lower in ("avisos", "mis avisos"):
+            pend = self.avisos.pendientes()
+            if not pend:
+                return "[i] No hay avisos pendientes."
+            return "Avisos pendientes:\n" + "\n".join(f"- dentro de {max(0, s) // 60} min {max(0, s) % 60} s ({m}): {t}"
+                                                       for s, m, t in pend)
         elif cmd_lower in ("capacidades", "que te falta", "qué te falta"):
             import capacidades_kira as cap
             return cap.texto_informe(cap.informe(self.hechos_capacidades()))
@@ -670,7 +694,8 @@ class KiraGodCore:
         elif cmd_lower == "recargar modulos":
             n = self.cargar_modulos()
             fallos = f" Fallaron: {', '.join(self.errores_modulos)}." if self.errores_modulos else ""
-            return f"[OK] {n} comando(s) de módulos cargados.{fallos}"
+            juegos = f" Juegos: {', '.join(sorted(self.juegos_modulos))}." if self.juegos_modulos else ""
+            return f"[OK] {n} comando(s) de módulos cargados.{juegos}{fallos}"
         else:
             r = self._comando_modulo(cmd_lower, command)
             if r is not None:

@@ -21,7 +21,13 @@ API_KIRA = (
     "Para audio, vídeo y archivos la función recibe (texto, kira): kira.medios(tipo=None) -> lista de dicts (titulo, tipo, "
     "estado, ruta); kira.importar(titulo) -> nombre de archivo en la carpeta de trabajo; kira.ffmpeg(entradas, salida, args) "
     "(nombres simples sin rutas; args solo opciones como -af -vf -filter_complex -ss -to -c:a -c:v -b:a); "
-    "kira.escribir(nombre, texto) / kira.leer(nombre) para .txt .json .md .csv; kira.exportar(nombre) -> (ok, mensaje).")
+    "kira.escribir(nombre, texto) / kira.leer(nombre) para .txt .json .md .csv; kira.exportar(nombre) -> (ok, mensaje). "
+    "Datos propios del módulo: kira.guardar_dato(clave, valor) / kira.leer_dato(clave, defecto) (JSON). "
+    "Recuerdos: kira.recordar(texto) / kira.buscar_recuerdos(consulta) -> lista de textos. "
+    "Avisos: kira.avisar_en(segundos, texto) (Kira lo dirá en voz alta) y kira.decir(texto); kira.ahora(). "
+    "JUEGOS: registrar() puede devolver {\"juego nombre\": crear} con def crear(motor): class J(motor.Juego): ... ; return J. "
+    "En el juego: preparar(), actualizar(dt), al_tocar(x, y); self.rect(x, y, w, h, color), self.circulo(x, y, r, color), "
+    "self.dedo, self.chocan(a, b), self.puntos, self.fin(msg); pantalla 360x640 con y hacia arriba. NO importes el motor: llega como parámetro.")
 
 SISTEMA_MEJORA = (
     "Eres el generador de mejoras de KiraOS. Responde SOLO con este formato:\n"
@@ -55,6 +61,17 @@ def registrar():
         kira.ffmpeg([nombre], "mas_alto.mp3", ["-af", "volume=1.5"])
         return kira.exportar("mas_alto.mp3")[1]
     return {"subir volumen": subir}
+```
+Ejemplo 3 (datos y avisos):
+NOMBRE: recordatorio
+```python
+def registrar():
+    def recordar_en(texto, kira):
+        minutos, _, que = texto.partition(" ")
+        kira.avisar_en(int(minutos) * 60, "Te recuerdo: " + que)
+        kira.guardar_dato("ultimo", que)
+        return f"Vale, dentro de {minutos} minutos te aviso."
+    return {"avísame en": recordar_en}
 ```'''
 
 SISTEMA_MEJORA_LOCAL = (
