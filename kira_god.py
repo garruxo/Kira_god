@@ -64,6 +64,8 @@ class KiraGodCore:
         self.bitacora = bitacora_kira.Bitacora(os.path.join(self.dir, "bitacora.json"))
         import cerebro_ia_kira
         self.cerebro_ia = cerebro_ia_kira.Cerebro(self.dir)
+        import lector_kira                       # lee texto y código de imágenes (Tesseract, dentro del móvil)
+        self.lector = lector_kira.Lector(self.dir)
         import cerebro_propio_kira               # el cerebro DENTRO de la app (sin Termux ni API)
         self.cerebro_propio = cerebro_propio_kira.CerebroPropio(self.dir)
         if self.cerebro_propio.auto and self.cerebro_propio.modelo_instalado() and self.cerebro_propio.tiene_motor():
@@ -489,6 +491,35 @@ class KiraGodCore:
         c = self._clave_para("codigo")
         return "local" if c == cerebro_ia_kira.LOCAL else ("claude" if c else None)
 
+    def _orden_lector(self, cmd_lower):
+        import lector_kira as lk
+        lec = self.lector
+        if cmd_lower == "lector":
+            return ("Lector de capturas: " + ("listo" if lec.disponible() else
+                    ("sin descargar los idiomas (6 MB): Menú > Lector" if not lec.idiomas_instalados() else "falta la librería")))
+        if cmd_lower.startswith(("lee", "léeme", "leer")):
+            ruta = lk.ultima_captura()
+            if ruta is None:
+                return "[x] No encuentro capturas de pantalla (o falta el permiso para ver tus fotos)."
+            try:
+                texto = lec.leer(ruta)
+            except lk.LectorError as e:
+                return f"[x] {e}"
+            return (f"He leído tu última captura:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}\n\n"
+                    "Puedes decir: «abre lo leído en el editor», «guarda lo leído» o «explícame lo leído».")
+        if not lec.ultimo:
+            return "[i] Todavía no he leído ninguna captura. Di «lee la última captura»."
+        if cmd_lower.startswith("guarda"):
+            n = self.recuerdos.guardar(lec.ultimo[:2000], fuente="captura") if getattr(self, "recuerdos", None) else None
+            return f"[OK] Guardado en mi baúl (recuerdo #{n})." if n else "[x] No pude guardarlo."
+        if cmd_lower.startswith(("explícame", "explicame", "explica")):
+            try:
+                return self.conversar("Explícame, de forma clara y corta, este texto o código que he leído de una captura:\n"
+                                      + lec.ultimo[:1500])
+            except RuntimeError as e:
+                return f"[x] {e}"
+        return "[i] Para abrirlo en el editor, usa el botón «Abrir en el editor» del Lector."
+
     def _orden_cerebro_propio(self, cmd_lower):
         import cerebro_propio_kira as cp
         c = self.cerebro_propio
@@ -722,6 +753,8 @@ class KiraGodCore:
         elif cmd_lower in ("cerebro propio", "mi cerebro") or re.match(r"^(?:descarga|descargar) (?:el )?cerebro\b", cmd_lower) \
                 or cmd_lower in ("enciende cerebro", "enciende tu cerebro", "apaga cerebro", "apaga tu cerebro"):
             return self._orden_cerebro_propio(cmd_lower)
+        elif re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura\b|^(?:abre|guarda|explícame|explicame|explica) lo le[ií]do\b|^lector$", cmd_lower):
+            return self._orden_lector(cmd_lower)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()
             if not pend:

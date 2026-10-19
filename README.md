@@ -209,3 +209,12 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
 - Pantalla «Cerebro y oído» en el menú. Órdenes: `cerebro propio`, `descarga cerebro ligero|listo`,
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
+
+## Lector de capturas: texto y código, sin internet (nuevo)
+- `lector_kira.py`: Tesseract (Tesseract4Android 4.9.0, Apache 2.0, desde JitPack) dentro del APK; idiomas español e
+  inglés (`tessdata_fast`) se descargan una vez. Para CÓDIGO reconstruye la sangría con la posición de cada palabra
+  (TSV) y las líneas en blanco con el interlineado: en las pruebas con capturas reales de un editor, el código sale
+  idéntico y se puede ejecutar.
+- Órdenes: `lee la última captura`, `abre lo leído en el editor`, `guarda lo leído`, `explícame lo leído`.
+  Pantalla «Lector» en el menú. Permiso nuevo: `READ_MEDIA_IMAGES` (para ver tus capturas).
+- La compilación en GitHub ahora COMPRUEBA qué lleva el APK (cerebro, oído, lector) y lo apunta en las notas.

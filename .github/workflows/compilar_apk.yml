@@ -125,6 +125,15 @@ jobs:
           path: compilacion.log
           retention-days: 7
 
+      - name: Comprobar qué lleva el APK (cerebro, oído, lector)
+        run: |
+          APK=$(ls bin/*.apk | head -1)
+          LIBS=$(unzip -l "$APK" | grep -oE "lib/arm64-v8a/lib(kira_cerebro[a-z_]*|vosk|tesseract|leptonica|jnidispatch|pngx|jpeg)[a-z0-9_]*\.so" | sort -u | tr '\n' ' ')
+          DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;" | sort -u | tr '\n' ' ')
+          TAM=$(du -h "$APK" | cut -f1)
+          echo "::notice title=Contenido del APK::Tamaño $TAM. Librerías: $LIBS. Clases Java: $DEX"
+          echo "$LIBS" | grep -q kira_cerebro || echo "::warning title=Falta el cerebro::El APK no lleva libkira_cerebro*.so"
+
       - name: Guardar el APK como artefacto
         uses: actions/upload-artifact@v4
         with:

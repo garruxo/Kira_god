@@ -49,12 +49,13 @@ tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.tex
 ok(len(tiles) == 10, f"10 apartados principales, hay {len(tiles)}")
 mas = buscar("Button", texto_en="Más apartados"); mas.press()
 tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.text]
-ok(len(tiles) == 25 and "Menos" in mas.text, f"con «Más» salen los 25, hay {len(tiles)}")
+import menu_kira as _mk
+ok(len(tiles) == len(_mk.APARTADOS) and "Menos" in mas.text, f"con «Más» salen todos ({len(_mk.APARTADOS)}), hay {len(tiles)}")
 # todos los apartados navegan sin error
 vistos = set()
 for t in tiles:
     sm.ir("menu"); t.press(); Clock.correr(3, 0.1); time.sleep(0.15); Clock.correr(3, 0.1); vistos.add(sm.current)
-ok(vistos == {"inicio", "panel", "pasarela", "busqueda", "notas", "memoria", "estado", "config", "ayuda", "lienzo", "conocimiento", "sala_hacker", "sala_diseno", "sala_cine", "mediateca", "taller", "sala_ciber", "mezcla", "editor_video", "bitacora", "juegos", "editor_codigo", "cerebro_kira"}, "destinos: " + str(vistos))
+ok(vistos == {"inicio", "panel", "pasarela", "busqueda", "notas", "memoria", "estado", "config", "ayuda", "lienzo", "conocimiento", "sala_hacker", "sala_diseno", "sala_cine", "mediateca", "taller", "sala_ciber", "mezcla", "editor_video", "bitacora", "juegos", "editor_codigo", "cerebro_kira", "lector"}, "destinos: " + str(vistos))
 # notas
 sm.ir("notas"); cn = buscar("TextInput", hint_text="Nueva nota…"); cn.text = "comprar pilas"
 buscar("Button", text="Añadir nota").press(); ok("comprar pilas" in open(os.path.join(T, "notas.json"), encoding="utf-8").read(), "nota guardada")

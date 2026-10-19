@@ -13,6 +13,7 @@ Aquí solo hay pantallas finas. Botón "atrás" de Android / tecla Esc: vuelve a
 """
 import datetime
 import os
+import re
 import threading
 
 
@@ -47,6 +48,7 @@ def construir_interfaz(core, consola=None):
     from pantalla_bitacora_kira import montar_bitacora
     from pantallas_codigo_kira import montar_codigo
     from pantalla_cerebro_kira import montar_cerebro
+    from pantalla_lector_kira import montar_lector, pedir_permiso_fotos
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -227,6 +229,18 @@ def construir_interfaz(core, consola=None):
         pedido = ik.pedido_mejora(texto)
         if pedido is not None:                          # «Kira, mejora…» / «aprende a…»: al flujo de mejoras
             mejora_por_voz(pedido)
+            return
+        bajo = texto.lower()
+        if re.match(r"^abre lo le[ií]do", bajo):        # lo que leyó de una captura, al editor
+            lector = getattr(core, "lector", None)
+            if lector is not None and lector.ultimo:
+                decir("Te lo abro en el editor.")
+                codigo_ui["cargar_en_editor"](lector.ultimo, "", "Texto leído de una captura: revísalo y pulsa «Ejecutar».")
+            else:
+                decir("Todavía no he leído ninguna captura.")
+            return
+        if re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura", bajo) and not pedir_permiso_fotos():
+            decir("Necesito permiso para ver tus capturas. Concédelo y pídemelo otra vez.")
             return
         st["ocupado"] = True
         if st["reloj_txt"] is not None:
@@ -808,6 +822,13 @@ def construir_interfaz(core, consola=None):
                         "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "NEON": NEON,
                         "FUENTE": FUENTE, "core": core, "oido": oido, "ajustes": ajustes,
                         "reiniciar_escucha": reiniciar_escucha})
+
+    # =================================================================================
+    #  LECTOR DE CAPTURAS
+    # =================================================================================
+    montar_lector(sm, {"boton": boton, "texto_largo": texto_largo, "pantalla": pantalla, "en_hilo": en_hilo,
+                       "ganchos": ganchos, "TXT": TXT, "GRIS": GRIS, "VERDE": VERDE, "FUENTE": FUENTE, "core": core,
+                       "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
     # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)

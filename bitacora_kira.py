@@ -190,6 +190,8 @@ MAPA = {
     "oido_kira.py": "el oído propio (Vosk): escucha continua sin conexión y sin pitidos",
     "pantalla_cerebro_kira.py": "pantalla «Cerebro y oído» (descargas y encendido)",
     "herramientas_pc/compilar_cerebro_android.sh": "compila llama-server para Android (lo usa GitHub al hacer el APK)",
+    "lector_kira.py": "lee texto y código de capturas (Tesseract) y reconstruye la sangría",
+    "pantalla_lector_kira.py": "pantalla «Lector» (leer captura, abrir en el editor, guardar, explicar)",
     "recuerdos_kira.py": "baúl de recuerdos en disco: índice, firmas, buscar sin cargar todo en la RAM",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }

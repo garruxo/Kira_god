@@ -15,7 +15,7 @@ import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
 # El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
-PRINCIPALES = ("hablar", "cerebro_kira", "mejoras", "juegos", "editor_codigo", "conocimiento", "sala", "diseno", "ciber", "config")
+PRINCIPALES = ("hablar", "cerebro_kira", "mejoras", "lector", "juegos", "editor_codigo", "sala", "diseno", "ciber", "config")
 APARTADOS = [
     {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
@@ -25,6 +25,7 @@ APARTADOS = [
     {"id": "mezcla",    "titulo": "Mesa de mezcla",  "desc": "Mezcla pistas de audio",       "color": (0.90, 0.45, 0.70), "destino": ("pantalla", "mezcla")},
     {"id": "editor",    "titulo": "Editor de vídeo", "desc": "Cortar, unir, música…",        "color": (0.55, 0.45, 0.95), "destino": ("pantalla", "editor_video")},
     {"id": "cerebro_kira", "titulo": "Cerebro y oído", "desc": "Su IA y su oído, sin internet", "color": (0.55, 0.40, 0.95), "destino": ("pantalla", "cerebro_kira")},
+    {"id": "lector",    "titulo": "Lector",          "desc": "Lee capturas: texto y código", "color": (0.20, 0.65, 0.75), "destino": ("pantalla", "lector")},
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
     {"id": "taller",    "titulo": "Taller",          "desc": "Qué le falta y cómo prepararse", "color": (0.90, 0.75, 0.25), "destino": ("pantalla", "taller")},
@@ -89,6 +90,8 @@ AYUDA = (
     "vez el modelo ligero (1,4 GB, rápido) o el listo (3 GB) y se enciende sola al abrir Kira. Las respuestas van "
     "apareciendo mientras piensa. El OÍDO PROPIO (39 MB) escucha sin parar, sin pitidos y sin internet, en todas las "
     "pantallas; si no está, usa el reconocedor de Android.\n"
+    "LECTOR: Kira lee el texto y el código de tus capturas de pantalla, sin internet. Descarga una vez los idiomas (6 MB) "
+    "y di «lee la última captura». Si es código, reconstruye la sangría y puedes abrirlo en el editor para ejecutarlo.\n"
     "RECUERDOS: Kira guarda en una carpeta suya (privada y firmada) lo que le enseñas y lo que le explica Claude. "
     "Antes de preguntar a nadie busca ahí, y solo abre los trozos del índice que necesita, sin llenar la RAM. "
     "Busca también por significado: sabe que minino es gato, y aprende palabras nuevas (con el modelo del móvil o con "

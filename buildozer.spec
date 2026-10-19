@@ -107,7 +107,7 @@ fullscreen = 0
 
 # (list) Permissions
 # (See https://python-for-android.readthedocs.io/en/latest/buildoptions.html for all the supported syntaxes and properties)
-android.permissions = INTERNET,RECORD_AUDIO,READ_EXTERNAL_STORAGE,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO
+android.permissions = INTERNET,RECORD_AUDIO,READ_EXTERNAL_STORAGE,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES
 
 # (list) features (adds uses-feature -tags to manifest)
 #android.features = android.hardware.usb.host
@@ -214,7 +214,7 @@ android.accept_sdk_license = True
 
 # (list) Gradle dependencies to add
 # El oído de Kira: reconocimiento de voz sin conexión (Vosk) y su dependencia JNA
-android.gradle_dependencies = com.alphacephei:vosk-android:0.3.47@aar, net.java.dev.jna:jna:5.13.0@aar
+android.gradle_dependencies = com.alphacephei:vosk-android:0.3.47@aar, net.java.dev.jna:jna:5.13.0@aar, cz.adaptech.tesseract4android:tesseract4android-openmp:4.9.0
 
 # (bool) Enable AndroidX support. Enable when 'android.gradle_dependencies'
 # contains an 'androidx' package, or any package from Kotlin source.
@@ -229,7 +229,8 @@ android.gradle_dependencies = com.alphacephei:vosk-android:0.3.47@aar, net.java.
 # (list) Gradle repositories to add {can be necessary for some android.gradle_dependencies}
 # please enclose in double quotes 
 # e.g. android.gradle_repositories = "maven { url 'https://repo.spring.io/release' }"
-#android.add_gradle_repositories =
+# El lector de texto (Tesseract4Android) se publica en JitPack
+android.add_gradle_repositories = maven { url 'https://jitpack.io' }
 
 # (list) packaging options to add
 # see https://developer.android.com/reference/tools/gradle-api/7.1/com/android/build/api/dsl/PackagingOptions
