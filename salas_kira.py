@@ -467,6 +467,13 @@ def construir_ciber(semilla=9):
     _q(P, (-ANCHO, 0, FONDO), (ANCHO, 0, FONDO), (ANCHO, ALTO, FONDO), (-ANCHO, ALTO, FONDO), (0.01, 0.03, 0.02), (0, 0, -1), 0)
     _q(P, (ANCHO, 0, 0), (-ANCHO, 0, 0), (-ANCHO, ALTO, 0), (ANCHO, ALTO, 0), oscuro, (0, 0, 1), 0)
     _q(P, (-ANCHO, ALTO, 0), (ANCHO, ALTO, 0), (ANCHO, ALTO, FONDO), (-ANCHO, ALTO, FONDO), (0.01, 0.02, 0.02), (0, -1, 0), 0)
+    # rejilla luminosa en el suelo (ilumina el búnker de verde)
+    for x in (-2.0, -1.0, 0.0, 1.0, 2.0):
+        _q(P, (x - 0.015, 0.004, 0.2), (x + 0.015, 0.004, 0.2), (x + 0.015, 0.004, FONDO - 0.2), (x - 0.015, 0.004, FONDO - 0.2),
+           (0.05, 0.55, 0.25), (0, 1, 0), 1, None, True)
+    for z in (1.0, 2.5, 4.0, 5.5, 7.0):
+        _q(P, (-ANCHO + 0.2, 0.004, z - 0.015), (ANCHO - 0.2, 0.004, z - 0.015), (ANCHO - 0.2, 0.004, z + 0.015),
+           (-ANCHO + 0.2, 0.004, z + 0.015), (0.05, 0.55, 0.25), (0, 1, 0), 1, None, True)
     # rejilla verde en las paredes (estética matrix)
     rej = (0.05, 0.3, 0.18)
     _rejilla_pared(P, "x", -ANCHO + 0.02, 1.0, 7.0, 0.3, 2.5, (1, 0, 0), rej)

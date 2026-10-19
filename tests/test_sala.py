@@ -6,7 +6,7 @@ def ok(c, m):
     global n; n += 1; assert c, "FALLA: " + m
 W, H = 360, 640
 esc = hk.construir_escena()
-ok(300 < len(esc) < 450, f"nº de caras razonable ({len(esc)})")
+ok(300 < len(esc) < 600, f"nº de caras razonable ({len(esc)})")
 # proyección: un punto delante del centro cae en el centro; a la derecha cae a la derecha; detrás no se proyecta
 pose = (0, 1.5, 0, 0, 0)
 pc = hk.a_camara((0, 1.5, 4), pose); ok(abs(pc[0]) < 1e-9 and abs(pc[2] - 4) < 1e-9, "delante")

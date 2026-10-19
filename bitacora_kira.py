@@ -179,6 +179,13 @@ MAPA = {
     "red_kira.py": "conexiones https con los certificados correctos en Android",
     "escucha_kira.py": "escucha permanente con «Kira», borrador de 10 s y luz de neón (lógica)",
     "portada_kira.py": "portada blanca con «Kira» de fondo y el botón redondo de neón",
+    "curso_avanzado_kira.py": "curso de programación avanzada y programas completos (todos comprobados)",
+    "ejecutor_kira.py": "ejecuta tus programas en modo seguro (sin archivos/red/sistema, con límite de tiempo)",
+    "motor_juegos_kira.py": "motor de juegos 2D: piezas, choques, física, toques",
+    "juegos_kira.py": "los juegos de Kira, escritos como programas que puedes cambiar",
+    "pantallas_codigo_kira.py": "pantallas del editor de código, la lista de juegos y la de jugar",
+    "api_modulos_kira.py": "lo que pueden usar las mejoras: datos propios, recuerdos, avisos, juegos",
+    "luz3d_kira.py": "iluminación de las salas 3D: lámparas de colores, sombras, degradados",
     "recuerdos_kira.py": "baúl de recuerdos en disco: índice, firmas, buscar sin cargar todo en la RAM",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }

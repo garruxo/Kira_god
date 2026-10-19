@@ -82,6 +82,8 @@ AYUDA = (
     "en «Abrir…».\n"
     "JUEGOS: Rompeladrillos, Serpiente, Esquiva, Saltarín y Pong, hechos con el motor de Kira. Con «Código» los abres en el "
     "editor; «Programar un juego nuevo» trae una plantilla. Un juego es una clase que hereda de Juego (motor_juegos_kira).\n"
+    "MEJORAS MÁS POTENTES: los módulos pueden guardar sus propios datos, usar los recuerdos de Kira, programar avisos "
+    "(«avísame en 10 minutos…») y añadir juegos. Escribe «avisos» para ver los pendientes.\n"
     "RECUERDOS: Kira guarda en una carpeta suya (privada y firmada) lo que le enseñas y lo que le explica Claude. "
     "Antes de preguntar a nadie busca ahí, y solo abre los trozos del índice que necesita, sin llenar la RAM. "
     "Busca también por significado: sabe que minino es gato, y aprende palabras nuevas (con el modelo del móvil o con "

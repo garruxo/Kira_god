@@ -173,3 +173,23 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
 - **Mejoras por voz**: «Kira, mejora…», «Kira, aprende a…», «Kira, añade…» (`inicio_kira.pedido_mejora`) abre la
   terminal de mejoras, envía el pedido al laboratorio y lee el resultado en voz alta. Aplicar sigue necesitando dos
   toques: la voz puede pedir, nunca aprobar (así una tele o cualquiera que hable cerca no puede instalar código).
+
+## Programación avanzada, editor, juegos y salas más bonitas (nuevo)
+- `curso_avanzado_kira.py`: 16 lecciones avanzadas (clases, herencia, dataclasses, decoradores, generadores, `with`,
+  excepciones propias, hilos, asyncio, regex, SQLite, complejidad, grafos, programación dinámica, patrones, pruebas)
+  y 10 programas completos (juego de la vida, A*, Huffman, intérprete de expresiones, Vigenère, perceptrón, sudoku,
+  máquina de estados, inventario, Markov). Todos se comprueban ejecutándolos. En la terminal: Básico / Avanzado / Códigos.
+- `ejecutor_kira.py` + `pantallas_codigo_kira.py`: **editor de código** (menú «Editor de código»): escribir, comprobar,
+  ejecutar, guardar y abrir programas. Modo seguro: sin archivos, red ni sistema, lista de módulos permitidos, corta a los
+  5 s (también hilos) y recorta la salida. Es una protección contra errores, no una caja fuerte: no ejecutes código ajeno.
+- `motor_juegos_kira.py` + `juegos_kira.py`: **motor de juegos 2D** y 5 juegos (Rompeladrillos, Serpiente, Esquiva,
+  Saltarín, Pong contra Kira) escritos como programas que se abren y cambian en el editor; plantilla para juegos nuevos.
+  Cada fotograma tiene límite de tiempo: un juego colgado se para sin colgar la app.
+- `api_modulos_kira.py`: las mejoras ahora pueden guardar sus datos, usar los recuerdos, programar avisos que Kira dice
+  en voz alta y añadir juegos (`{"juego nombre": crear(motor)}`). El laboratorio tiene un test fijo nuevo
+  (`tests_fijos/test_juegos.py`) que JUEGA esos juegos antes de aprobarlos. Tras actualizar el laboratorio, vuelve a
+  sellarlo (`sellar SELLAR NUCLEO`) porque cambió un test fijo.
+- `luz3d_kira.py`: las 4 salas 3D con lámparas de colores reales (detectadas solas), degradados, sombras bajo los
+  muebles, autoexposición, resplandor, viñeta y luces que parpadean. Sala Hacker con armario de servidores, tira LED,
+  planta y silla; búnker con rejilla luminosa en el suelo.
+- Pruebas: `test_codigo.py`, `test_cableado_codigo.py`, `test_api_modulos.py`, `test_luz3d.py`.

@@ -137,6 +137,25 @@ def construir_escena(semilla=7):
        (0.9, 0.75, 0.3), (-1, 0, 0), 3, "salida")
     _q(P, (ANCHO - 0.14, 2.3, 3.6), (ANCHO - 0.14, 2.3, 4.6), (ANCHO - 0.14, 2.52, 4.6), (ANCHO - 0.14, 2.52, 3.6),
        (0.1, 0.9, 0.4), (-1, 0, 0), 3, "salida", True)                                          # cartel luminoso
+
+    # --- detalles: tira LED bajo la mesa, servidor con pilotos, planta y silla ---
+    _q(P, (-1.35, 0.70, 6.39), (1.35, 0.70, 6.39), (1.35, 0.73, 6.39), (-1.35, 0.73, 6.39),
+       (0.1, 0.75, 0.95), (0, 0, -1), 2, "ordenador", True)                                    # tira LED (ilumina el suelo)
+    _caja(P, 2.15, 0.0, 6.6, 2.85, 1.9, 7.5, (0.07, 0.08, 0.1), 1)                              # armario de servidores
+    for fila in range(7):
+        y = 0.25 + fila * 0.23
+        _caja(P, 2.18, y, 6.58, 2.82, y + 0.16, 6.6, (0.11, 0.12, 0.15), 2)                     # bandejas
+        for k in range(3):
+            col = ((0.1, 1.0, 0.45), (1.0, 0.75, 0.1), (0.2, 0.6, 1.0))[(fila + k) % 3]
+            x = 2.3 + k * 0.07
+            _q(P, (x, y + 0.06, 6.575), (x + 0.03, y + 0.06, 6.575), (x + 0.03, y + 0.09, 6.575), (x, y + 0.09, 6.575),
+               col, (0, 0, -1), 3, None, True)                                                  # pilotos que parpadean
+    _caja(P, -2.6, 0.0, 7.1, -2.2, 0.38, 7.5, (0.45, 0.28, 0.18), 1)                            # maceta
+    for hx, hz, ha in ((-2.45, 7.3, 0.9), (-2.3, 7.2, 0.75), (-2.5, 7.4, 0.68), (-2.35, 7.38, 1.05)):
+        _caja(P, hx - 0.09, 0.38, hz - 0.09, hx + 0.09, ha, hz + 0.09, (0.12, 0.42, 0.2), 1)    # hojas
+    _caja(P, 1.45, 0.42, 5.8, 1.95, 0.48, 6.3, (0.12, 0.13, 0.16), 1)                           # silla: asiento
+    _caja(P, 1.45, 0.48, 6.24, 1.95, 1.05, 6.3, (0.12, 0.13, 0.16), 1)                          # respaldo
+    _caja(P, 1.67, 0.0, 6.02, 1.73, 0.42, 6.08, (0.2, 0.2, 0.22), 1)                            # pata
     return P
 
 
@@ -176,10 +195,13 @@ def _recortar(pts):
     return sal
 
 
-def _sombrear(color, normal, dist, emisiva, niebla=NIEBLA):
+def _sombrear(color, normal, dist, emisiva, niebla=NIEBLA, luz=None):
     if emisiva:
         base = color
         f = min(1.0, dist / 14.0) * 0.25
+    elif luz is not None:                                   # iluminación calculada (luz3d_kira): lámparas de colores
+        base = tuple(min(1.0, c * k) for c, k in zip(color, luz))
+        f = min(1.0, dist / 13.0) * 0.42
     else:
         lamb = 0.45 + 0.55 * max(0.0, normal[0] * LUZ[0] + normal[1] * LUZ[1] + normal[2] * LUZ[2]) if normal else 0.8
         base = tuple(c * lamb for c in color)
@@ -187,12 +209,15 @@ def _sombrear(color, normal, dist, emisiva, niebla=NIEBLA):
     return tuple(b + (n - b) * f for b, n in zip(base, niebla))
 
 
-def render_caras(escena, pose, w, h, f=None, niebla=NIEBLA):
-    """[(puntos_pantalla, (r,g,b), hotspot)] de atrás hacia delante. y de pantalla hacia ARRIBA."""
+def render_caras(escena, pose, w, h, f=None, niebla=NIEBLA, luz=None, anim=None, t=0.0):
+    """[(puntos_pantalla, (r,g,b), hotspot)] de atrás hacia delante. y de pantalla hacia ARRIBA.
+    luz/anim (opcionales, de luz3d_kira.preparar): factor de luz por cara y animación de lo que brilla."""
     f = f or 0.9 * w
     ex, ey, ez = pose[0], pose[1], pose[2]
     visibles = []
-    for pts, color, normal, capa, hot, emi in escena:
+    if luz is not None or anim is not None:
+        import luz3d_kira
+    for i, (pts, color, normal, capa, hot, emi) in enumerate(escena):
         if normal is not None:                                   # descarta caras de espaldas
             p0 = pts[0]
             if normal[0] * (ex - p0[0]) + normal[1] * (ey - p0[1]) + normal[2] * (ez - p0[2]) <= 0:
@@ -211,7 +236,10 @@ def render_caras(escena, pose, w, h, f=None, niebla=NIEBLA):
         pp = [proyectar(p, w, h, f) for p in pc]
         if max(p[0] for p in pp) < -50 or min(p[0] for p in pp) > w + 50 or max(p[1] for p in pp) < -50 or min(p[1] for p in pp) > h + 50:
             continue
-        visibles.append((capa, -dist2, pp, _sombrear(color, normal, math.sqrt(dist2), emi, niebla), hot))
+        if emi and anim is not None:
+            color = luz3d_kira.color_animado(color, anim[i], t)
+        visibles.append((capa, -dist2, pp, _sombrear(color, normal, math.sqrt(dist2), emi, niebla,
+                                                     luz[i] if luz is not None else None), hot))
     visibles.sort(key=lambda v: (v[0], v[1]))
     return [(pp, col, hot) for _, _, pp, col, hot in visibles]
 
@@ -294,9 +322,17 @@ class Recorrido:
     """Estados: 'caminando' (paseo hasta la mesa) | 'libre' (puedes mirar) | 'yendo' (hacia un objeto)
     | 'dentro' (esperando; el evento ya se emitió) | 'volviendo' (de vuelta a la mesa)."""
 
-    def __init__(self, escena=None, cfg=None):
+    def __init__(self, escena=None, cfg=None, luces=True):
         self.cfg = cfg or CFG_HACKER
         self.escena = escena if escena is not None else construir_escena()
+        self.luz = self.anim = None
+        self.luces = []
+        if luces and self.cfg.get("luces", True):          # iluminación de verdad (luz3d_kira), igual en todas las salas
+            import luz3d_kira
+            prep = luz3d_kira.preparar(self.escena)
+            self.escena, self.luz, self.anim, self.luces = prep["caras"], prep["luz"], prep["anim"], prep["luces"]
+        self.reloj = 0.0                                   # para las animaciones (lo que brilla, cursores)
+        self._ultimo_anim = 0.0
         self.reiniciar()
 
     def reiniciar(self):
@@ -318,6 +354,10 @@ class Recorrido:
     def paso(self, dt):
         """Avanza el tiempo. Devuelve 'ordenador' | 'biblioteca' | 'salida' cuando llegas a ese objeto."""
         dt = max(0.0, min(float(dt), 0.25))
+        self.reloj += dt
+        if self.anim is not None and self.reloj - self._ultimo_anim > 0.12:   # animación suave aunque estés quieto
+            self._ultimo_anim = self.reloj
+            self.sucio = True
         if self.estado in ("libre", "dentro"):
             return None
         self.t += dt
@@ -375,7 +415,24 @@ class Recorrido:
             self._ir(self.cfg["mesa"], 1.0, "volviendo")
 
     def render(self, w, h):
-        return render_caras(self.escena, self.pose, w, h, niebla=self.cfg["niebla"])
+        return render_caras(self.escena, self.pose, w, h, niebla=self.cfg["niebla"], luz=self.luz, anim=self.anim,
+                            t=self.reloj)
+
+    def halos(self, w, h, f=None):
+        """[(x, y, radio_px, (r, g, b))] resplandor en pantalla alrededor de cada luz visible."""
+        f = f or 0.9 * w
+        sal = []
+        import luz3d_kira
+        for pos, col, inten, alcance, _n, area in self.luces:
+            if area > luz3d_kira.HALO_AREA:
+                continue                                    # las grandes (paneles, pantallas) ya iluminan la sala
+            pc = a_camara(pos, self.pose)
+            if pc[2] < 0.3:
+                continue
+            x, y = proyectar(pc, w, h, f)
+            if -w * 0.2 < x < w * 1.2 and -h * 0.2 < y < h * 1.2:
+                sal.append((x, y, min(w * 0.3, f * 0.16 * (0.6 + inten) / pc[2]), col))
+        return sal
 
     def tocar(self, x, y, w, h):
         """Toque en pantalla (y hacia arriba). Devuelve el objeto tocado (y empieza a ir hacia él) o None."""
@@ -395,7 +452,7 @@ class Recorrido:
 # =====================================================================================
 def crear_widgets():
     from kivy.clock import Clock
-    from kivy.graphics import Color, Rectangle, Triangle
+    from kivy.graphics import Color, Ellipse, Rectangle, Triangle
     from kivy.metrics import dp, sp
     from kivy.uix.label import Label
     from kivy.uix.widget import Widget
@@ -444,6 +501,18 @@ def crear_widgets():
                     p0 = (pp[0][0] + ox, pp[0][1] + oy)
                     for i in range(1, len(pp) - 1):
                         Triangle(points=[*p0, pp[i][0] + ox, pp[i][1] + oy, pp[i + 1][0] + ox, pp[i + 1][1] + oy])
+                for x, y, r, col in self.rec.halos(w, h):          # resplandor de las luces
+                    for k in (1.0, 0.82, 0.66, 0.52, 0.4, 0.3, 0.21):
+                        Color(*col, 0.028)
+                        Ellipse(pos=(ox + x - r * k, oy + y - r * k), size=(2 * r * k, 2 * r * k))
+                for i in range(6):                                   # viñeta: bordes un poco más oscuros
+                    a = 0.07 * (6 - i) / 6
+                    m = (i + 1) * min(w, h) * 0.018
+                    Color(0, 0, 0, a)
+                    Rectangle(pos=(ox, oy), size=(w, m))
+                    Rectangle(pos=(ox, oy + h - m), size=(w, m))
+                    Rectangle(pos=(ox, oy), size=(m, h))
+                    Rectangle(pos=(ox + w - m, oy), size=(m, h))
             vistos = set()
             for texto, x, y in etiquetas(self.rec.pose, w, h, None, self.rec.cfg["anclas"], self.rec.cfg["nombres"]):
                 vistos.add(texto)
