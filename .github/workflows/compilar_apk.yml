@@ -44,17 +44,49 @@ jobs:
       - name: Revisión previa (falla en segundos en vez de tras una hora)
         run: python herramientas_pc/comprobar_antes_de_compilar.py
 
-      - name: Caché de SDK/NDK (acelera las siguientes compilaciones)
-        uses: actions/cache@v4
+      - name: Recuperar SDK/NDK guardados (acelera las siguientes compilaciones)
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
           restore-keys: buildozer-${{ runner.os }}-
 
       - name: Compilar el APK (debug)
-        run: yes | buildozer -v android debug
+        run: |
+          set -o pipefail
+          yes | buildozer -v android debug 2>&1 | tee compilacion.log
+
+      - name: Guardar SDK/NDK aunque falle (para no descargarlos otra vez)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
+
+      - name: Si falló, resumir el error (Kira y Claude lo leen en las anotaciones)
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import re
+          try:
+              lineas = open("compilacion.log", encoding="utf-8", errors="replace").read().splitlines()
+          except OSError:
+              lineas = ["No se creó compilacion.log"]
+          limpio = [re.sub(r"\x1b\[[0-9;]*m", "", l) for l in lineas]
+          idx = [i for i, l in enumerate(limpio) if re.search(r"Command failed|Error:|ERROR:|error:|Traceback|BuildInterruptingException|No matching distribution|FAILED", l)]
+          trozos = []
+          for i in idx[-6:]:
+              trozos.append("\n".join(limpio[max(0, i - 25): i + 8]))
+          resumen = ("\n----\n".join(trozos) if trozos else "\n".join(limpio[-80:]))[-12000:]
+          resumen += "\n==== FINAL DEL REGISTRO ====\n" + "\n".join(limpio[-40:])[-5000:]
+          esc = resumen.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print("::error title=Fallo de buildozer::" + esc)
+          PY
 
       - name: Guardar el APK como artefacto
         uses: actions/upload-artifact@v4
