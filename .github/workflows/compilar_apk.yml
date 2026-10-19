@@ -56,7 +56,6 @@ jobs:
 
       - name: Compilar el APK (debug)
         run: |
-          set -o pipefail
           # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)
           rm -rf .buildozer/android/platform/build-*/build/other_builds/libffi* || true
           # si cambió la rama de python-for-android en buildozer.spec, bajar la copia nueva
@@ -65,7 +64,10 @@ jobs:
             have=$(git -C .buildozer/android/platform/python-for-android rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
             if [ -n "$want" ] && [ "$want" != "$have" ]; then echo "p4a: $have -> $want"; rm -rf .buildozer/android/platform/python-for-android .buildozer/android/platform/build-*; fi
           fi
-          yes | buildozer -v android debug 2>&1 | tee compilacion.log
+          # el código de salida que cuenta es el de buildozer (el 2.º de la tubería), no el de «yes»
+          yes | buildozer -v android debug 2>&1 | tee compilacion.log; rc=${PIPESTATUS[1]}
+          ls -la bin/ || true
+          exit $rc
 
       - name: Guardar SDK/NDK aunque falle (para no descargarlos otra vez)
         if: always()
