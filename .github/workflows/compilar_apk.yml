@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git zip unzip autoconf libtool pkg-config zlib1g-dev \
-            libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev automake autopoint gettext
+            libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libltdl-dev libssl-dev automake autopoint gettext
 
       - name: Buildozer y Cython fijado (los recipes no van con Cython 3)
         run: |
@@ -57,6 +57,8 @@ jobs:
       - name: Compilar el APK (debug)
         run: |
           set -o pipefail
+          # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)
+          rm -rf .buildozer/android/platform/build-*/build/other_builds/libffi* || true
           yes | buildozer -v android debug 2>&1 | tee compilacion.log
 
       - name: Guardar SDK/NDK aunque falle (para no descargarlos otra vez)

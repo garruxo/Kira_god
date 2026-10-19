@@ -84,7 +84,7 @@ En PowerShell: `wsl --shutdown` y vuelve a abrir Ubuntu. Durante la compilación
 sudo apt update
 ```
 ```
-sudo apt install -y git zip unzip openjdk-17-jdk python3-pip python3-venv python3-virtualenv autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev automake autopoint gettext
+sudo apt install -y git zip unzip openjdk-17-jdk python3-pip python3-venv python3-virtualenv autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libltdl-dev libssl-dev automake autopoint gettext
 ```
 ```
 python3 -m venv ~/venv_kira

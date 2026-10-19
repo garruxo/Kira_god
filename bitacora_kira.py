@@ -50,7 +50,7 @@ PASOS = [
     {"id": "apk", "titulo": "Compilar el APK en tu PC (buildozer en WSL, Ubuntu 24.04)", "claves": ("apk", "buildozer", "compilar", "zlib", "android", "externally-managed", "pep 668"),
      "donde": "Ubuntu 24.04 (WSL) en el PC, con Kira_god copiada a tu carpeta de Linux (~), NO en /mnt/c (es lentísimo).",
      "como": ["sudo apt update && sudo apt install -y git zip unzip openjdk-17-jdk python3-pip python3-venv python3-virtualenv autoconf "
-              "libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev automake autopoint gettext",
+              "libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libltdl-dev libssl-dev automake autopoint gettext",
               "python3 -m venv ~/venv_kira && source ~/venv_kira/bin/activate   (en 24.04 «pip install --user» está bloqueado)",
               "pip install buildozer setuptools cython==0.29.34",
               "cp -r /mnt/c/Users/TU_USUARIO/Desktop/Kira_god ~/ && cd ~/Kira_god",
@@ -92,6 +92,13 @@ PASOS = [
               "Vuelve a lanzar guardando el registro (no empieza de cero: lo ya compilado se reutiliza):  buildozer -v android debug 2>&1 | tee compilacion.log",
               "Si falla otra vez, enseña el error real:  grep -B 30 'Command failed' compilacion.log | head -n 40"],
      "comprobar": "La compilación pasa del punto donde se paró.", "archivos": ["buildozer.spec"]},
+    {"id": "libffi_ltdl", "titulo": "Buildozer: libffi falla con LT_SYS_SYMBOL_USCORE (falta libltdl-dev)", "claves": ("lt_sys_symbol_uscore", "libffi", "autoreconf", "possibly undefined macro"),
+     "donde": "Ubuntu (WSL) o GitHub. Falta un paquete del sistema que usa autoconf para preparar libffi.",
+     "como": ["Instálalo:  sudo apt install -y libltdl-dev",
+              "Borra lo que quedó a medias de libffi:  rm -rf .buildozer/android/platform/build-*/build/other_builds/libffi*",
+              "Relanza:  buildozer -v android debug 2>&1 | tee compilacion.log"],
+     "comprobar": "En el registro aparece «Building libffi» y sigue adelante sin «autoreconf: error».",
+     "archivos": ["buildozer.spec", ".github/workflows/compilar_apk.yml"]},
     {"id": "pip_roto", "titulo": "Buildozer: el pip interno quedó a medias (ImportError de pip._internal)", "claves": ("pip._internal", "builddependencyinstallerror", "pip install -u pip", "cannot import name"),
      "donde": "Ubuntu, ~/Kira_god. Es el entorno de Python que buildozer crea para compilar; si una actualización de pip se corta, queda mezclado.",
      "como": ["Bórralo (buildozer lo vuelve a crear solo; no se pierde lo ya compilado):  rm -rf .buildozer/android/platform/build-arm64-v8a/build/venv",
@@ -180,6 +187,7 @@ HISTORIA = [
 
 DIAGNOSTICOS = [
     (r"cerebro local no responde|modelo local|no hay cerebro de ia", "cerebro_local"),
+    (r"lt_sys_symbol_uscore|possibly undefined macro: lt_", "libffi_ltdl"),
     (r"cannot import name .* from .pip\._internal|builddependencyinstallerror", "pip_roto"),
     (r"buildozer failed to execute the last command|the error might be hidden in the log|# command failed", "error_buildozer"),
     (r"unknown command/target android|can't open file .*comprobar_antes_de_compilar|no such file or directory.*comprobar_antes", "terminal_linux"),
