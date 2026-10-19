@@ -170,3 +170,6 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
 - Conversaciones: las NUEVAS se guardan en el baúl («lo hablamos»); las que Kira ya tenía reconocidas no se duplican.
 - Menú claro y sencillo: 8 apartados principales y «Más apartados» para el resto. Las salas inmersivas siguen oscuras.
 - Pruebas: `tests/test_escucha.py`, `tests/test_cableado_escucha.py` (micrófono simulado).
+- **Mejoras por voz**: «Kira, mejora…», «Kira, aprende a…», «Kira, añade…» (`inicio_kira.pedido_mejora`) abre la
+  terminal de mejoras, envía el pedido al laboratorio y lee el resultado en voz alta. Aplicar sigue necesitando dos
+  toques: la voz puede pedir, nunca aprobar (así una tele o cualquiera que hable cerca no puede instalar código).

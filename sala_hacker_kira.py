@@ -282,7 +282,7 @@ def montar_sala_hacker(sm, ctx):
         confirmacion["reloj"] = None
         btn_aplicar.text = "Aplicar"
 
-    def enviar_mejora():
+    def enviar_mejora(al_terminar=None):
         pedido = ik.limpiar_entrada(campo_mej.text)
         if not pedido or btn_env.disabled:
             return
@@ -295,9 +295,13 @@ def montar_sala_hacker(sm, ctx):
             btn_env.disabled = False
             if isinstance(r, Exception):
                 res.text = f"[x] {r}"
+                if al_terminar is not None:
+                    al_terminar({"ok": False, "aprobable": False, "texto": f"[x] {r}"})
                 return
             res.text = r["texto"] + (f"\n\n(Intentos: {r['intentos']})" if r.get("intentos") else "")
             decision(bool(r.get("aprobable")))
+            if al_terminar is not None:
+                al_terminar(r)
         en_hilo(lambda: ctl.enviar_orden(completo), terminado)
 
     def aplicar():
@@ -342,6 +346,15 @@ def montar_sala_hacker(sm, ctx):
         res.text = "Pedido preparado por el Taller. Revísalo y pulsa «Pedir mejora»."
         estado["modo_siguiente"] = "mejorar"
         ir("terminal")
+
+    def pedir_mejora(texto, al_terminar=None):
+        """Por VOZ: abre la terminal en MEJORAR, escribe el pedido y lo envía al laboratorio. Aplicar sigue
+        necesitando tus dos toques: la voz puede pedir, pero no aprobar."""
+        elegir("Kira")
+        campo_mej.text = str(texto)
+        estado["modo_siguiente"] = "mejorar"
+        ir("terminal")
+        enviar_mejora(al_terminar)
 
     # =================================================================================
     #  BIBLIOTECA
@@ -435,4 +448,4 @@ def montar_sala_hacker(sm, ctx):
     ganchos["biblioteca"] = lambda: elegir_estante(sel["estante"])
 
     return {"detener": detener, "volver_a_sala": volver_a_sala, "biblioteca": biblioteca, "habitacion": habitacion,
-            "preparar_mejora": preparar_mejora}
+            "preparar_mejora": preparar_mejora, "pedir_mejora": pedir_mejora}

@@ -209,6 +209,10 @@ def construir_interfaz(core, consola=None):
         if not texto or st["ocupado"]:
             return
         campo.text = ""
+        pedido = ik.pedido_mejora(texto)
+        if pedido is not None:                          # «Kira, mejora…» / «aprende a…»: al flujo de mejoras
+            mejora_por_voz(pedido)
+            return
         st["ocupado"] = True
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()
@@ -227,6 +231,26 @@ def construir_interfaz(core, consola=None):
                 if via == "escena" and cerebro.ultima_escena:
                     mostrar_escena(cerebro.ultima_escena, texto_r)
         en_hilo(lambda: conv.preguntar(texto), terminado)
+
+    # ---------- mejoras pedidas por voz ----------
+    def mejora_por_voz(pedido):
+        quien = getattr(core, "cerebro_para_codigo", lambda: None)()
+        if quien is None:
+            decir("Para programar mejoras necesito un cerebro de IA: la clave de Claude («config clave: …») o el "
+                  "modelo local. Cuando lo tenga, pídemelo otra vez.")
+            return
+        if not getattr(ctl.pasarela, "url", ""):
+            decir("Para probar mejoras necesito el laboratorio conectado. Ve a Menú, Más apartados, Pasarela.")
+            return
+        decir(f"Vale, me pongo a programar: {pedido}. El laboratorio lo probará y te enseño el resultado. "
+              "Para instalarlo tendrás que tocar Aplicar dos veces.")
+
+        def al_terminar(r):
+            if r.get("aprobable"):
+                voz.hablar("La mejora ha pasado las pruebas del laboratorio. Revísala y toca Aplicar dos veces si te parece bien.")
+            else:
+                voz.hablar("No he conseguido una mejora que pase las pruebas. Te dejo el detalle en la terminal.")
+        Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](pedido, al_terminar), 2.5)
 
     # ---------- escucha permanente con «Kira» ----------
     def pintar_escucha(texto=None):

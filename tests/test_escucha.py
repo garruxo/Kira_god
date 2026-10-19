@@ -65,4 +65,15 @@ ok(B.guardar_charla("cuéntame algo largo", "[x] No pude responder") is None, "l
 B.guardar("Mi gato se llama Miko.", fuente="usuario")
 ok(B.guardar_charla("cómo se llama mi gato", "Tu gato se llama Miko, me lo dijiste.") is None, "lo que ya sabía no se guarda otra vez")
 ok("lo hablamos" in rk.texto_lista(B.buscar("película sábado")), "en la lista sale como conversación")
+
+# ---------- pedir mejoras con la voz ----------
+import inicio_kira as ik
+ok(ik.pedido_mejora("mejora la mesa de mezcla para que tenga eco") == "la mesa de mezcla para que tenga eco", "mejora …")
+ok(ik.pedido_mejora("Aprende a convertir euros a dólares") == "convertir euros a dólares", "aprende a …")
+ok(ik.pedido_mejora("añade un temporizador de cocina.") == "un temporizador de cocina", "añade …")
+ok(ik.pedido_mejora("Mejórate: que me digas el tiempo") == "que me digas el tiempo", "mejórate …")
+ok(ik.pedido_mejora("quiero que sepas leer códigos QR") == "leer códigos QR", "quiero que sepas …")
+ok(ik.pedido_mejora("aprende que mi perro se llama Toby") is None, "«aprende que» es recordar, no programar")
+ok(ik.pedido_mejora("aprende sola") is None and ik.pedido_mejora("aprende sobre volcanes") is None, "estudiar no es programar")
+ok(ik.pedido_mejora("qué tal estás") is None and ik.pedido_mejora("mejora") is None, "charla normal o pedido vacío")
 print("ESCUCHA OK", n)

@@ -96,4 +96,29 @@ sm.ir("config"); ok(any("Escucha permanente" in w.text for w in sm.walk() if typ
 sm.ir("inicio"); portada.al_tocar(); ok(sm.current == "menu", "el botón de neón entra al menú")
 class Toque: x, y = 50, 60
 portada.zoom = 1.0; sm.ir("inicio"); portada.on_touch_down(Toque()); ok(sm.current == "menu", "un toque en el centro también")
+
+# ---------- pedir una mejora con la voz ----------
+sm.ir("inicio"); correr(0.5); MICRO.dichos.clear(); charlas.clear()
+core.cerebro_para_codigo = lambda: None
+MICRO.cola.append("Kira, aprende a convertir euros a dólares")
+ok(correr(3, lambda: any("necesito un cerebro" in d for d in MICRO.dichos)), "sin cerebro: lo dice claro")
+ok(not charlas, "no lo trata como charla")
+core.cerebro_para_codigo = lambda: "claude"
+ctl = sm.control; ctl.pasarela.url = ""
+MICRO.cola.append("Kira, aprende a convertir euros a dólares")
+ok(correr(3, lambda: any("laboratorio conectado" in d for d in MICRO.dichos)), "sin laboratorio: lo dice claro")
+ctl.pasarela.url = "http://127.0.0.1:8765"
+pedidos, aplicadas = [], []
+class Pend:
+    nombre = "euros_dolares"; resultado = {"avisos": []}
+def enviar_orden(p): pedidos.append(p); ctl.pendiente = Pend(); return {"ok": True, "aprobable": True, "intentos": 1, "texto": "Resumen: superó las pruebas."}
+ctl.enviar_orden = enviar_orden
+ctl.aplicar = lambda confirmado=False: (aplicadas.append(confirmado), {"ok": True, "texto": "[OK] aplicado"})[1]
+MICRO.cola.append("Kira, aprende a convertir euros a dólares")
+ok(correr(3, lambda: any("me pongo a programar" in d for d in MICRO.dichos)), "confirma que se pone a programar")
+ok(correr(6, lambda: pedidos), "envía el pedido al laboratorio")
+ok("convertir euros a dólares" in pedidos[0] and sm.current == "terminal", "abre la terminal de mejoras con el pedido: " + repr(pedidos))
+ok(correr(3, lambda: any("ha pasado las pruebas" in d for d in MICRO.dichos)), "lee el resultado en voz alta")
+ok(not aplicadas, "la voz NO aplica nada: hay que tocar Aplicar dos veces")
+ok(not buscar_btn("Aplicar").disabled if (buscar_btn := (lambda t: next(w for w in sm.get_screen("terminal").walk() if type(w).__name__ == "Button" and w.text == t))) else False, "Aplicar queda listo para tus dos toques")
 print("CABLEADO ESCUCHA OK", n)

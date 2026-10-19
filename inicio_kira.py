@@ -161,6 +161,27 @@ def ocultar_secretos(texto):
     return _SECRETO.sub("sk-ant-****", t)
 
 
+_MEJORA = re.compile(
+    r"^(?:por\s+favor\s+)?(?P<verbo>mej[oó]rate|mejora(?:r)?|mejora\s+tu|mejora\s+tus|aprende\s+a|ap[ré]ndete\s+a|a[ñn][aá]dete|a[ñn]ade|"
+    r"progr[aá]mate|programa|cr[eé]ate|crea\s+una\s+funci[oó]n|quiero\s+que\s+(?:sepas|aprendas\s+a|puedas))\b[\s,:]*(?P<pedido>.+)$",
+    re.I | re.S)
+
+
+def pedido_mejora(texto):
+    """Si la frase pide una MEJORA de Kira («mejora…», «aprende a…», «añade…», «prográmate…»), devuelve lo que pide.
+    Si no, None. («aprende que…» es para recordar un dato, no para programar.)"""
+    t = limpiar_entrada(texto).rstrip(" .!?¡¿")
+    m = _MEJORA.match(t)
+    if not m:
+        return None
+    pedido = m.group("pedido").strip(" ,.:")
+    if len(pedido) < 4 or re.match(r"^(?:sola|sobre)\b", pedido, re.I):
+        return None
+    if m.group("verbo").lower().startswith("ap") and re.match(r"^que\b", pedido, re.I):
+        return None                                     # «aprende que…» = recordar un dato
+    return pedido
+
+
 def limpiar_entrada(texto):
     return re.sub(r"\s+", " ", _CONTROL.sub(" ", str(texto))).strip()[:MAX_ENTRADA]
 
