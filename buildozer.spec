@@ -339,7 +339,9 @@ android.allow_backup = False
 #p4a.fork = kivy
 
 # (str) python-for-android branch to use, defaults to master
-#p4a.branch = master
+# «develop»: la «master» (v2026.05.09) baja paquetes para Android y luego los instala como si fueran del PC
+# («charset_normalizer-…-android_24_arm64_v8a.whl is not a supported wheel on this platform»). En develop está arreglado.
+p4a.branch = develop
 
 # (str) python-for-android specific commit to use, defaults to HEAD, must be within p4a.branch
 #p4a.commit = HEAD

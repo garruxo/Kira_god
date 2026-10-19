@@ -59,6 +59,12 @@ jobs:
           set -o pipefail
           # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)
           rm -rf .buildozer/android/platform/build-*/build/other_builds/libffi* || true
+          # si cambió la rama de python-for-android en buildozer.spec, bajar la copia nueva
+          if [ -d .buildozer/android/platform/python-for-android ]; then
+            want=$(grep -E '^p4a.branch' buildozer.spec | cut -d= -f2 | tr -d ' ')
+            have=$(git -C .buildozer/android/platform/python-for-android rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+            if [ -n "$want" ] && [ "$want" != "$have" ]; then echo "p4a: $have -> $want"; rm -rf .buildozer/android/platform/python-for-android .buildozer/android/platform/build-*; fi
+          fi
           yes | buildozer -v android debug 2>&1 | tee compilacion.log
 
       - name: Guardar SDK/NDK aunque falle (para no descargarlos otra vez)
