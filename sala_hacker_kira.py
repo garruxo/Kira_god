@@ -28,6 +28,7 @@ def montar_sala_hacker(sm, ctx):
     import habitacion_kira as hk
     import inicio_kira as ik
     import programacion_kira as pk
+    import curso_avanzado_kira as ca
 
     boton, entrada, texto_largo, en_hilo = ctx["boton"], ctx["entrada"], ctx["texto_largo"], ctx["en_hilo"]
     TXT, NEON, TENUE, GRIS, VERDE, ROJO = (ctx[k] for k in ("TXT", "NEON", "TENUE", "GRIS", "VERDE", "ROJO"))
@@ -179,6 +180,13 @@ def montar_sala_hacker(sm, ctx):
 
     # ---- APRENDER ----
     c_apr = BoxLayout(orientation="vertical", spacing=dp(6))
+    fila_niv = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+    niveles = {"Básico": pk.CURSO, "Avanzado": ca.CURSO_AVANZADO, "Códigos": ca.CODIGOS}
+    botones_niv = {}
+    for nombre_n in niveles:
+        botones_niv[nombre_n] = boton(nombre_n, lambda n_=nombre_n: pintar_lecciones(n_), GRIS, alto=40)
+        fila_niv.add_widget(botones_niv[nombre_n])
+    c_apr.add_widget(fila_niv)
     sv_lecc = ScrollView(size_hint_y=0.26, do_scroll_x=False)
     rej = GridLayout(cols=2, spacing=dp(6), size_hint_y=None, row_default_height=dp(42), row_force_default=True)
     rej.bind(minimum_height=rej.setter("height"))
@@ -195,8 +203,20 @@ def montar_sala_hacker(sm, ctx):
         vista.text = f"{titulo}\n\n{explicacion}\n\nEjemplo:\n{codigo}"
         est_apr.text = ""
 
-    for l in pk.CURSO:
-        rej.add_widget(boton(l["titulo"], lambda l_=l: mostrar_leccion(l_["titulo"], l_["texto"], l_["codigo"]), GRIS, alto=42))
+    def pintar_lecciones(nivel="Básico"):
+        rej.clear_widgets()
+        for n_, b_ in botones_niv.items():
+            b_.background_color = VERDE if n_ == nivel else GRIS
+        for l in niveles[nivel]:
+            rej.add_widget(boton(l["titulo"], lambda l_=l: mostrar_leccion(l_["titulo"], l_["texto"], l_["codigo"]), GRIS, alto=42))
+    pintar_lecciones("Básico")
+
+    def abrir_editor():
+        if not actual["codigo"]:
+            est_apr.text = "Elige una lección primero."
+            return
+        if ctx.get("abrir_en_editor"):
+            ctx["abrir_en_editor"](actual["codigo"], f"{actual['titulo']}: pulsa «Ejecutar» y cámbialo a tu gusto.")
 
     def comprobar():
         if not actual["codigo"]:
@@ -215,6 +235,7 @@ def montar_sala_hacker(sm, ctx):
             est_apr.text = f"No se pudo guardar: {e}"
     fila_a = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
     fila_a.add_widget(boton("Comprobar sintaxis", comprobar, GRIS))
+    fila_a.add_widget(boton("Abrir en el editor", abrir_editor, GRIS))
     fila_a.add_widget(boton("Guardar en biblioteca", guardar, VERDE))
     c_apr.add_widget(fila_a)
     campo_tema = entrada("Pídele a Kira una lección sobre…")

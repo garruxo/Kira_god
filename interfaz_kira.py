@@ -45,6 +45,7 @@ def construir_interfaz(core, consola=None):
     from taller_kira import montar_taller
     from sala_ciber_kira import montar_sala_ciber
     from pantalla_bitacora_kira import montar_bitacora
+    from pantallas_codigo_kira import montar_codigo
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -421,7 +422,7 @@ def construir_interfaz(core, consola=None):
         if menu_st["todos"]:
             for a in mk.secundarios():
                 rejilla.add_widget(baldosa(a))
-        btn_mas.text = "Menos apartados ▴" if menu_st["todos"] else f"Más apartados ({len(mk.secundarios())}) ▾"
+        btn_mas.text = "Menos apartados" if menu_st["todos"] else f"Más apartados ({len(mk.secundarios())})"
 
     def alternar_mas():
         menu_st["todos"] = not menu_st["todos"]
@@ -718,12 +719,27 @@ def construir_interfaz(core, consola=None):
     c_ayu.add_widget(sv_ayu)
 
     # =================================================================================
+    #  EDITOR DE CÓDIGO Y JUEGOS
+    # =================================================================================
+    def juegos_de_mejoras():
+        """Juegos que han añadido los módulos de mejora (registrar() -> {'juego …': ClaseJuego})."""
+        lista = []
+        for nombre, clase in sorted(getattr(core, "juegos_modulos", {}).items()):
+            lista.append((nombre, lambda c=clase: codigo_ui["empezar_juego"]("", volver="juegos", juego=c())))
+        return lista
+    codigo_ui = montar_codigo(sm, {
+        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
+        "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
+        "FUENTE": FUENTE, "dir_datos": dir_datos, "ganchos": ganchos, "juegos_extra": juegos_de_mejoras})
+
+    # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)
     # =================================================================================
     hacker = montar_sala_hacker(sm, {
         **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "ctl": ctl, "core": core, "cerebro": cerebro, "voz": voz,
-        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
+        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes,
+        "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
     # =================================================================================
     #  SALA DE DISEÑO, SALA DE CINE, MEDIATECA, REPRODUCTOR
@@ -772,6 +788,8 @@ def construir_interfaz(core, consola=None):
             hacker["detener"]()
         if nombre != "sala_ciber":
             ciber["detener"]()
+        if nombre != "jugar":
+            codigo_ui["parar_juego"]()
         diseno["detener_si_sale"](nombre)
         sm.current = nombre
         if nombre == "inicio":

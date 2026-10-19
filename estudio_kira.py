@@ -216,6 +216,6 @@ class Estudiante:
     def texto_plan(self):
         lineas = []
         for i, t in enumerate(PLAN):
-            marca = "✓" if i < self.indice else ("→" if i == self.indice % len(PLAN) else " ")
+            marca = "[hecho]" if i < self.indice else ("[ahora]" if i == self.indice % len(PLAN) else "       ")
             lineas.append(f"{marca} {t}")
         return "Plan de estudio:\n" + "\n".join(lineas)

@@ -63,7 +63,7 @@ tema, _ = E.paso()
 ok(tema == ek.PLAN[0] and E.indice == 1, "el plan avanza")
 E2 = ek.Estudiante(B, os.path.join(T, "estudio.json"), pedir=wiki)
 ok(E2.indice == 1 and E2.aprendidos == E.aprendidos, "el progreso se guarda")
-ok("✓ Programación" in E.texto_plan() and "→ Python" in E.texto_plan(), "plan legible")
+ok("[hecho] Programación" in E.texto_plan() and "[ahora] Python" in E.texto_plan(), "plan legible")
 ok("Plan: 1 de" in E.estado_texto(), "estado")
 
 # aprender sola: hilo en segundo plano

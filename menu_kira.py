@@ -15,7 +15,7 @@ import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
 # El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
-PRINCIPALES = ("hablar", "mejoras", "conocimiento", "sala", "diseno", "ciber", "bitacora", "config")
+PRINCIPALES = ("hablar", "mejoras", "juegos", "editor_codigo", "conocimiento", "sala", "diseno", "ciber", "bitacora", "config")
 APARTADOS = [
     {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
@@ -24,6 +24,8 @@ APARTADOS = [
     {"id": "mediateca", "titulo": "Mediateca",       "desc": "Tus vídeos y tu música",       "color": (0.95, 0.60, 0.30), "destino": ("pantalla", "mediateca")},
     {"id": "mezcla",    "titulo": "Mesa de mezcla",  "desc": "Mezcla pistas de audio",       "color": (0.90, 0.45, 0.70), "destino": ("pantalla", "mezcla")},
     {"id": "editor",    "titulo": "Editor de vídeo", "desc": "Cortar, unir, música…",        "color": (0.55, 0.45, 0.95), "destino": ("pantalla", "editor_video")},
+    {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
+    {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
     {"id": "taller",    "titulo": "Taller",          "desc": "Qué le falta y cómo prepararse", "color": (0.90, 0.75, 0.25), "destino": ("pantalla", "taller")},
     {"id": "ciber",     "titulo": "Ciberseguridad", "desc": "Búnker: defensa, aprendizaje, dispositivo", "color": (0.15, 0.85, 0.45), "destino": ("pantalla", "sala_ciber")},
     {"id": "bitacora",  "titulo": "Bitácora",        "desc": "Pasos, guías y arreglos",       "color": (0.70, 0.70, 0.78), "destino": ("pantalla", "bitacora")},
@@ -75,6 +77,11 @@ AYUDA = (
     "lo prueba en el laboratorio, y te lee el resultado. Instalarlo SIEMPRE requiere tocar «Aplicar» dos veces: la voz "
     "puede pedir, pero no aprobar. Necesita cerebro de IA y el laboratorio conectado.\n"
     "PORTADA: toca el botón redondo de neón para entrar al menú. El neón brilla más cuando Kira te escucha y cuando habla.\n"
+    "EDITOR DE CÓDIGO: escribe Python, pulsa «Ejecutar» y ves lo que imprime. «Ejemplos…» trae el curso básico y avanzado, "
+    "programas completos y juegos. Modo seguro: sin archivos, red ni sistema y se corta a los 5 segundos. «Guardar» lo deja "
+    "en «Abrir…».\n"
+    "JUEGOS: Rompeladrillos, Serpiente, Esquiva, Saltarín y Pong, hechos con el motor de Kira. Con «Código» los abres en el "
+    "editor; «Programar un juego nuevo» trae una plantilla. Un juego es una clase que hereda de Juego (motor_juegos_kira).\n"
     "RECUERDOS: Kira guarda en una carpeta suya (privada y firmada) lo que le enseñas y lo que le explica Claude. "
     "Antes de preguntar a nadie busca ahí, y solo abre los trozos del índice que necesita, sin llenar la RAM. "
     "Busca también por significado: sabe que minino es gato, y aprende palabras nuevas (con el modelo del móvil o con "
