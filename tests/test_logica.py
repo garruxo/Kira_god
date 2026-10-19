@@ -74,7 +74,7 @@ def imp(name, *a, **k):
     return real(name, *a, **k)
 builtins.__import__ = imp; ok(not ik.Voz().puede_hablar(), "sin plyer"); builtins.__import__ = real
 # menú
-ids = [a["id"] for a in mk.APARTADOS]; ok(len(ids) == len(set(ids)) == 24, "apartados únicos")
+ids = [a["id"] for a in mk.APARTADOS]; ok(len(ids) == len(set(ids)) == 25, "apartados únicos")
 ok(all(a["destino"][0] in ("panel", "pantalla") for a in mk.APARTADOS), "destinos")
 f = {"notas": ["Comprar PILAS", "idea: módulo de hora"], "módulos": ["hora (hora, reloj)"]}
 ok(mk.buscar_local("pilas", f) == [("notas", "Comprar PILAS")], "busca")

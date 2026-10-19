@@ -31,7 +31,7 @@ campo = buscar("TextInput", hint_text="Escríbele a Kira o dale una orden…")
 burbuja = [w for w in sm.walk() if type(w).__name__ == "Label"]
 Clock.correr(40, 0.1)
 sal = [w.text for w in burbuja if "Soy Kira" in w.text]
-ok(sal and "no tengo clave" in sal[0], "saludo honesto sin clave: " + str([w.text for w in burbuja][:6]))
+ok(sal and "no tengo cerebro" in sal[0], "saludo honesto sin cerebro: " + str([w.text for w in burbuja][:6]))
 # charla
 campo.text = "hola kira"; buscar("Button", text="Enviar").press()
 B = next(w for w in burbuja if "Soy Kira" in w.text or w.text == "…")
@@ -49,12 +49,12 @@ tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.tex
 ok(len(tiles) == 10, f"10 apartados principales, hay {len(tiles)}")
 mas = buscar("Button", texto_en="Más apartados"); mas.press()
 tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.text]
-ok(len(tiles) == 24 and "Menos" in mas.text, f"con «Más» salen los 24, hay {len(tiles)}")
+ok(len(tiles) == 25 and "Menos" in mas.text, f"con «Más» salen los 25, hay {len(tiles)}")
 # todos los apartados navegan sin error
 vistos = set()
 for t in tiles:
     sm.ir("menu"); t.press(); Clock.correr(3, 0.1); time.sleep(0.15); Clock.correr(3, 0.1); vistos.add(sm.current)
-ok(vistos == {"inicio", "panel", "pasarela", "busqueda", "notas", "memoria", "estado", "config", "ayuda", "lienzo", "conocimiento", "sala_hacker", "sala_diseno", "sala_cine", "mediateca", "taller", "sala_ciber", "mezcla", "editor_video", "bitacora", "juegos", "editor_codigo"}, "destinos: " + str(vistos))
+ok(vistos == {"inicio", "panel", "pasarela", "busqueda", "notas", "memoria", "estado", "config", "ayuda", "lienzo", "conocimiento", "sala_hacker", "sala_diseno", "sala_cine", "mediateca", "taller", "sala_ciber", "mezcla", "editor_video", "bitacora", "juegos", "editor_codigo", "cerebro_kira"}, "destinos: " + str(vistos))
 # notas
 sm.ir("notas"); cn = buscar("TextInput", hint_text="Nueva nota…"); cn.text = "comprar pilas"
 buscar("Button", text="Añadir nota").press(); ok("comprar pilas" in open(os.path.join(T, "notas.json"), encoding="utf-8").read(), "nota guardada")

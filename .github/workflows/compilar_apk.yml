@@ -54,6 +54,23 @@ jobs:
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
           restore-keys: buildozer-${{ runner.os }}-
 
+      - name: Recuperar el cerebro ya compilado (si no ha cambiado)
+        id: cache_cerebro
+        uses: actions/cache@v4
+        with:
+          path: libs_android
+          key: cerebro-${{ hashFiles('herramientas_pc/compilar_cerebro_android.sh') }}
+
+      - name: Compilar el cerebro de Kira (llama.cpp para Android)
+        if: steps.cache_cerebro.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
+          bash herramientas_pc/compilar_cerebro_android.sh 2>&1 | tee cerebro.log; rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            python3 -c "import re;t=open('cerebro.log',errors='replace').read().splitlines();m=[l for l in t if re.search(r'error|Error|ERROR|No encuentro',l)][-25:];x='\n'.join(m+['---']+t[-30:])[-3800:];print('::error title=Fallo al compilar el cerebro::'+x.replace('%','%25').replace('\n','%0A'))"
+            exit $rc
+          fi
+
       - name: Compilar el APK (debug)
         run: |
           # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)

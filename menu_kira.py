@@ -15,7 +15,7 @@ import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
 # El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
-PRINCIPALES = ("hablar", "mejoras", "juegos", "editor_codigo", "conocimiento", "sala", "diseno", "ciber", "bitacora", "config")
+PRINCIPALES = ("hablar", "cerebro_kira", "mejoras", "juegos", "editor_codigo", "conocimiento", "sala", "diseno", "ciber", "config")
 APARTADOS = [
     {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
@@ -24,6 +24,7 @@ APARTADOS = [
     {"id": "mediateca", "titulo": "Mediateca",       "desc": "Tus vídeos y tu música",       "color": (0.95, 0.60, 0.30), "destino": ("pantalla", "mediateca")},
     {"id": "mezcla",    "titulo": "Mesa de mezcla",  "desc": "Mezcla pistas de audio",       "color": (0.90, 0.45, 0.70), "destino": ("pantalla", "mezcla")},
     {"id": "editor",    "titulo": "Editor de vídeo", "desc": "Cortar, unir, música…",        "color": (0.55, 0.45, 0.95), "destino": ("pantalla", "editor_video")},
+    {"id": "cerebro_kira", "titulo": "Cerebro y oído", "desc": "Su IA y su oído, sin internet", "color": (0.55, 0.40, 0.95), "destino": ("pantalla", "cerebro_kira")},
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
     {"id": "taller",    "titulo": "Taller",          "desc": "Qué le falta y cómo prepararse", "color": (0.90, 0.75, 0.25), "destino": ("pantalla", "taller")},
@@ -84,6 +85,10 @@ AYUDA = (
     "editor; «Programar un juego nuevo» trae una plantilla. Un juego es una clase que hereda de Juego (motor_juegos_kira).\n"
     "MEJORAS MÁS POTENTES: los módulos pueden guardar sus propios datos, usar los recuerdos de Kira, programar avisos "
     "(«avísame en 10 minutos…») y añadir juegos. Escribe «avisos» para ver los pendientes.\n"
+    "CEREBRO Y OÍDO: Kira puede tener su PROPIA IA dentro de la app (sin Termux ni API): en «Cerebro y oído» descarga una "
+    "vez el modelo ligero (1,4 GB, rápido) o el listo (3 GB) y se enciende sola al abrir Kira. Las respuestas van "
+    "apareciendo mientras piensa. El OÍDO PROPIO (39 MB) escucha sin parar, sin pitidos y sin internet, en todas las "
+    "pantallas; si no está, usa el reconocedor de Android.\n"
     "RECUERDOS: Kira guarda en una carpeta suya (privada y firmada) lo que le enseñas y lo que le explica Claude. "
     "Antes de preguntar a nadie busca ahí, y solo abre los trozos del índice que necesita, sin llenar la RAM. "
     "Busca también por significado: sabe que minino es gato, y aprende palabras nuevas (con el modelo del móvil o con "
@@ -210,7 +215,7 @@ def color_oscuro(rgb, factor=0.55):
 
 class AjustesInterfaz:
     """Preferencias de la interfaz (voz, escucha permanente y velocidad del texto)."""
-    DEFECTO = {"voz_hablar": True, "velocidad": 45, "escucha_permanente": True}
+    DEFECTO = {"voz_hablar": True, "velocidad": 45, "escucha_permanente": True, "oido_propio": True}
 
     def __init__(self, ruta):
         self.ruta = ruta
@@ -220,11 +225,12 @@ class AjustesInterfaz:
         self.velocidad = int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 45
         self.velocidad = max(15, min(self.velocidad, 120))
         self.escucha_permanente = datos.get("escucha_permanente", True) is not False
+        self.oido_propio = datos.get("oido_propio", True) is not False
 
     def guardar(self):
         try:
             _guardar_json(self.ruta, {"voz_hablar": self.voz_hablar, "velocidad": self.velocidad,
-                                      "escucha_permanente": self.escucha_permanente})
+                                      "escucha_permanente": self.escucha_permanente, "oido_propio": self.oido_propio})
         except OSError:
             pass
 
@@ -236,6 +242,11 @@ class AjustesInterfaz:
         self.voz_hablar = not self.voz_hablar
         self.guardar()
         return self.voz_hablar
+
+    def alternar_oido(self):
+        self.oido_propio = not self.oido_propio
+        self.guardar()
+        return self.oido_propio
 
     def alternar_escucha(self):
         self.escucha_permanente = not self.escucha_permanente

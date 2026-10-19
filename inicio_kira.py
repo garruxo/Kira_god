@@ -136,8 +136,8 @@ def saludo(hora, tiene_clave, voz_hablar_ok=False, voz_escuchar_ok=False):
     if tiene_clave:
         frases.append("Puedes hablar conmigo o darme órdenes. Toca el botón para entrar al menú.")
     else:
-        frases.append("Todavía no tengo clave de la API, así que solo entiendo órdenes, no puedo charlar. "
-                      "Entra y guárdala en Configuración.")
+        frases.append("Todavía no tengo cerebro de IA, así que solo entiendo órdenes, no puedo charlar. "
+                      "En el menú, «Cerebro y oído», puedes descargar el mío: funciona sin internet ni clave.")
     if not voz_hablar_ok:
         frases.append("En este dispositivo no puedo hablar en voz alta: te escribo.")
     elif not voz_escuchar_ok:
@@ -235,7 +235,7 @@ class Conversacion:
             self.historial = []
             self._guardar()
 
-    def preguntar(self, texto):
+    def preguntar(self, texto, al_trozo=None):
         """Bloqueante (llámalo en un hilo). Devuelve (respuesta, via): 'orden' | 'local' | 'aprender' | 'escena' | 'charla' | 'error'."""
         texto = limpiar_entrada(texto)
         if not texto:
@@ -268,7 +268,13 @@ class Conversacion:
                 self._anotar("kira", loc[0])
                 return loc
         try:
-            r = self.conversar(texto, previo)
+            if al_trozo is not None:
+                try:
+                    r = self.conversar(texto, previo, al_trozo=al_trozo)   # la respuesta va apareciendo
+                except TypeError:
+                    r = self.conversar(texto, previo)
+            else:
+                r = self.conversar(texto, previo)
             self._anotar("kira", r)
             if self.al_turno is not None:
                 try:

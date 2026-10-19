@@ -32,6 +32,45 @@ class CerebroError(RuntimeError):
     pass
 
 
+def visible_parcial(texto):
+    """Lo que se puede enseñar YA de una respuesta a medias: sin el razonamiento <think>… (ni el que aún no se cerró)."""
+    t = _PENSAMIENTO.sub("", str(texto or ""))
+    i = t.lower().find("<think>")
+    return (t[:i] if i >= 0 else t).lstrip()
+
+
+def leer_sse(respuesta, extraer, al_trozo, tope=2_000_000):
+    """Lee un flujo «data: …» línea a línea. extraer(dict) -> trocito de texto. Llama al_trozo(texto_visible)."""
+    total, visto, leidos = "", "", 0
+    while True:
+        linea = respuesta.readline()
+        if not linea:
+            break
+        leidos += len(linea)
+        if leidos > tope:
+            break
+        linea = linea.decode("utf-8", "replace").strip()
+        if not linea.startswith("data:"):
+            continue
+        dato = linea[5:].strip()
+        if dato == "[DONE]":
+            break
+        try:
+            trozo = extraer(json.loads(dato))
+        except (ValueError, KeyError, IndexError, TypeError):
+            continue
+        if trozo:
+            total += trozo
+            v = visible_parcial(total)
+            if v != visto:
+                visto = v
+                try:
+                    al_trozo(v)
+                except Exception:
+                    pass
+    return total
+
+
 def limpiar_respuesta(texto):
     """Quita el «razonamiento» que algunos modelos (Qwen y similares) escriben entre <think>…</think>."""
     t = _PENSAMIENTO.sub("", str(texto or ""))
@@ -132,25 +171,31 @@ class Cerebro:
                 "el móvil (ver «cómo cerebro local») o pon la clave con «config clave: …».")
 
     # ---- hablar con el modelo local (formato OpenAI de llama-server) ----
-    def chat_local(self, system, mensajes, max_tokens=512, timeout=300):
+    def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None):
+        """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra."""
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
             {"role": m["role"], "content": str(m["content"])} for m in mensajes]
         cuerpo = json.dumps({"messages": msgs, "max_tokens": int(min(max_tokens, MAX_TOKENS_LOCAL)),
-                             "temperature": 0.6, "stream": False}).encode("utf-8")
+                             "temperature": 0.6, "stream": bool(al_trozo)}).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
                                      headers={"Content-Type": "application/json"})
         try:
             with self._abrir(req, timeout=timeout) as r:
-                datos = json.loads(r.read(2_000_000).decode("utf-8"))
+                if al_trozo:
+                    texto = leer_sse(r, lambda d: (d["choices"][0].get("delta") or {}).get("content") or "", al_trozo)
+                    datos = None
+                else:
+                    datos = json.loads(r.read(2_000_000).decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise CerebroError(f"El modelo local respondió {e.code}.")
         except Exception as e:
             self._cache = (0.0, None)
             raise CerebroError(f"No se pudo hablar con el modelo local: {e}")
-        try:
-            texto = datos["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            raise CerebroError("El modelo local devolvió una respuesta sin texto.")
+        if datos is not None:
+            try:
+                texto = datos["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError):
+                raise CerebroError("El modelo local devolvió una respuesta sin texto.")
         texto = limpiar_respuesta(texto)
         if not texto:
             raise CerebroError("El modelo local no llegó a responder (respuesta vacía).")

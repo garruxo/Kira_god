@@ -193,3 +193,19 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   muebles, autoexposición, resplandor, viñeta y luces que parpadean. Sala Hacker con armario de servidores, tira LED,
   planta y silla; búnker con rejilla luminosa en el suelo.
 - Pruebas: `test_codigo.py`, `test_cableado_codigo.py`, `test_api_modulos.py`, `test_luz3d.py`.
+
+## Cerebro y oído propios: Kira sin Termux, sin API y sin el reconocedor de Android (nuevo)
+- `herramientas_pc/compilar_cerebro_android.sh`: GitHub compila **llama-server** (llama.cpp b11742) para Android
+  arm64 en dos versiones (rápida ARMv8.2+dotprod y genérica) y las mete en el APK como `libkira_cerebro*.so`
+  (`android.add_libs_arm64_v8a`). Android las deja ejecutables en la carpeta de librerías nativas de la app.
+- `cerebro_propio_kira.py`: descarga UNA vez el modelo (Qwen3.5 2B 1,4 GB o 4B 3 GB, licencia Apache 2.0) con
+  progreso, comprobación de espacio y reanudación; enciende el motor (prueba el rápido y, si el móvil no puede, el
+  genérico) en `127.0.0.1:8080` y lo apaga al cerrar Kira. Se enciende solo al abrir la app.
+- Respuestas que **van apareciendo** mientras piensa (streaming) con el cerebro propio y con Claude.
+- `oido_kira.py`: **oído propio** con Vosk (`vosk-android`, modelo español de 39 MB): escucha continua, sin pitidos
+  y sin internet, en todas las pantallas (se pausa mientras Kira habla o piensa, y en los juegos). Como el
+  reconocedor sin conexión puede no conocer «Kira», se acepta por cómo SUENA la primera palabra («quiera…»), pero no
+  «quiero» ni «mira». Si no está, Kira usa el reconocedor de Android.
+- Pantalla «Cerebro y oído» en el menú. Órdenes: `cerebro propio`, `descarga cerebro ligero|listo`,
+  `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
+  `test_cableado_cerebro.py`.

@@ -29,11 +29,40 @@ def _norm(t):
 _NOMBRE = re.compile(r"\b(?:" + "|".join(NOMBRES) + r")\b")
 
 
+def fonetica(palabra):
+    """Cómo SUENA una palabra en español, simplificado: «quiera» -> «kiera», «kyra» -> «kira»."""
+    w = _norm(palabra)
+    w = re.sub(r"[^a-zñ]", "", w).replace("qu", "k").replace("h", "").replace("y", "i")
+    w = re.sub(r"c(?=[aou])", "k", w)
+    return w
+
+
+def _distancia(a, b):
+    previa = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        actual = [i]
+        for j, cb in enumerate(b, 1):
+            actual.append(min(previa[j] + 1, actual[j - 1] + 1, previa[j - 1] + (ca != cb)))
+        previa = actual
+    return previa[-1]
+
+
+def suena_a_kira(palabra):
+    """Para la PRIMERA palabra de una frase: el reconocedor sin conexión puede no conocer «Kira» y escribir
+    «quiera», «kiara» o «quira». Se acepta si suena casi igual y empieza por el sonido K («quiero», «mira» no)."""
+    f = fonetica(palabra)
+    return f.startswith("ki") and len(f) <= 6 and _distancia(f, "kira") <= 1
+
+
 def contiene_nombre(texto):
     """(True, lo_que_va_después_del_nombre) si la frase nombra a Kira; (False, '') si no."""
     original = str(texto or "")
     m = _NOMBRE.search(_norm(original))
     if not m:
+        partes = original.strip().split(None, 1)
+        if partes and suena_a_kira(partes[0]):
+            resto = re.sub(r"^[\s,.:;!¡?¿-]+", "", partes[1] if len(partes) > 1 else "").strip()
+            return True, resto
         return False, ""
     # el texto normalizado tiene la misma longitud que el original salvo tildes combinadas: se busca en el original
     m2 = re.search(r"\b(?:k|q)[iíy]r[aá]+h?\b", original, re.I)

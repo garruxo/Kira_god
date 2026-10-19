@@ -261,6 +261,16 @@ if KIVY_AVAILABLE:
                 print("[!] Panel no disponible, se usa la consola clásica:\n" + traceback.format_exc())
                 return consola
 
+        def on_pause(self):
+            return True                       # al cambiar de app, Kira se pausa (no se cierra)
+
+        def on_stop(self):
+            for pieza in ("cerebro_propio", "oido"):
+                try:
+                    getattr(getattr(self, "kira_god", None), pieza).apagar()
+                except Exception:
+                    pass
+
 # 4. Ejecución principal adaptativa
 if __name__ == '__main__':
     if KIVY_AVAILABLE:

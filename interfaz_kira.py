@@ -46,6 +46,7 @@ def construir_interfaz(core, consola=None):
     from sala_ciber_kira import montar_sala_ciber
     from pantalla_bitacora_kira import montar_bitacora
     from pantallas_codigo_kira import montar_codigo
+    from pantalla_cerebro_kira import montar_cerebro
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -65,6 +66,9 @@ def construir_interfaz(core, consola=None):
                            no_reconocida=getattr(core, "NO_RECONOCIDA", "[i] No reconozco la orden"),
                            cerebro=cerebro, al_turno=guardar_turno)
     voz = ik.Voz()
+    import oido_kira
+    oido = getattr(core, "oido", None) or oido_kira.Oido(dir_datos)
+    core.oido = oido                                 # main.py lo apaga al cerrar
 
     try:
         Window.clearcolor = (0.015, 0.03, 0.03, 1)
@@ -155,7 +159,7 @@ def construir_interfaz(core, consola=None):
     modelo = esk.NeonModelo()
     escucha = esk.Escucha()
     st = {"ocupado": False, "entrando": False, "reloj_txt": None, "maq": None, "reloj_mic": None, "saludado": False,
-          "esc_reloj": None, "esc_stt": False, "esc_t": 0.0, "esc_fallos": 0}
+          "esc_reloj": None, "esc_stt": False, "esc_t": 0.0, "esc_fallos": 0, "oido": False}
 
     p_ini = Screen(name="inicio")
     orbe = PortadaKira(modelo=modelo, al_tocar=lambda: entrar())
@@ -186,10 +190,20 @@ def construir_interfaz(core, consola=None):
     def estado_base():
         return "escuchando" if st["esc_reloj"] is not None else "reposo"
 
-    def decir(texto, hablar=True):
-        """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta."""
+    def decir(texto, hablar=True, ya_escrito=False):
+        """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta.
+        ya_escrito=True: el texto ya fue apareciendo mientras pensaba (no se vuelve a escribir)."""
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()
+            st["reloj_txt"] = None
+        if ya_escrito:
+            burbuja.text = texto
+            modelo.poner_estado("hablando")
+            Clock.schedule_once(lambda _dt: modelo.estado == "hablando" and not st["ocupado"]
+                                and modelo.poner_estado(estado_base()), min(8.0, 1.0 + len(texto) / 16.0))
+            if hablar and ajustes.voz_hablar:
+                voz.hablar(texto.replace("[OK]", "").replace("[x]", "").replace("[i]", ""))
+            return
         st["maq"] = ik.Maquina(texto, cps=ajustes.velocidad)
         modelo.poner_estado("hablando")
 
@@ -222,16 +236,29 @@ def construir_interfaz(core, consola=None):
         modelo.poner_estado("pensando")
         escucha.olvidar()
 
+        flujo = {"hubo": False}
+
+        def mostrar_trozo(parcial):                      # la respuesta va apareciendo mientras Kira piensa
+            if not st["ocupado"]:
+                return
+            flujo["hubo"] = True
+            burbuja.text = parcial + " …"
+            if modelo.estado != "hablando":
+                modelo.poner_estado("hablando")
+
+        def trozo(parcial):                              # llega desde otro hilo: se pinta en el de la pantalla
+            Clock.schedule_once(lambda _dt, p_=parcial: mostrar_trozo(p_), 0)
+
         def terminado(r):
             st["ocupado"] = False
             if isinstance(r, Exception):
                 decir(f"[x] Algo falló: {r}", hablar=False)
             else:
                 texto_r, via = r
-                decir(texto_r, hablar=(via != "error"))
+                decir(texto_r, hablar=(via != "error"), ya_escrito=flujo["hubo"] and via == "charla")
                 if via == "escena" and cerebro.ultima_escena:
                     mostrar_escena(cerebro.ultima_escena, texto_r)
-        en_hilo(lambda: conv.preguntar(texto), terminado)
+        en_hilo(lambda: conv.preguntar(texto, al_trozo=trozo), terminado)
 
     # ---------- mejoras pedidas por voz ----------
     def mejora_por_voz(pedido):
@@ -276,8 +303,28 @@ def construir_interfaz(core, consola=None):
             pass
         return True
 
+    def usar_oido_propio():
+        return ajustes.oido_propio and oido.disponible()
+
+    def al_frase_oido(texto):                          # llega desde el hilo de Java: se pasa al de la pantalla
+        Clock.schedule_once(lambda _dt, t_=texto: procesar_frase(t_), 0)
+
     def arrancar_escucha():
         if st["esc_reloj"] is not None:
+            return True
+        if usar_oido_propio():                         # oído propio: continuo, sin pitidos y sin internet
+            if not permiso_micro():
+                pintar_escucha("Necesito permiso para el micrófono. Concédelo y pulsa «Escucha».")
+                return False
+            ok, msg = oido.encender(al_frase_oido)
+            if not ok:
+                pintar_escucha(msg)
+                return False
+            st["oido"] = True
+            st["esc_reloj"] = Clock.schedule_interval(ciclo_escucha, 0.4)
+            if modelo.estado == "reposo":
+                modelo.poner_estado("escuchando")
+            pintar_escucha("Te escucho de fondo con mi oído propio. Di «Kira» cuando quieras.")
             return True
         if not voz.puede_escuchar():
             pintar_escucha("No puedo escuchar en este dispositivo. Escríbeme.")
@@ -299,6 +346,9 @@ def construir_interfaz(core, consola=None):
         if st["esc_stt"]:
             voz.parar_escucha()
             st["esc_stt"] = False
+        if st["oido"]:
+            oido.apagar()
+            st["oido"] = False
         escucha.olvidar()                              # el borrador se borra al apagar
         if modelo.estado in ("escuchando", "atenta"):
             modelo.poner_estado("reposo")
@@ -317,6 +367,11 @@ def construir_interfaz(core, consola=None):
         if modelo.estado == "atenta" and not escucha.atenta:
             modelo.poner_estado(estado_base())
             pintar_escucha()
+        if st["oido"]:                                 # el oído propio escucha en TODAS las pantallas
+            oido.pausar(st["ocupado"] or voz.hablando() or sm.current == "jugar")
+            if oido.estado == "error":
+                pintar_escucha(oido.mensaje)
+            return
         callada = sm.current != "inicio" or st["ocupado"] or voz.hablando()
         if callada:                                    # fuera de la portada, pensando o hablando: no escucha
             if st["esc_stt"]:
@@ -344,7 +399,12 @@ def construir_interfaz(core, consola=None):
         if estado != "listo" or not txt:
             return
         st["esc_fallos"] = 0
+        procesar_frase(txt)
+
+    def procesar_frase(txt):
         que, orden = escucha.oir(txt)
+        if que != "nada" and sm.current != "inicio":   # te ha oído desde otra pantalla: vuelve a su botón
+            ir("inicio")
         if que == "atenta":
             modelo.poner_estado("atenta")
             pintar_escucha("Te escucho… dime.")
@@ -374,7 +434,12 @@ def construir_interfaz(core, consola=None):
             return
         st["saludado"] = True
         tiene = bool(getattr(core, "tiene_clave", lambda: False)())
-        texto = ik.saludo(datetime.datetime.now().hour, tiene, voz.puede_hablar(), voz.puede_escuchar())
+        propio = getattr(core, "cerebro_propio", None)
+        despertando = bool(propio and not tiene and propio.modelo_instalado() and propio.tiene_motor())
+        texto = ik.saludo(datetime.datetime.now().hour, tiene or despertando, voz.puede_hablar(),
+                          voz.puede_escuchar() or oido.disponible())
+        if despertando:
+            texto += " Estoy cargando mi cerebro: en unos segundos podré charlar contigo."
         if ajustes.escucha_permanente and voz.puede_escuchar():
             texto += " Para hablarme, di «Kira»."
         decir(texto)
@@ -731,6 +796,18 @@ def construir_interfaz(core, consola=None):
         "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
         "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
         "FUENTE": FUENTE, "dir_datos": dir_datos, "ganchos": ganchos, "juegos_extra": juegos_de_mejoras})
+
+    # =================================================================================
+    #  CEREBRO Y OÍDO PROPIOS
+    # =================================================================================
+    def reiniciar_escucha():
+        parar_escucha()
+        if ajustes.escucha_permanente:
+            arrancar_escucha()
+    montar_cerebro(sm, {"boton": boton, "texto_largo": texto_largo, "pantalla": pantalla, "ganchos": ganchos,
+                        "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "NEON": NEON,
+                        "FUENTE": FUENTE, "core": core, "oido": oido, "ajustes": ajustes,
+                        "reiniciar_escucha": reiniciar_escucha})
 
     # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)

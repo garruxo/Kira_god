@@ -18,6 +18,7 @@ import re
 import json
 import logging
 import types
+import threading
 import urllib.request
 import urllib.error
 
@@ -63,6 +64,10 @@ class KiraGodCore:
         self.bitacora = bitacora_kira.Bitacora(os.path.join(self.dir, "bitacora.json"))
         import cerebro_ia_kira
         self.cerebro_ia = cerebro_ia_kira.Cerebro(self.dir)
+        import cerebro_propio_kira               # el cerebro DENTRO de la app (sin Termux ni API)
+        self.cerebro_propio = cerebro_propio_kira.CerebroPropio(self.dir)
+        if self.cerebro_propio.auto and self.cerebro_propio.modelo_instalado() and self.cerebro_propio.tiene_motor():
+            self.cerebro_propio.encender_en_segundo_plano(lambda ok: self.cerebro_ia.local_disponible(forzar=True))
         try:                                       # baúl de recuerdos en disco (carpeta privada, firmada)
             import recuerdos_kira
             self.recuerdos = recuerdos_kira.Recuerdos(os.path.join(self.dir, "recuerdos"))
@@ -308,7 +313,7 @@ class KiraGodCore:
         except Exception:
             return None
 
-    def conversar(self, texto, historial=()):
+    def conversar(self, texto, historial=(), al_trozo=None):
         """Respuesta hablada de Kira (modelo local o API de Claude). Lanza RuntimeError si falta cerebro o falla la red.
         Antes de responder, la IA recibe los recuerdos del baúl que vengan al caso."""
         import cerebro_ia_kira
@@ -322,8 +327,9 @@ class KiraGodCore:
         ctx = self._contexto_recuerdos(texto)
         if ctx:
             system += "\n\n" + ctx
-        r = self._llamar_api(clave, system, "", max_tokens=300, mensajes=self.armar_mensajes(historial, texto))
-        r = " ".join(r.split())[:1200] or "…"
+        extra = {"al_trozo": al_trozo} if al_trozo is not None else {}
+        r = self._llamar_api(clave, system, "", max_tokens=300, mensajes=self.armar_mensajes(historial, texto), **extra)
+        r = " ".join(cerebro_ia_kira.limpiar_respuesta(r).split())[:1200] or "…"
         if clave != cerebro_ia_kira.LOCAL:
             self.aprender_de_ia(texto, r)
         return r
@@ -430,10 +436,11 @@ class KiraGodCore:
         """True si Kira tiene algún cerebro de IA ahora mismo (modelo local encendido o clave de Claude)."""
         return bool(self._leer_clave())
 
-    def _llamar_api(self, clave, system, usuario, max_tokens=4000, mensajes=None):
+    def _llamar_api(self, clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
         import cerebro_ia_kira
-        if clave == cerebro_ia_kira.LOCAL:                      # modelo local (llama-server en el móvil o en casa)
-            return self.cerebro_ia.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens)
+        if clave == cerebro_ia_kira.LOCAL:                      # modelo local (cerebro propio, o en casa)
+            return self.cerebro_ia.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens,
+                                              al_trozo=al_trozo)
         ruta_modelo = os.path.join(self.dir, "modelo.txt")
         modelo = MODELO_POR_DEFECTO
         if os.path.exists(ruta_modelo):
@@ -442,6 +449,7 @@ class KiraGodCore:
         cuerpo = json.dumps({
             "model": modelo, "max_tokens": int(max_tokens), "system": system,
             "messages": mensajes or [{"role": "user", "content": usuario}],
+            **({"stream": True} if al_trozo else {}),
         }).encode("utf-8")
         req = urllib.request.Request(
             "https://api.anthropic.com/v1/messages", data=cuerpo, method="POST",
@@ -450,6 +458,10 @@ class KiraGodCore:
         try:
             import red_kira
             with red_kira.abrir(req, timeout=90) as r:
+                if al_trozo:                                    # la respuesta llega a trozos (eventos SSE)
+                    return cerebro_ia_kira.leer_sse(
+                        r, lambda d: (d.get("delta") or {}).get("text", "") if d.get("type") == "content_block_delta" else "",
+                        al_trozo)
                 datos = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"La API respondió {e.code} (revisa clave y modelo)")
@@ -476,6 +488,35 @@ class KiraGodCore:
         import cerebro_ia_kira
         c = self._clave_para("codigo")
         return "local" if c == cerebro_ia_kira.LOCAL else ("claude" if c else None)
+
+    def _orden_cerebro_propio(self, cmd_lower):
+        import cerebro_propio_kira as cp
+        c = self.cerebro_propio
+        if cmd_lower.startswith(("descarga", "descargar")):
+            id_ = "listo" if "listo" in cmd_lower or "grande" in cmd_lower else "ligero"
+            if c.estado == "descargando":
+                return f"[i] Ya estoy descargando: {c.progreso * 100:.0f} %."
+            c.elegir(id_)
+
+            def bajar():
+                try:
+                    c.descargar(id_)
+                    if c.tiene_motor():
+                        c.encender()
+                        self.cerebro_ia.local_disponible(forzar=True)
+                except cp.CerebroPropioError:
+                    pass
+            threading.Thread(target=bajar, daemon=True).start()
+            m = cp.MODELOS[id_]
+            return (f"[OK] Descargando {m['nombre']} ({m['bytes'] / 1e9:.1f} GB). Mejor con WiFi y el móvil enchufado. "
+                    "Puedes seguir usando Kira; di «cerebro propio» para ver cómo va.")
+        if cmd_lower.startswith("enciende"):
+            c.encender_en_segundo_plano(lambda ok: self.cerebro_ia.local_disponible(forzar=True))
+            return "[OK] Encendiendo mi cerebro… tarda unos segundos en cargar."
+        if cmd_lower.startswith("apaga"):
+            c.apagar()
+            return "[OK] Cerebro propio apagado (ahorra batería). «enciende cerebro» para volver."
+        return c.estado_texto()
 
     def _orden_recuerdos(self, command, cmd_lower):
         import recuerdos_kira
@@ -656,6 +697,8 @@ class KiraGodCore:
         elif cmd_lower == "cerebro" or cmd_lower.startswith("cerebro "):
             import cerebro_ia_kira
             arg = command.strip()[7:].strip()
+            if arg.lower() == "propio":
+                return self._orden_cerebro_propio("cerebro propio")
             try:
                 if arg.lower() in cerebro_ia_kira.MOTORES:
                     self.cerebro_ia.poner_motor(arg.lower())
@@ -676,6 +719,9 @@ class KiraGodCore:
             return self._orden_recuerdos(command, cmd_lower)
         elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):
             return self._orden_estudio(command, cmd_lower)
+        elif cmd_lower in ("cerebro propio", "mi cerebro") or re.match(r"^(?:descarga|descargar) (?:el )?cerebro\b", cmd_lower) \
+                or cmd_lower in ("enciende cerebro", "enciende tu cerebro", "apaga cerebro", "apaga tu cerebro"):
+            return self._orden_cerebro_propio(cmd_lower)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()
             if not pend:

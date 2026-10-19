@@ -11,7 +11,8 @@ def ok(c, m):
 ok(ek.contiene_nombre("Kira, ¿qué hora es?") == (True, "qué hora es?"), "nombre al principio")
 ok(ek.contiene_nombre("oye kira pon música")[1] == "pon música", "nombre en medio")
 ok(ek.contiene_nombre("KÍRA")[0] and ek.contiene_nombre("kyra")[0], "mayúsculas, tildes y variantes")
-ok(not ek.contiene_nombre("quiera venir mañana")[0], "«quiera» no la despierta")
+ok(not ek.contiene_nombre("puede que no quiera venir mañana")[0], "«quiera» en medio de la frase no la despierta")
+ok(ek.contiene_nombre("quiera venir mañana")[0], "al principio sí (así escribe «Kira» el reconocedor sin conexión)")
 ok(not ek.contiene_nombre("kirguistán")[0] and not ek.contiene_nombre("")[0], "palabras parecidas no")
 
 # ---------- borrador de 10 segundos ----------

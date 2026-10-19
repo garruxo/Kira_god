@@ -27,7 +27,7 @@ source.include_exts = py,png,jpg,kv,atlas
 #source.exclude_exts = spec
 
 # (list) List of directory to exclude (leave empty to not exclude anything)
-source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tests, .github, herramientas_pc, kira_laboratorio
+source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tests, .github, herramientas_pc, kira_laboratorio, libs_android, .cerebro_build
 
 # (list) List of exclusions using pattern matching
 # Do not prefix with './'
@@ -213,7 +213,8 @@ android.accept_sdk_license = True
 #android.add_resources =
 
 # (list) Gradle dependencies to add
-#android.gradle_dependencies =
+# El oído de Kira: reconocimiento de voz sin conexión (Vosk) y su dependencia JNA
+android.gradle_dependencies = com.alphacephei:vosk-android:0.3.47@aar, net.java.dev.jna:jna:5.13.0@aar
 
 # (bool) Enable AndroidX support. Enable when 'android.gradle_dependencies'
 # contains an 'androidx' package, or any package from Kotlin source.
@@ -263,7 +264,8 @@ android.accept_sdk_license = True
 # (list) Android additional libraries to copy into libs/armeabi
 #android.add_libs_armeabi = libs/android/*.so
 #android.add_libs_armeabi_v7a = libs/android-v7/*.so
-#android.add_libs_arm64_v8a = libs/android-v8/*.so
+# El cerebro de Kira (llama-server compilado para Android por herramientas_pc/compilar_cerebro_android.sh)
+android.add_libs_arm64_v8a = libs_android/arm64-v8a/*.so
 #android.add_libs_x86 = libs/android-x86/*.so
 #android.add_libs_mips = libs/android-mips/*.so
 

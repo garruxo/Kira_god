@@ -186,6 +186,10 @@ MAPA = {
     "pantallas_codigo_kira.py": "pantallas del editor de código, la lista de juegos y la de jugar",
     "api_modulos_kira.py": "lo que pueden usar las mejoras: datos propios, recuerdos, avisos, juegos",
     "luz3d_kira.py": "iluminación de las salas 3D: lámparas de colores, sombras, degradados",
+    "cerebro_propio_kira.py": "el cerebro DENTRO de la app: descarga el modelo, enciende y apaga el motor",
+    "oido_kira.py": "el oído propio (Vosk): escucha continua sin conexión y sin pitidos",
+    "pantalla_cerebro_kira.py": "pantalla «Cerebro y oído» (descargas y encendido)",
+    "herramientas_pc/compilar_cerebro_android.sh": "compila llama-server para Android (lo usa GitHub al hacer el APK)",
     "recuerdos_kira.py": "baúl de recuerdos en disco: índice, firmas, buscar sin cargar todo en la RAM",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }
