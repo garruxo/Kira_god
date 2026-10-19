@@ -2,10 +2,10 @@
 """
 interfaz_kira.py - Interfaz inmersiva de Kira (Kivy, móvil y PC)
 
-  INICIO : un orbe vivo. Kira te saluda y te habla; tú le escribes o le hablas (micrófono).
-           Tocar el orbe = entrar al menú.
-  MENÚ   : todos los apartados (Sala Hacker, Mejoras, Pasarela, Módulos, Búsqueda, Notas, Memoria,
-           Estado, Consola, Configuración, Ayuda).
+  INICIO : fondo blanco con «Kira» por todo el fondo y un botón redondo de neón en el centro (tocarlo = menú).
+           Escucha permanente: Kira solo contesta cuando oye su nombre; el resto se borra a los 10 segundos.
+  MENÚ   : claro y sencillo: los apartados principales y, al tocar «Más apartados», todos los demás.
+  Las salas inmersivas (Hacker, Ciberseguridad, Diseño…) conservan su estilo oscuro.
   Las pantallas de Sala/Mejoras/Módulos/Consola/Ajustes son las del panel de siempre (panel_kira.py).
 
 La lógica (conversación, búsqueda, notas, estado, voz) está en inicio_kira.py y menu_kira.py, sin Kivy.
@@ -23,16 +23,20 @@ def construir_interfaz(core, consola=None):
     from kivy.core.window import Window
     from kivy.metrics import dp, sp
     from kivy.uix.boxlayout import BoxLayout
+    from kivy.graphics import Color, Rectangle
     from kivy.uix.button import Button
     from kivy.uix.gridlayout import GridLayout
     from kivy.uix.label import Label
     from kivy.uix.screenmanager import FadeTransition, Screen, ScreenManager
+    from kivy.uix.widget import Widget
     from kivy.uix.scrollview import ScrollView
     from kivy.uix.textinput import TextInput
     from kivy.utils import platform
 
     import cerebro_local as cl
     import escena_kira as ek
+    import escucha_kira as esk
+    import portada_kira
     import inicio_kira as ik
     import menu_kira as mk
     import panel_kira
@@ -51,10 +55,14 @@ def construir_interfaz(core, consola=None):
     notas = mk.Notas(os.path.join(dir_datos, "notas.json"))
     cerebro = cl.CerebroLocal(os.path.join(dir_datos, "conocimiento.json"), escena=lambda t: ek.interpretar(t),
                               recuerdos=getattr(core, "recuerdos", None))
+    def guardar_turno(tu, kira):
+        rec = getattr(core, "recuerdos", None)
+        if rec is not None:
+            rec.guardar_charla(tu, kira)          # solo lo NUEVO: lo que ya sabía no se duplica
     conv = ik.Conversacion(os.path.join(dir_datos, "conversacion.json"),
                            core.procesar_orden, core.conversar,
                            no_reconocida=getattr(core, "NO_RECONOCIDA", "[i] No reconozco la orden"),
-                           cerebro=cerebro)
+                           cerebro=cerebro, al_turno=guardar_turno)
     voz = ik.Voz()
 
     try:
@@ -63,31 +71,56 @@ def construir_interfaz(core, consola=None):
     except Exception:
         pass
 
-    TXT, NEON, TENUE = (0.72, 1.0, 0.82, 1), (0.1, 0.9, 0.5, 1), (0.5, 0.7, 0.6, 1)
-    GRIS, VERDE, ROJO = (0.12, 0.2, 0.17, 1), (0.08, 0.45, 0.28, 1), (0.55, 0.15, 0.18, 1)
+    # Dos paletas: CLARA (portada, menú y pantallas sencillas) y OSCURA (salas inmersivas y panel).
+    CLARA = {"TXT": (0.13, 0.16, 0.21, 1), "NEON": (0.0, 0.58, 0.82, 1), "TENUE": (0.44, 0.49, 0.56, 1),
+             "GRIS": (0.90, 0.92, 0.95, 1), "VERDE": (0.0, 0.62, 0.62, 1), "ROJO": (0.88, 0.34, 0.40, 1),
+             "CAMPO": (1, 1, 1, 1), "FONDO": (0.975, 0.98, 0.99, 1)}
+    OSCURA = {"TXT": (0.72, 1.0, 0.82, 1), "NEON": (0.1, 0.9, 0.5, 1), "TENUE": (0.5, 0.7, 0.6, 1),
+              "GRIS": (0.12, 0.2, 0.17, 1), "VERDE": (0.08, 0.45, 0.28, 1), "ROJO": (0.55, 0.15, 0.18, 1),
+              "CAMPO": (0.05, 0.1, 0.09, 1), "FONDO": (0.015, 0.03, 0.03, 1)}
     ruta_mono = os.path.join(kivy_data_dir, "fonts", "RobotoMono-Regular.ttf")
     FUENTE = {"font_name": ruta_mono} if os.path.exists(ruta_mono) else {}
 
-    # ---------- piezas ----------
-    def boton(texto, accion, color=GRIS, alto=48, **kw):
-        b = Button(text=texto, size_hint_y=None, height=dp(alto), background_normal="", background_color=color,
-                   font_size=sp(15), **FUENTE, **kw)
-        b.bind(on_release=lambda *_: accion())
-        return b
+    def _luminosidad(c):
+        return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
-    def entrada(hint, **kw):
-        return TextInput(hint_text=hint, multiline=False, size_hint_y=None, height=dp(48), font_size=sp(15),
-                         background_color=(0.05, 0.1, 0.09, 1), foreground_color=TXT,
-                         hint_text_color=TENUE, cursor_color=NEON, padding=(dp(10), dp(12)), **kw)
+    # ---------- piezas (según la paleta) ----------
+    def hacer_piezas(P):
+        def boton(texto, accion, color=P["GRIS"], alto=48, **kw):
+            kw.setdefault("color", P["TXT"] if _luminosidad(color) > 0.6 else (1, 1, 1, 1))
+            b = Button(text=texto, size_hint_y=None, height=dp(alto), background_normal="", background_color=color,
+                       font_size=sp(15), **FUENTE, **kw)
+            b.bind(on_release=lambda *_: accion())
+            return b
 
-    def texto_largo(inicial=""):
-        sv = ScrollView(do_scroll_x=False)
-        lb = Label(text=inicial, size_hint_y=None, halign="left", valign="top", color=TXT,
-                   font_size=sp(15), **FUENTE)
-        lb.bind(width=lambda w, a: setattr(lb, "text_size", (a - dp(8), None)),
-                texture_size=lambda w, ts: setattr(lb, "height", ts[1] + dp(12)))
-        sv.add_widget(lb)
-        return sv, lb
+        def entrada(hint, **kw):
+            return TextInput(hint_text=hint, multiline=False, size_hint_y=None, height=dp(48), font_size=sp(15),
+                             background_color=P["CAMPO"], foreground_color=P["TXT"],
+                             hint_text_color=P["TENUE"], cursor_color=P["NEON"], padding=(dp(10), dp(12)), **kw)
+
+        def texto_largo(inicial=""):
+            sv = ScrollView(do_scroll_x=False)
+            lb = Label(text=inicial, size_hint_y=None, halign="left", valign="top", color=P["TXT"],
+                       font_size=sp(15), **FUENTE)
+            lb.bind(width=lambda w, a: setattr(lb, "text_size", (a - dp(8), None)),
+                    texture_size=lambda w, ts: setattr(lb, "height", ts[1] + dp(12)))
+            sv.add_widget(lb)
+            return sv, lb
+        return boton, entrada, texto_largo
+
+    boton, entrada, texto_largo = hacer_piezas(CLARA)
+    boton_o, entrada_o, texto_largo_o = hacer_piezas(OSCURA)
+    TXT, NEON, TENUE, GRIS, VERDE, ROJO = (CLARA[k] for k in ("TXT", "NEON", "TENUE", "GRIS", "VERDE", "ROJO"))
+    PIEZAS_SALA = {"boton": boton_o, "entrada": entrada_o, "texto_largo": texto_largo_o,
+                   "TXT": OSCURA["TXT"], "NEON": OSCURA["NEON"], "TENUE": OSCURA["TENUE"], "GRIS": OSCURA["GRIS"],
+                   "VERDE": OSCURA["VERDE"], "ROJO": OSCURA["ROJO"], "FUENTE": FUENTE}
+
+    def fondo_claro(widget):
+        """Pinta un fondo claro detrás de una pantalla (las salas siguen con el suyo)."""
+        with widget.canvas.before:
+            Color(*CLARA["FONDO"])
+            rect = Rectangle(pos=widget.pos, size=widget.size)
+        widget.bind(pos=lambda w, v: setattr(rect, "pos", v), size=lambda w, v: setattr(rect, "size", v))
 
     def en_hilo(trabajo, al_terminar):
         def correr():
@@ -104,6 +137,7 @@ def construir_interfaz(core, consola=None):
     def pantalla(nombre, titulo):
         """Pantalla con barra superior ‹ Menú. Devuelve (Screen, caja_de_contenido)."""
         p = Screen(name=nombre)
+        fondo_claro(p)
         raiz = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
         barra = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
         barra.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
@@ -114,36 +148,42 @@ def construir_interfaz(core, consola=None):
         return p, raiz
 
     # =================================================================================
-    #  INICIO (orbe)
+    #  INICIO: portada blanca con «Kira» de fondo y el botón de neón
     # =================================================================================
-    OrbeKira = ik.crear_widgets()
-    modelo = ik.OrbeModelo()
-    st = {"ocupado": False, "entrando": False, "reloj_txt": None, "maq": None, "reloj_mic": None, "saludado": False}
+    PortadaKira = portada_kira.crear_widgets()
+    modelo = esk.NeonModelo()
+    escucha = esk.Escucha()
+    st = {"ocupado": False, "entrando": False, "reloj_txt": None, "maq": None, "reloj_mic": None, "saludado": False,
+          "esc_reloj": None, "esc_stt": False, "esc_t": 0.0, "esc_fallos": 0}
 
     p_ini = Screen(name="inicio")
-    raiz_ini = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
-    cab = BoxLayout(size_hint_y=None, height=dp(36))
-    cab.add_widget(Label(text="K I R A", color=NEON, font_size=sp(18), halign="left", **FUENTE))
-    cab.add_widget(boton("Menú", lambda: entrar(), GRIS, alto=36, size_hint_x=None, width=dp(80)))
-    raiz_ini.add_widget(cab)
-
-    orbe = OrbeKira(modelo=modelo, al_tocar=lambda: entrar(), size_hint_y=0.46)
-    raiz_ini.add_widget(orbe)
+    orbe = PortadaKira(modelo=modelo, al_tocar=lambda: entrar())
+    p_ini.add_widget(orbe)                       # el fondo y el botón ocupan toda la pantalla
+    capa = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(6))
+    capa.add_widget(Widget(size_hint_y=0.56))    # hueco: ahí se ve el botón de neón
 
     sv_burbuja, burbuja = texto_largo("")
-    sv_burbuja.size_hint_y = 0.24
-    raiz_ini.add_widget(sv_burbuja)
+    sv_burbuja.size_hint_y = 0.30
+    with sv_burbuja.canvas.before:                # panel blanco detrás del texto: se lee bien sobre las letras
+        Color(1, 1, 1, 0.88)
+        panel_b = Rectangle(pos=sv_burbuja.pos, size=sv_burbuja.size)
+    sv_burbuja.bind(pos=lambda w, v: setattr(panel_b, "pos", v), size=lambda w, v: setattr(panel_b, "size", v))
+    capa.add_widget(sv_burbuja)
+    lbl_escucha = Label(text="", size_hint_y=None, height=dp(22), color=TENUE, font_size=sp(12), **FUENTE)
+    capa.add_widget(lbl_escucha)
 
     campo = entrada("Escríbele a Kira o dale una orden…")
     fila = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(6))
     fila.add_widget(campo)
-    fila.add_widget(boton("Mic", lambda: escuchar(), VERDE, alto=48, size_hint_x=None, width=dp(64)))
+    btn_escucha = boton("", lambda: alternar_escucha(), GRIS, alto=48, size_hint_x=None, width=dp(96))
+    fila.add_widget(btn_escucha)
     fila.add_widget(boton("Enviar", lambda: enviar(), VERDE, alto=48, size_hint_x=None, width=dp(84)))
-    raiz_ini.add_widget(fila)
-    raiz_ini.add_widget(Label(text="toca el orbe para entrar", size_hint_y=None, height=dp(24),
-                              color=TENUE, font_size=sp(12), **FUENTE))
-    p_ini.add_widget(raiz_ini)
+    capa.add_widget(fila)
+    p_ini.add_widget(capa)
     sm.add_widget(p_ini)
+
+    def estado_base():
+        return "escuchando" if st["esc_reloj"] is not None else "reposo"
 
     def decir(texto, hablar=True):
         """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta."""
@@ -157,8 +197,8 @@ def construir_interfaz(core, consola=None):
             if st["maq"].terminada:
                 st["reloj_txt"].cancel()
                 st["reloj_txt"] = None
-                if not st["ocupado"] and st["reloj_mic"] is None:
-                    modelo.poner_estado("reposo")
+                if not st["ocupado"] and modelo.estado == "hablando":
+                    modelo.poner_estado(estado_base())
         st["reloj_txt"] = Clock.schedule_interval(escribir, 1 / 30.0)
         if hablar and ajustes.voz_hablar:
             voz.hablar(texto.replace("[OK]", "").replace("[x]", "").replace("[i]", ""))
@@ -175,6 +215,7 @@ def construir_interfaz(core, consola=None):
             st["reloj_txt"] = None
         burbuja.text = "…"
         modelo.poner_estado("pensando")
+        escucha.olvidar()
 
         def terminado(r):
             st["ocupado"] = False
@@ -187,43 +228,106 @@ def construir_interfaz(core, consola=None):
                     mostrar_escena(cerebro.ultima_escena, texto_r)
         en_hilo(lambda: conv.preguntar(texto), terminado)
 
-    def escuchar():
-        if st["ocupado"] or st["reloj_mic"] is not None:
-            return
-        if platform == "android":
-            try:
-                from android.permissions import Permission, check_permission, request_permissions
-                if not check_permission(Permission.RECORD_AUDIO):
-                    request_permissions([Permission.RECORD_AUDIO])
-                    decir("Necesito permiso para el micrófono. Concédelo y vuelve a pulsar Mic.", hablar=False)
-                    return
-            except Exception:
-                pass
-        ok, msg = voz.iniciar_escucha()
-        if not ok:
-            decir(msg, hablar=False)
-            return
-        modelo.poner_estado("escuchando")
-        burbuja.text = msg
-        inicio = {"t": 0.0}
+    # ---------- escucha permanente con «Kira» ----------
+    def pintar_escucha(texto=None):
+        on = st["esc_reloj"] is not None
+        btn_escucha.text = "Escucha: SÍ" if on else "Escucha: NO"
+        if texto is not None:
+            lbl_escucha.text = texto
+        elif on:
+            lbl_escucha.text = "Te escucho de fondo. Di «Kira» para hablar conmigo."
+        else:
+            lbl_escucha.text = "Escucha apagada. Escríbeme o activa la escucha."
 
-        def sondeo(dt):
-            inicio["t"] += dt
-            estado, txt = voz.sondear()
-            if estado == "escuchando" and inicio["t"] < 15:
-                return
-            st["reloj_mic"].cancel()
-            st["reloj_mic"] = None
-            if estado == "escuchando":
+    def permiso_micro():
+        if platform != "android":
+            return True
+        try:
+            from android.permissions import Permission, check_permission, request_permissions
+            if not check_permission(Permission.RECORD_AUDIO):
+                request_permissions([Permission.RECORD_AUDIO])
+                return False
+        except Exception:
+            pass
+        return True
+
+    def arrancar_escucha():
+        if st["esc_reloj"] is not None:
+            return True
+        if not voz.puede_escuchar():
+            pintar_escucha("No puedo escuchar en este dispositivo. Escríbeme.")
+            return False
+        if not permiso_micro():
+            pintar_escucha("Necesito permiso para el micrófono. Concédelo y pulsa «Escucha».")
+            return False
+        st["esc_fallos"] = 0
+        st["esc_reloj"] = Clock.schedule_interval(ciclo_escucha, 0.4)
+        if modelo.estado == "reposo":
+            modelo.poner_estado("escuchando")
+        pintar_escucha()
+        return True
+
+    def parar_escucha():
+        if st["esc_reloj"] is not None:
+            st["esc_reloj"].cancel()
+            st["esc_reloj"] = None
+        if st["esc_stt"]:
+            voz.parar_escucha()
+            st["esc_stt"] = False
+        escucha.olvidar()                              # el borrador se borra al apagar
+        if modelo.estado in ("escuchando", "atenta"):
+            modelo.poner_estado("reposo")
+        pintar_escucha()
+
+    def alternar_escucha():
+        ajustes.alternar_escucha()
+        if ajustes.escucha_permanente:
+            arrancar_escucha()
+        else:
+            parar_escucha()
+        pintar_config()
+
+    def ciclo_escucha(dt):
+        escucha.purgar()                               # lo oído hace más de 10 s se borra
+        if modelo.estado == "atenta" and not escucha.atenta:
+            modelo.poner_estado(estado_base())
+            pintar_escucha()
+        callada = sm.current != "inicio" or st["ocupado"] or voz.hablando()
+        if callada:                                    # fuera de la portada, pensando o hablando: no escucha
+            if st["esc_stt"]:
                 voz.parar_escucha()
-                decir("No te he oído. Prueba otra vez o escríbeme.", hablar=False)
-            elif estado == "listo" and txt:
-                campo.text = txt
-                modelo.poner_estado("reposo")
-                enviar()
-            else:
-                decir(f"No te he entendido ({txt}). Escríbeme si prefieres.", hablar=False)
-        st["reloj_mic"] = Clock.schedule_interval(sondeo, 0.4)
+                st["esc_stt"] = False
+            return
+        if not st["esc_stt"]:
+            ok, msg = voz.iniciar_escucha()
+            if not ok:
+                st["esc_fallos"] += 1
+                if st["esc_fallos"] >= 5:
+                    parar_escucha()
+                    pintar_escucha(msg)
+                return
+            st["esc_stt"], st["esc_t"] = True, 0.0
+            return
+        estado, txt = voz.sondear()
+        if estado == "escuchando":
+            st["esc_t"] += dt
+            if st["esc_t"] > 12:                       # una escucha no debe quedarse colgada
+                voz.parar_escucha()
+                st["esc_stt"] = False
+            return
+        st["esc_stt"] = False                          # terminó esta frase: la siguiente vuelta escucha otra
+        if estado != "listo" or not txt:
+            return
+        st["esc_fallos"] = 0
+        que, orden = escucha.oir(txt)
+        if que == "atenta":
+            modelo.poner_estado("atenta")
+            pintar_escucha("Te escucho… dime.")
+            decir("¿Sí? Dime.", hablar=True)
+            modelo.poner_estado("atenta")
+        elif que == "orden":
+            pintar_escucha("«" + orden[:60] + "»")
+            enviar(orden)
 
     def entrar():
         if st["entrando"]:
@@ -245,7 +349,14 @@ def construir_interfaz(core, consola=None):
             return
         st["saludado"] = True
         tiene = bool(getattr(core, "tiene_clave", lambda: False)())
-        decir(ik.saludo(datetime.datetime.now().hour, tiene, voz.puede_hablar(), voz.puede_escuchar()))
+        texto = ik.saludo(datetime.datetime.now().hour, tiene, voz.puede_hablar(), voz.puede_escuchar())
+        if ajustes.escucha_permanente and voz.puede_escuchar():
+            texto += " Para hablarme, di «Kira»."
+        decir(texto)
+        if ajustes.escucha_permanente:
+            arrancar_escucha()
+        else:
+            pintar_escucha()
 
     campo.bind(on_text_validate=lambda *_: enviar())
 
@@ -253,33 +364,51 @@ def construir_interfaz(core, consola=None):
     #  MENÚ
     # =================================================================================
     p_menu = Screen(name="menu")
-    raiz_menu = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+    fondo_claro(p_menu)
+    raiz_menu = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
     cab_m = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-    cab_m.add_widget(boton("‹ Orbe", lambda: ir("inicio"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-    cab_m.add_widget(Label(text="MENÚ", color=NEON, font_size=sp(18), halign="left", **FUENTE))
+    cab_m.add_widget(boton("‹ Kira", lambda: ir("inicio"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
+    cab_m.add_widget(Label(text="MENÚ", color=NEON, font_size=sp(19), bold=True, halign="left", **FUENTE))
     raiz_menu.add_widget(cab_m)
     sv_m = ScrollView(do_scroll_x=False)
-    rejilla = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, row_default_height=dp(112), row_force_default=True)
+    rejilla = GridLayout(cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(96), row_force_default=True)
     rejilla.bind(minimum_height=rejilla.setter("height"))
+    menu_st = {"todos": False}
 
     def ajustar_columnas(*_):
         rejilla.cols = 2 if Window.width < dp(720) else (3 if Window.width < dp(1100) else 4)
     Window.bind(width=ajustar_columnas)
     ajustar_columnas()
 
-    for a in mk.APARTADOS:
-        r, g, b = a["color"]
+    def baldosa(a):
         t = Button(text=f"[b]{a['titulo']}[/b]\n[size={int(sp(12))}]{a['desc']}[/size]", markup=True,
                    halign="center", valign="middle", background_normal="",
-                   background_color=(r * 0.22, g * 0.22, b * 0.22, 1), color=(r, g, b, 1), font_size=sp(16), **FUENTE)
-        t.bind(size=lambda w, s: setattr(w, "text_size", (s[0] - dp(10), None)))
+                   background_color=mk.color_claro(a["color"]), color=mk.color_oscuro(a["color"]),
+                   font_size=sp(16), **FUENTE)
+        t.bind(size=lambda w, s_: setattr(w, "text_size", (s_[0] - dp(10), None)))
         t.bind(on_release=lambda _b, d=a["destino"]: ir(d[1] if d[0] == "pantalla" else "panel",
                                                         d[1] if d[0] == "panel" else None))
-        rejilla.add_widget(t)
+        return t
+
+    def pintar_menu():
+        rejilla.clear_widgets()
+        for a in mk.principales():
+            rejilla.add_widget(baldosa(a))
+        if menu_st["todos"]:
+            for a in mk.secundarios():
+                rejilla.add_widget(baldosa(a))
+        btn_mas.text = "Menos apartados ▴" if menu_st["todos"] else f"Más apartados ({len(mk.secundarios())}) ▾"
+
+    def alternar_mas():
+        menu_st["todos"] = not menu_st["todos"]
+        pintar_menu()
+    btn_mas = boton("", alternar_mas, GRIS, alto=44)
     sv_m.add_widget(rejilla)
     raiz_menu.add_widget(sv_m)
+    raiz_menu.add_widget(btn_mas)
     p_menu.add_widget(raiz_menu)
     sm.add_widget(p_menu)
+    pintar_menu()
 
     # =================================================================================
     #  PANEL (Sala, Mejoras, Módulos, Consola, Ajustes) dentro de la interfaz
@@ -287,7 +416,7 @@ def construir_interfaz(core, consola=None):
     p_panel = Screen(name="panel")
     caja_panel = BoxLayout(orientation="vertical")
     barra_p = BoxLayout(size_hint_y=None, height=dp(40), padding=(dp(6), dp(2)))
-    barra_p.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=36, size_hint_x=None, width=dp(100)))
+    barra_p.add_widget(boton_o("‹ Menú", lambda: ir("menu"), OSCURA["GRIS"], alto=36, size_hint_x=None, width=dp(100)))
     caja_panel.add_widget(barra_p)
     caja_panel.add_widget(panel_raiz)
     p_panel.add_widget(caja_panel)
@@ -434,10 +563,12 @@ def construir_interfaz(core, consola=None):
                     valign="top", **FUENTE)
     msg_cfg.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))
     btn_voz = boton("", lambda: alternar_voz(), GRIS)
+    btn_esc_cfg = boton("", lambda: alternar_escucha(), GRIS)
     btn_efe = boton("", lambda: alternar_efectos(), GRIS)
 
     def pintar_config(texto=""):
         btn_voz.text = "Kira habla en voz alta: " + ("SÍ" if ajustes.voz_hablar else "NO")
+        btn_esc_cfg.text = "Escucha permanente («Kira»): " + ("SÍ" if ajustes.escucha_permanente else "NO")
         btn_efe.text = "Efectos visuales: " + ("SÍ" if ctl.efectos_activos() else "NO (ahorra batería)")
         extra = ""
         if not voz.puede_hablar():
@@ -457,7 +588,7 @@ def construir_interfaz(core, consola=None):
     def velocidad(delta):
         ajustes.cambiar_velocidad(delta)
         pintar_config(f"Velocidad del texto: {ajustes.velocidad} letras/seg.")
-    for w in (btn_voz, btn_efe, boton("Texto más lento", lambda: velocidad(-10)),
+    for w in (btn_voz, btn_esc_cfg, btn_efe, boton("Texto más lento", lambda: velocidad(-10)),
               boton("Texto más rápido", lambda: velocidad(10)),
               boton("Clave de la API y laboratorio", lambda: ir("panel", "ajustes"), VERDE), msg_cfg):
         c_cfg.add_widget(w)
@@ -566,8 +697,7 @@ def construir_interfaz(core, consola=None):
     #  SALA HACKER (habitación 3D, terminal, biblioteca)
     # =================================================================================
     hacker = montar_sala_hacker(sm, {
-        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo,
-        "TXT": TXT, "NEON": NEON, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE,
+        **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "ctl": ctl, "core": core, "cerebro": cerebro, "voz": voz,
         "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
 
@@ -575,8 +705,7 @@ def construir_interfaz(core, consola=None):
     #  SALA DE DISEÑO, SALA DE CINE, MEDIATECA, REPRODUCTOR
     # =================================================================================
     diseno = montar_sala_diseno(sm, {
-        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo,
-        "TXT": TXT, "NEON": NEON, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE,
+        **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz,
         "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
 
@@ -584,8 +713,7 @@ def construir_interfaz(core, consola=None):
     #  SALA DE CIBERSEGURIDAD (búnker de solo lectura y aprendizaje)
     # =================================================================================
     ciber = montar_sala_ciber(sm, {
-        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo,
-        "TXT": TXT, "NEON": NEON, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE,
+        **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz, "ganchos": ganchos,
         "dir_datos": dir_datos, "ajustes": ajustes})
 
@@ -593,22 +721,20 @@ def construir_interfaz(core, consola=None):
     #  MESA DE MEZCLA Y EDITOR DE VÍDEO
     # =================================================================================
     montar_av(sm, {
-        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo,
-        "TXT": TXT, "NEON": NEON, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE,
+        **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos, "dir_datos": dir_datos})
 
     # =================================================================================
     #  BITÁCORA (pasos, guías, fallos y notas)
     # =================================================================================
-    montar_bitacora(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo, "NEON": NEON, "GRIS": GRIS,
-                         "VERDE": VERDE, "FUENTE": FUENTE, "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos})
+    montar_bitacora(sm, {"boton": boton_o, "entrada": entrada_o, "texto_largo": texto_largo_o, "NEON": OSCURA["NEON"],
+                         "GRIS": OSCURA["GRIS"], "VERDE": OSCURA["VERDE"], "FUENTE": FUENTE, "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos})
 
     # =================================================================================
     #  TALLER (qué sabe hacer Kira y qué le falta)
     # =================================================================================
     montar_taller(sm, {
-        "boton": boton, "texto_largo": texto_largo, "en_hilo": en_hilo,
-        "TXT": TXT, "NEON": NEON, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE,
+        **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos,
         "preparar_mejora": hacker["preparar_mejora"]})
 
@@ -623,11 +749,6 @@ def construir_interfaz(core, consola=None):
         if nombre != "sala_ciber":
             ciber["detener"]()
         diseno["detener_si_sale"](nombre)
-        if nombre != "inicio" and st["reloj_mic"] is not None:
-            st["reloj_mic"].cancel()
-            st["reloj_mic"] = None
-            voz.parar_escucha()
-            modelo.poner_estado("reposo")
         sm.current = nombre
         if nombre == "inicio":
             orbe.iniciar()
@@ -642,7 +763,7 @@ def construir_interfaz(core, consola=None):
     def tecla(_ventana, clave, *_a):
         if clave == 27:                          # Esc / botón atrás de Android
             if sm.current == "inicio":
-                return False                     # en el orbe, atrás cierra la app como siempre
+                return False                     # en la portada, atrás cierra la app como siempre
             if sm.current in ("terminal", "biblioteca"):
                 hacker["volver_a_sala"]()                 # de la terminal/biblioteca se vuelve a la habitación
             elif sm.current in diseno["atras"]:

@@ -159,3 +159,14 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
 - Lo aprendido se responde desde el baúl sin preguntar a ninguna IA. Lo bajado de internet nunca se pasa a una IA.
 - `red_kira.py`: https con los certificados de `certifi` (en Android Python a veces no encuentra los del sistema).
 - Pruebas: `tests/test_estudio.py`.
+
+## Portada clara, botón de neón y escucha permanente (nuevo)
+- `portada_kira.py`: fondo blanco con «Kira» repetido por todo el fondo y un botón redondo de neón en el centro
+  (tocarlo = menú). El neón brilla más cuando Kira te escucha de verdad (tras oír su nombre) y late cuando habla.
+- `escucha_kira.py` (lógica pura): escucha permanente mientras la portada está en pantalla. Solo contesta cuando oye
+  «Kira» («Kira, ¿qué hora es?», o «Kira» y luego la orden). Lo que oye sin su nombre queda en un borrador en la RAM
+  que se borra a los 10 segundos; nunca se guarda ni sale del móvil. No escucha mientras habla, piensa o estás en otra
+  pantalla. Se apaga con el botón «Escucha» o en Configuración.
+- Conversaciones: las NUEVAS se guardan en el baúl («lo hablamos»); las que Kira ya tenía reconocidas no se duplican.
+- Menú claro y sencillo: 8 apartados principales y «Más apartados» para el resto. Las salas inmersivas siguen oscuras.
+- Pruebas: `tests/test_escucha.py`, `tests/test_cableado_escucha.py` (micrófono simulado).

@@ -14,8 +14,10 @@ import threading
 import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
+# El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
+PRINCIPALES = ("hablar", "mejoras", "conocimiento", "sala", "diseno", "ciber", "bitacora", "config")
 APARTADOS = [
-    {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al orbe",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
+    {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
     {"id": "diseno",    "titulo": "Sala de Diseño", "desc": "Playa 3D: webs, apps, videoclips", "color": (0.20, 0.75, 0.85), "destino": ("pantalla", "sala_diseno")},
     {"id": "cine",      "titulo": "Sala de Cine",    "desc": "Butacas: tus vídeos y clips",  "color": (0.85, 0.35, 0.40), "destino": ("pantalla", "sala_cine")},
@@ -30,7 +32,7 @@ APARTADOS = [
     {"id": "modulos",   "titulo": "Módulos",         "desc": "Lo que Kira ya sabe hacer",   "color": (0.35, 0.50, 0.95), "destino": ("panel", "modulos")},
     {"id": "busqueda",  "titulo": "Búsqueda",        "desc": "Notas, lecciones, módulos",   "color": (0.95, 0.70, 0.20), "destino": ("pantalla", "busqueda")},
     {"id": "lienzo",    "titulo": "Lienzo",         "desc": "Kira dibuja paisajes",        "color": (0.40, 0.85, 0.95), "destino": ("pantalla", "lienzo")},
-    {"id": "conocimiento", "titulo": "Conocimiento", "desc": "Lo que Kira ha aprendido",    "color": (0.55, 0.90, 0.55), "destino": ("pantalla", "conocimiento")},
+    {"id": "conocimiento", "titulo": "Conocimiento", "desc": "Lo que ha aprendido y estudia",    "color": (0.55, 0.90, 0.55), "destino": ("pantalla", "conocimiento")},
     {"id": "notas",     "titulo": "Notas",           "desc": "Apuntes rápidos",             "color": (0.95, 0.55, 0.25), "destino": ("pantalla", "notas")},
     {"id": "memoria",   "titulo": "Memoria",         "desc": "Conversación y lecciones",    "color": (0.75, 0.45, 1.00), "destino": ("pantalla", "memoria")},
     {"id": "estado",    "titulo": "Estado",          "desc": "Cómo está todo",              "color": (0.30, 0.80, 0.85), "destino": ("pantalla", "estado")},
@@ -66,6 +68,10 @@ AYUDA = (
     "está cada cosa y qué ha fallado. Di «bitácora» para ver el resumen, «cómo instalar ffmpeg» para una guía, "
     "«diagnosticar» para que relacione los fallos recientes con su arreglo, «apunta: …» para dejarle una nota y "
     "«fallos resueltos» cuando lo arregles.\n"
+    "ESCUCHA: con la escucha permanente activada, Kira oye siempre pero SOLO contesta cuando dices «Kira» (por ejemplo "
+    "«Kira, ¿qué hora es?», o «Kira» y luego lo que quieras). Lo que oye sin su nombre se borra a los 10 segundos y nunca "
+    "se guarda. Funciona con la app abierta en pantalla. Se apaga en Configuración.\n"
+    "PORTADA: toca el botón redondo de neón para entrar al menú. El neón brilla más cuando Kira te escucha y cuando habla.\n"
     "RECUERDOS: Kira guarda en una carpeta suya (privada y firmada) lo que le enseñas y lo que le explica Claude. "
     "Antes de preguntar a nadie busca ahí, y solo abre los trozos del índice que necesita, sin llenar la RAM. "
     "Busca también por significado: sabe que minino es gato, y aprende palabras nuevas (con el modelo del móvil o con "
@@ -172,9 +178,27 @@ class Notas:
         return False
 
 
+def principales():
+    return [a for a in APARTADOS if a["id"] in PRINCIPALES]
+
+
+def secundarios():
+    return [a for a in APARTADOS if a["id"] not in PRINCIPALES]
+
+
+def color_claro(rgb, mezcla=0.82):
+    """Fondo pastel para una baldosa del menú: el color mezclado con blanco."""
+    return tuple(c * (1 - mezcla) + mezcla for c in rgb) + (1,)
+
+
+def color_oscuro(rgb, factor=0.55):
+    """Texto legible sobre el fondo claro: el mismo color, oscurecido."""
+    return tuple(c * factor for c in rgb) + (1,)
+
+
 class AjustesInterfaz:
-    """Preferencias de la interfaz (voz y velocidad del texto). Los efectos visuales siguen en el panel."""
-    DEFECTO = {"voz_hablar": True, "velocidad": 45}
+    """Preferencias de la interfaz (voz, escucha permanente y velocidad del texto)."""
+    DEFECTO = {"voz_hablar": True, "velocidad": 45, "escucha_permanente": True}
 
     def __init__(self, ruta):
         self.ruta = ruta
@@ -183,10 +207,12 @@ class AjustesInterfaz:
         v = datos.get("velocidad", 45)
         self.velocidad = int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 45
         self.velocidad = max(15, min(self.velocidad, 120))
+        self.escucha_permanente = datos.get("escucha_permanente", True) is not False
 
     def guardar(self):
         try:
-            _guardar_json(self.ruta, {"voz_hablar": self.voz_hablar, "velocidad": self.velocidad})
+            _guardar_json(self.ruta, {"voz_hablar": self.voz_hablar, "velocidad": self.velocidad,
+                                      "escucha_permanente": self.escucha_permanente})
         except OSError:
             pass
 
@@ -198,6 +224,11 @@ class AjustesInterfaz:
         self.voz_hablar = not self.voz_hablar
         self.guardar()
         return self.voz_hablar
+
+    def alternar_escucha(self):
+        self.escucha_permanente = not self.escucha_permanente
+        self.guardar()
+        return self.escucha_permanente
 
 
 # =====================================================================================

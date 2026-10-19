@@ -42,11 +42,15 @@ llamadas.clear(); campo.text = "recargar modulos"; buscar("Button", text="Enviar
 Clock.correr(60, 0.1); time.sleep(0.3); Clock.correr(60, 0.1)
 ok(not llamadas, "una orden conocida no llama a la IA: " + str(llamadas))
 # entrar con el orbe
-orbe = next(w for w in sm.walk() if type(w).__name__ == "OrbeKira")
-orbe.al_tocar(); ok(sm.current == "menu", "tocar el orbe entra al menú")
-# todos los apartados navegan sin error
+orbe = next(w for w in sm.walk() if type(w).__name__ == "PortadaKira")
+orbe.al_tocar(); ok(sm.current == "menu", "tocar el botón de neón entra al menú")
+# menú sencillo: primero los principales; «Más apartados» enseña el resto
 tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.text]
-ok(len(tiles) == 22, f"22 apartados, hay {len(tiles)}")
+ok(len(tiles) == 8, f"8 apartados principales, hay {len(tiles)}")
+mas = buscar("Button", texto_en="Más apartados"); mas.press()
+tiles = [w for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.text]
+ok(len(tiles) == 22 and "Menos" in mas.text, f"con «Más» salen los 22, hay {len(tiles)}")
+# todos los apartados navegan sin error
 vistos = set()
 for t in tiles:
     sm.ir("menu"); t.press(); Clock.correr(3, 0.1); time.sleep(0.15); Clock.correr(3, 0.1); vistos.add(sm.current)
@@ -81,8 +85,8 @@ sm.ir("config"); bv = buscar("Button", texto_en="Kira habla"); antes = bv.text; 
 # atrás
 sm.ir("menu")
 from kivy.core.window import Window as W
-f = [f for f in W._b["on_keyboard"]][0]; ok(f(W, 27) is True and sm.current == "inicio", "Esc: menú -> orbe")
-ok(f(W, 27) is False, "Esc en el orbe deja salir")
+f = [f for f in W._b["on_keyboard"]][0]; ok(f(W, 27) is True and sm.current == "inicio", "Esc: menú -> portada")
+ok(f(W, 27) is False, "Esc en la portada deja salir")
 # clave nunca en disco de historial
 campo.text = "config clave: sk-ant-api03-ZZZZZZZZZZZZ"; buscar("Button", text="Enviar").press(); esperar(lambda: False, 0.6)
 ok("ZZZZZZ" not in open(os.path.join(T, "conversacion.json")).read(), "la clave no queda en el historial")

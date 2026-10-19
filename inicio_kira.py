@@ -134,7 +134,7 @@ def saludo(hora, tiene_clave, voz_hablar_ok=False, voz_escuchar_ok=False):
     parte = "Buenos días" if 6 <= hora < 13 else ("Buenas tardes" if 13 <= hora < 21 else "Buenas noches")
     frases = [f"{parte}. Soy Kira."]
     if tiene_clave:
-        frases.append("Puedes hablar conmigo o darme órdenes. Toca el orbe para entrar.")
+        frases.append("Puedes hablar conmigo o darme órdenes. Toca el botón para entrar al menú.")
     else:
         frases.append("Todavía no tengo clave de la API, así que solo entiendo órdenes, no puedo charlar. "
                       "Entra y guárdala en Configuración.")
@@ -172,8 +172,10 @@ class Conversacion:
     conversar(texto, historial)->str (core.conversar; puede lanzar RuntimeError)
     """
 
-    def __init__(self, ruta, responder_orden, conversar, no_reconocida="[i] No reconozco la orden", cerebro=None):
+    def __init__(self, ruta, responder_orden, conversar, no_reconocida="[i] No reconozco la orden", cerebro=None,
+                 al_turno=None):
         self.ruta, self.responder_orden, self.conversar = ruta, responder_orden, conversar
+        self.al_turno = al_turno    # al_turno(tu, kira): guarda en el baúl las conversaciones NUEVAS
         self.cerebro = cerebro      # cerebro_local.CerebroLocal (opcional): memoria que aprende, búsqueda, dibujo
         self.no_reconocida = no_reconocida
         self._lock = threading.Lock()
@@ -247,6 +249,11 @@ class Conversacion:
         try:
             r = self.conversar(texto, previo)
             self._anotar("kira", r)
+            if self.al_turno is not None:
+                try:
+                    self.al_turno(texto, r)
+                except Exception:
+                    pass
             return r, "charla"
         except RuntimeError as e:
             r = f"[x] {e}"
@@ -264,6 +271,10 @@ class Voz:
         self._plyer = plyer_modulo
         self.error = ""
         self._stt = None
+        self.hablando_hasta = 0.0
+
+    def hablando(self):
+        return time.monotonic() < self.hablando_hasta
 
     def _cargar(self):
         if self._plyer is None:
@@ -296,6 +307,8 @@ class Voz:
         texto = limpiar_entrada(texto)[:500]
         if not texto or not self.puede_hablar():
             return False
+        # mientras habla no debe escucharse a sí misma: tiempo aproximado de lectura (unas 14 letras por segundo)
+        self.hablando_hasta = time.monotonic() + 1.0 + len(texto) / 14.0
 
         def decir():
             try:
