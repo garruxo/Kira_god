@@ -85,16 +85,26 @@ jobs:
               lineas = open("compilacion.log", encoding="utf-8", errors="replace").read().splitlines()
           except OSError:
               lineas = ["No se creó compilacion.log"]
-          limpio = [re.sub(r"\x1b\[[0-9;]*m", "", l) for l in lineas]
-          idx = [i for i, l in enumerate(limpio) if re.search(r"Command failed|Error:|ERROR:|error:|Traceback|BuildInterruptingException|No matching distribution|FAILED", l)]
-          trozos = []
-          for i in idx[-6:]:
-              trozos.append("\n".join(limpio[max(0, i - 25): i + 8]))
-          resumen = ("\n----\n".join(trozos) if trozos else "\n".join(limpio[-80:]))[-12000:]
-          resumen += "\n==== FINAL DEL REGISTRO ====\n" + "\n".join(limpio[-40:])[-5000:]
-          esc = resumen.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-          print("::error title=Fallo de buildozer::" + esc)
+          RUIDO = re.compile(r"Lib/test/|\*\*\* Error compiling|^\s*\^+\s*$|SyntaxError: (?:from __future__|unknown encoding|encoding problem|invalid|Non-UTF)|"
+                             r"autoupdate|AC_[A-Z_]+|general\.m4|the top level|acinclude\.m4|libtool\.m4|^\s*File \".*Lib/test|Downloading .*eta|━━")
+          limpio = [re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", l).rstrip() for l in lineas]
+          util = [l for l in limpio if l.strip() and not RUIDO.search(l)]
+          def nota(titulo, texto):
+              texto = texto[-3800:]
+              print(f"::error title={titulo}::" + texto.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          nota("1 Final del registro", "\n".join(util[-70:]))
+          idx = [k for k, l in enumerate(util) if re.search(r"Command failed|ERROR|Error:|error:|Traceback|Exception|FAILED|BUILD FAILED", l)]
+          for n, k in enumerate(idx[-3:], 2):
+              nota(f"{n} Error cerca de la linea {k}", "\n".join(util[max(0, k - 30): k + 10]))
           PY
+
+      - name: Guardar el registro completo (descargable desde la ejecución)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registro-compilacion
+          path: compilacion.log
+          retention-days: 7
 
       - name: Guardar el APK como artefacto
         uses: actions/upload-artifact@v4
