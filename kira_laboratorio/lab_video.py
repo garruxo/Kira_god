@@ -20,6 +20,9 @@ import time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 KIRA_GOD = os.environ.get("KIRA_GOD_DIR") or os.path.join(os.path.dirname(AQUI), "Kira_god")
+if not os.path.isfile(os.path.join(KIRA_GOD, "motor_video_kira.py")) and \
+        os.path.isfile(os.path.join(os.path.dirname(AQUI), "motor_video_kira.py")):
+    KIRA_GOD = os.path.dirname(AQUI)                   # el laboratorio DENTRO de la carpeta de Kira (como en GitHub)
 if os.path.isdir(KIRA_GOD) and KIRA_GOD not in sys.path:
     sys.path.insert(0, KIRA_GOD)
 
