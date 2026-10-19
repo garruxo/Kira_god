@@ -73,7 +73,7 @@ AYUDA = (
     "«diagnosticar» para que relacione los fallos recientes con su arreglo, «apunta: …» para dejarle una nota y "
     "«fallos resueltos» cuando lo arregles.\n"
     "ESCUCHA: con la escucha permanente activada, Kira oye siempre pero SOLO contesta cuando dices «Kira» (por ejemplo "
-    "«Kira, ¿qué hora es?», o «Kira» y luego lo que quieras). Lo que oye sin su nombre se borra a los 10 segundos y nunca "
+    "«Kira, ¿qué hora es?», o «Kira» y luego lo que quieras). Lo que oye sin su nombre se borra a los 15 segundos y nunca "
     "se guarda. Funciona con la app abierta en pantalla. Se apaga en Configuración.\n"
     "MEJORAS POR VOZ: «Kira, mejora…», «Kira, aprende a…» o «Kira, añade…» abre la terminal de mejoras, lo programa y "
     "lo prueba en el laboratorio, y te lee el resultado. Instalarlo SIEMPRE requiere tocar «Aplicar» dos veces: la voz "

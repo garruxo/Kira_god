@@ -3,7 +3,7 @@
 interfaz_kira.py - Interfaz inmersiva de Kira (Kivy, móvil y PC)
 
   INICIO : fondo blanco con «Kira» por todo el fondo y un botón redondo de neón en el centro (tocarlo = menú).
-           Escucha permanente: Kira solo contesta cuando oye su nombre; el resto se borra a los 10 segundos.
+           Escucha permanente: Kira solo contesta cuando oye su nombre; el resto se borra a los 15 segundos.
   MENÚ   : claro y sencillo: los apartados principales y, al tocar «Más apartados», todos los demás.
   Las salas inmersivas (Hacker, Ciberseguridad, Diseño…) conservan su estilo oscuro.
   Las pantallas de Sala/Mejoras/Módulos/Consola/Ajustes son las del panel de siempre (panel_kira.py).
@@ -358,6 +358,19 @@ def construir_interfaz(core, consola=None):
                 modelo.poner_estado("escuchando")
             pintar_escucha("Te escucho de fondo con mi oído propio. Di «Kira» cuando quieras.")
             return True
+        if ajustes.oido_propio and oido.libreria_disponible() and not oido.modelo_instalado():
+            # sin el reconocedor de Android (pitidos): Kira se descarga su oído ella sola y luego escucha
+            if oido.estado != "descargando":
+                def bajar_oido():
+                    try:
+                        oido.descargar_modelo()
+                        Clock.schedule_once(lambda _dt: reiniciar_escucha(), 0)
+                    except Exception as e:
+                        Clock.schedule_once(lambda _dt, e_=e: pintar_escucha(
+                            f"No pude descargar mi oído ({e_}). Revisa internet y pulsa «Escucha»."), 0)
+                threading.Thread(target=bajar_oido, daemon=True).start()
+            pintar_escucha("Me estoy descargando mi oído propio (39 MB, una sola vez). En un momento te escucho sin pitidos.")
+            return False
         if not voz.puede_escuchar():
             pintar_escucha("No puedo escuchar en este dispositivo. Escríbeme.")
             return False
@@ -395,7 +408,7 @@ def construir_interfaz(core, consola=None):
         pintar_config()
 
     def ciclo_escucha(dt):
-        escucha.purgar()                               # lo oído hace más de 10 s se borra
+        escucha.purgar()                               # lo oído hace más de 15 s se borra
         if modelo.estado == "atenta" and not escucha.atenta:
             modelo.poner_estado(estado_base())
             pintar_escucha()

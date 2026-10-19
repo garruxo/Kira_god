@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Escucha permanente con «Kira», borrador de 10 s, luz de neón y conversaciones nuevas en el baúl."""
+"""Escucha permanente con «Kira», borrador de 15 s, luz de neón y conversaciones nuevas en el baúl."""
 import os, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import escucha_kira as ek
@@ -15,16 +15,18 @@ ok(not ek.contiene_nombre("puede que no quiera venir mañana")[0], "«quiera» e
 ok(ek.contiene_nombre("quiera venir mañana")[0], "al principio sí (así escribe «Kira» el reconocedor sin conexión)")
 ok(not ek.contiene_nombre("kirguistán")[0] and not ek.contiene_nombre("")[0], "palabras parecidas no")
 
-# ---------- borrador de 10 segundos ----------
+# ---------- borrador de 15 segundos ----------
 reloj = [100.0]
 e = ek.Escucha(reloj=lambda: reloj[0])
 ok(e.oir("hablando de otra cosa") == ("nada", None) and len(e.borrador) == 1, "sin nombre: no contesta, va al borrador")
 reloj[0] += 5; e.oir("y más cosas")
 ok(len(e.borrador) == 2, "dos frases en el borrador")
 reloj[0] += 6
-ok(e.purgar() == 1 and len(e.borrador) == 1, "lo de hace más de 10 s se borra")
-reloj[0] += 11; e.purgar()
-ok(e.borrador == [], "todo se borra al pasar 10 s")
+ok(e.purgar() == 0 and len(e.borrador) == 2, "a los 11 s todavía no se borra (dura 15 s)")
+reloj[0] += 5
+ok(e.purgar() == 1 and len(e.borrador) == 1, "lo de hace más de 15 s se borra")
+reloj[0] += 16; e.purgar()
+ok(e.borrador == [], "todo se borra al pasar 15 s")
 
 # ---------- activación ----------
 e.oir("cosas sueltas")

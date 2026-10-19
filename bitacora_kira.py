@@ -177,7 +177,7 @@ MAPA = {
     "mejoras_ia_kira.py": "ayudas para que la IA escriba bien las mejoras (ejemplos, revisión previa)",
     "estudio_kira.py": "Kira estudia sola: Wikipedia, documentación de Python del móvil y plan de estudio",
     "red_kira.py": "conexiones https con los certificados correctos en Android",
-    "escucha_kira.py": "escucha permanente con «Kira», borrador de 10 s y luz de neón (lógica)",
+    "escucha_kira.py": "escucha permanente con «Kira», borrador de 15 s y luz de neón (lógica)",
     "portada_kira.py": "portada blanca con «Kira» de fondo y el botón redondo de neón",
     "curso_avanzado_kira.py": "curso de programación avanzada y programas completos (todos comprobados)",
     "ejecutor_kira.py": "ejecuta tus programas en modo seguro (sin archivos/red/sistema, con límite de tiempo)",

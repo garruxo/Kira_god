@@ -11,7 +11,7 @@ Vosk escucha sin parar, sin pitidos y sin internet, con un modelo en español de
   - pausar(True/False): mientras Kira habla o piensa, no se escucha a sí misma.
 La librería de Android (vosk-android) va en el APK (buildozer.spec, android.gradle_dependencies). En el PC no hay
 oído propio: Kira usa el reconocedor de siempre o el teclado.
-Lo que oye no se guarda: cada frase va a escucha_kira (borrador de 10 s en la RAM).
+Lo que oye no se guarda: cada frase va a escucha_kira (borrador de 15 s en la RAM).
 """
 import json
 import os

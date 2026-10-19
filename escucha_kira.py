@@ -5,7 +5,7 @@ Lógica PURA (sin Kivy, sin micrófono): se puede probar entera en el PC.
 
 Cómo funciona la escucha:
   - Kira oye frases sueltas (lo que le pasa el reconocimiento de voz del móvil) y las deja en un BORRADOR en la RAM.
-  - Todo lo del borrador que tenga más de 10 segundos se BORRA solo. Nunca se guarda en disco ni sale del móvil.
+  - Todo lo del borrador que tenga más de 15 segundos se BORRA solo. Nunca se guarda en disco ni sale del móvil.
   - Si en una frase aparece su nombre («Kira»), el borrador se para y Kira atiende:
         «Kira, ¿qué hora es?»  -> orden: «¿qué hora es?»
         «Kira»  (y nada más)    -> se queda ATENTA unos segundos: la siguiente frase es la orden.
@@ -16,7 +16,7 @@ import re
 import time
 import unicodedata
 
-VENTANA = 10.0            # segundos que dura una frase en el borrador
+VENTANA = 15.0            # segundos que dura una frase en el borrador
 ATENTA = 8.0              # segundos que espera la orden después de oír solo «Kira»
 NOMBRES = ("kira", "kyra", "kirah", "kiraa", "quira", "kiraaa")   # cómo suele escribirlo el reconocedor de voz
 
