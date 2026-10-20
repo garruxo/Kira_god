@@ -181,11 +181,15 @@ jobs:
             echo "::warning title=Manifiesto::No encuentro aapt para revisar el manifiesto"
           fi
 
-      - name: Comprobar que el APK lleva la firma fija de Kira
+      - name: Firmar el APK con la firma fija de Kira y comprobarlo
         run: |
           APK=$(ls bin/*.apk | head -1)
-          SIGNER=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
-          if [ -z "$SIGNER" ]; then echo "::warning title=Firma::No encuentro apksigner para comprobar la firma"; exit 0; fi
+          SIGNER=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/apksigner \
+                      /usr/local/lib/android/sdk/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SIGNER" ]; then echo "::error title=Firma::No encuentro apksigner para firmar el APK"; exit 1; fi
+          # se vuelve a firmar SIEMPRE con la firma fija (Gradle firma con una de usar y tirar)
+          "$SIGNER" sign --ks ~/.android/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey \
+            --key-pass pass:android "$APK"
           TIENE=$("$SIGNER" verify --print-certs "$APK" | grep -m1 "SHA-256 digest" | sed 's/.*: //' | tr -d ' :' | tr 'A-F' 'a-f')
           if [ "$TIENE" = "$(cat /tmp/firma_esperada)" ]; then
             echo "::notice title=Firma::El APK lleva la firma fija de Kira: se instala encima del anterior sin desinstalar."
