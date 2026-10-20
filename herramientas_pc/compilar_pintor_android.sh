@@ -20,7 +20,8 @@ COMUN=(-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DSD_BUILD_SHARED_LIBS
        -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF)
 
 if [ "${PARA_PC:-}" = "1" ]; then
-  cmake -S "$TRABAJO/sd.cpp" -B "$TRABAJO/pintor_pc" "${COMUN[@]}" -DGGML_NATIVE=ON   # en el PC, lo más rápido
+  # en el PC: AVX2 (todos los PCs de GitHub lo tienen); NATIVE no, que la caché puede ir a otra CPU (SIGILL)
+  cmake -S "$TRABAJO/sd.cpp" -B "$TRABAJO/pintor_pc" "${COMUN[@]}" -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
   cmake --build "$TRABAJO/pintor_pc" --target sd-cli -j "$(nproc)"
   mkdir -p "$RAIZ/libs_pc"
   cp "$TRABAJO/pintor_pc/bin/sd-cli" "$RAIZ/libs_pc/kira_pintor"
