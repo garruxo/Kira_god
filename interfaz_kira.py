@@ -960,7 +960,25 @@ def construir_interfaz(core, consola=None):
             break
 
     sm.control, sm.ir = ctl, ir
-    ir("inicio")
-    Clock.schedule_once(saludar, 0.8)
+
+    # =================================================================================
+    #  ARRANQUE: «Preparando a Kira» (oído, cerebro, lector y pantalla listos antes de empezar)
+    # =================================================================================
+    import arranque_kira
+    import red_kira
+    preparacion = arranque_kira.Preparacion(core, oido, ajustes, encender_oido=arrancar_escucha,
+                                            red=red_kira.red_sin_limite)
+
+    def empezar_kira():
+        ir("inicio")
+        Clock.schedule_once(saludar, 0.8)
+    arranque = arranque_kira.montar_arranque(sm, {"boton": boton, "fondo_claro": fondo_claro, "TXT": TXT, "NEON": NEON,
+                                                  "VERDE": VERDE, "FUENTE": FUENTE, "preparacion": preparacion,
+                                                  "al_terminar": empezar_kira})
+    if preparacion.hace_falta():
+        sm.current = "arranque"
+        arranque["empezar"]()
+    else:
+        empezar_kira()
     Clock.schedule_interval(revisar_avisos, 1.0)
     return sm

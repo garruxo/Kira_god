@@ -11,6 +11,7 @@ cerebro_propio_kira.py - El CEREBRO PROPIO de Kira: un modelo de IA que corre DE
 """
 import json
 import os
+import signal
 import shutil
 import subprocess
 import threading
@@ -45,6 +46,14 @@ def carpeta_librerias_android():
         return None
 
 
+def _vivo(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def _abrir_https(req, timeout=30):
     import red_kira
     return red_kira.abrir(req, timeout=timeout)
@@ -57,6 +66,8 @@ class CerebroPropio:
         self.carpeta_modelos = os.path.join(dir_datos, "modelos")
         self.ruta_cfg = os.path.join(dir_datos, "cerebro_propio.json")
         self.ruta_log = os.path.join(dir_datos, "cerebro_propio.log")
+        self.ruta_pid = os.path.join(dir_datos, "cerebro_propio.pid")   # para reutilizar el cerebro ya cargado
+        self.pid_externo = None
         self._binarios_dir = carpeta_binarios
         self._abrir, self._lanzar, self._reloj = abrir, lanzar, reloj
         self._salud = salud or self._salud_http
@@ -187,7 +198,38 @@ class CerebroPropio:
         return args
 
     def encendido(self):
-        return self.proceso is not None and self.proceso.poll() is None and self.estado == "encendido"
+        if self.estado != "encendido":
+            return False
+        if self.proceso is not None:
+            return self.proceso.poll() is None
+        return self.pid_externo is not None and _vivo(self.pid_externo)
+
+    def _reutilizar(self):
+        """Si el cerebro sigue cargado de antes (Kira se cerró pero el motor siguió vivo), se usa al momento."""
+        try:
+            pid, modelo = open(self.ruta_pid, encoding="utf-8").read().split()[:2]
+            pid = int(pid)
+        except (OSError, ValueError):
+            return False
+        if modelo != self.modelo or not _vivo(pid) or not self._salud():
+            self._borrar_pid()
+            return False
+        self.pid_externo = pid
+        return True
+
+    def _guardar_pid(self, pid):
+        if isinstance(pid, int):
+            try:
+                with open(self.ruta_pid, "w", encoding="utf-8") as f:
+                    f.write(f"{pid} {self.modelo}")
+            except OSError:
+                pass
+
+    def _borrar_pid(self):
+        try:
+            os.remove(self.ruta_pid)
+        except OSError:
+            pass
 
     def encender(self, espera=180.0):
         """Arranca el motor con el modelo elegido y espera a que responda. Bloquea: úsalo en un hilo.
@@ -198,6 +240,9 @@ class CerebroPropio:
             if not self.modelo_instalado():
                 self.estado, self.mensaje = "apagado", "Primero hay que descargar el modelo."
                 return False
+            if self._reutilizar():
+                self.estado, self.mensaje = "encendido", "Cerebro propio encendido (ya estaba cargado)."
+                return True
             binarios = self.binarios()
             if not binarios:
                 self.estado, self.mensaje = "error", "Esta versión de Kira no trae el motor del cerebro."
@@ -207,6 +252,7 @@ class CerebroPropio:
                 for extra in (True, False):
                     if self._probar(binario, extra, espera):
                         self.binario_usado = binario
+                        self._guardar_pid(getattr(self.proceso, "pid", None))
                         self.estado, self.mensaje = "encendido", "Cerebro propio encendido."
                         return True
             self.estado = "error"
@@ -216,8 +262,9 @@ class CerebroPropio:
     def _probar(self, binario, extra, espera):
         log = open(self.ruta_log, "ab")
         try:
+            extra_kw = {"start_new_session": True} if self._lanzar is subprocess.Popen else {}
             self.proceso = self._lanzar(self._argumentos(binario, extra), stdout=log, stderr=subprocess.STDOUT,
-                                        stdin=subprocess.DEVNULL, cwd=self.dir)
+                                        stdin=subprocess.DEVNULL, cwd=self.dir, **extra_kw)
         except OSError as e:
             log.close()
             self.mensaje = f"No se pudo lanzar el motor: {e}"
@@ -237,6 +284,13 @@ class CerebroPropio:
         return False
 
     def apagar(self):
+        externo, self.pid_externo = self.pid_externo, None
+        if externo is not None and _vivo(externo):
+            try:
+                os.kill(externo, signal.SIGTERM)
+            except OSError:
+                pass
+        self._borrar_pid()
         p, self.proceso = self.proceso, None
         if p is not None and p.poll() is None:
             p.terminate()

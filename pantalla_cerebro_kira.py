@@ -191,7 +191,7 @@ def montar_cerebro(sm, p):
             return
         permiso_notificaciones()
         est["aviso"] = "Android te va a pedir permiso para que Kira vea la pantalla."
-        vista.java.pedir_permiso(lambda ok: Clock.schedule_once(lambda _dt: (est.update(
+        vista.pedir_ver(lambda ok: Clock.schedule_once(lambda _dt: (est.update(
             aviso="Ya puedo ver la pantalla cuando me lo pidas." if ok else "No me diste permiso para ver la pantalla."),
             pintar()), 0.5))
 

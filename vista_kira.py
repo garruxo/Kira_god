@@ -100,11 +100,13 @@ class Vista:
         lista = cfg.get("privadas")
         self.privadas = [str(x) for x in lista if isinstance(x, str)] if isinstance(lista, list) else list(PRIVADAS_DEFECTO)
         self.siempre_activa = cfg.get("siempre_activa", False) is True
+        self.quiere_ver = cfg.get("quiere_ver", False) is True      # al abrir Kira, pedir ya el permiso de pantalla
 
     def _guardar(self):
         tmp = self.ruta_cfg + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"privadas": self.privadas, "siempre_activa": self.siempre_activa}, f, ensure_ascii=False)
+            json.dump({"privadas": self.privadas, "siempre_activa": self.siempre_activa,
+                       "quiere_ver": self.quiere_ver}, f, ensure_ascii=False)
         os.replace(tmp, self.ruta_cfg)
 
     def disponible(self):
@@ -121,6 +123,24 @@ class Vista:
         elif not self.java.puede_ver():
             self.java.detener()
         return True
+
+    def pedir_ver(self, al_resultado=None):
+        """Pide a Android el permiso de ver la pantalla; si lo das, al abrir Kira se pedirá solo."""
+        if self.java is None:
+            return False
+
+        def fin(ok):
+            if ok and not self.quiere_ver:
+                self.quiere_ver = True
+                self._guardar()
+            if al_resultado:
+                al_resultado(ok)
+        self.java.pedir_permiso(fin)
+        return True
+
+    def no_ver(self):
+        self.quiere_ver = False
+        self._guardar()
 
     # ---------- apps privadas ----------
     def es_privada(self, paquete):

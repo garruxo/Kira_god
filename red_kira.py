@@ -29,3 +29,16 @@ def abrir(req, timeout=30):
     if url.startswith("https://"):
         return urllib.request.urlopen(req, timeout=timeout, context=contexto_ssl())
     return urllib.request.urlopen(req, timeout=timeout)
+
+
+def red_sin_limite():
+    """¿Estás en una red sin límite de datos (WiFi)? True / False; None si no se sabe (p. ej. en el PC)."""
+    try:
+        from jnius import autoclass
+        act = autoclass("org.kivy.android.PythonActivity").mActivity
+        cm = act.getSystemService(autoclass("android.content.Context").CONNECTIVITY_SERVICE)
+        if cm.getActiveNetwork() is None:
+            return False
+        return not bool(cm.isActiveNetworkMetered())
+    except Exception:
+        return None

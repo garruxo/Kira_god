@@ -271,7 +271,10 @@ if KIVY_AVAILABLE:
                 self.kira_god.en_segundo_plano = False
 
         def on_stop(self):
-            for pieza in ("cerebro_propio", "oido"):
+            kg = getattr(self, "kira_god", None)
+            vista = getattr(kg, "vista", None)
+            piezas = ("oido",) if (vista is not None and vista.siempre_activa) else ("cerebro_propio", "oido")
+            for pieza in piezas:                    # «siempre activa»: el cerebro sigue cargado para la próxima vez
                 try:
                     getattr(getattr(self, "kira_god", None), pieza).apagar()
                 except Exception:
