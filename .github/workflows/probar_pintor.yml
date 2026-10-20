@@ -15,6 +15,9 @@ on:
       - herramientas_pc/probar_pintor_real.py
       - .github/workflows/probar_pintor.yml
 
+permissions:
+  contents: write          # solo para dejar el resultado en la rama «pruebas-pintor» (nunca toca main)
+
 jobs:
   probar:
     runs-on: ubuntu-24.04
@@ -58,3 +61,31 @@ jobs:
           name: pruebas-pintor
           path: salida_pruebas
           retention-days: 7
+
+      - name: Resumen en las anotaciones
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os
+          try:
+              d = json.load(open("salida_pruebas/resumen.json", encoding="utf-8"))
+          except Exception as e:
+              print(f"::warning title=Sin resumen::{e}"); raise SystemExit
+          for k, v in d.get("pintor", {}).items():
+              if isinstance(v, dict):
+                  print(f"::notice title=Pintor {k}::ok={v.get('ok')} s={v.get('segundos')} {str(v.get('error') or '')[:300]}")
+          for k, v in d.get("internet", {}).items():
+              lee = "; ".join(f"{l.get('tipo') or 'x'}:{l.get('letras') or l.get('error','')[:60]}" for l in v.get("lecturas", []))
+              fuentes = ", ".join(r["fuente"] for r in v.get("resultados", []))
+              print(f"::notice title=Internet {k}::ok={v.get('ok')} n={v.get('n')} [{fuentes}] lee: {lee} {str(v.get('error') or '')[:200]}")
+          PY
+
+      - name: Publicar el resultado en la rama «pruebas-pintor» (imágenes y resumen, para revisarlo)
+        if: always()
+        run: |
+          [ -d salida_pruebas ] || exit 0
+          cd salida_pruebas
+          git init -q && git checkout -q -b pruebas-pintor
+          git add -A
+          git -c user.name="kira-pruebas" -c user.email="kira-pruebas@users.noreply.github.com" commit -q -m "Resultado de la prueba del pintor y el buscador"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" pruebas-pintor
