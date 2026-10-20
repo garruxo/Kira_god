@@ -246,7 +246,7 @@ def construir_interfaz(core, consola=None):
                 decir("No tengo esa receta. Di «recetas» para ver la lista.")
             else:
                 decir(f"Te abro «{r['titulo']}» en el editor.")
-                codigo_ui["cargar_en_editor"](r["codigo"].strip() + "\n", r["id"],
+                codigo_ui["cargar_en_editor"](smk.programa(r), r["id"],
                                               "Receta probada: pulsa «Ejecutar» o «Jugar» para verla funcionar.")
             return
         if re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura", bajo) and not pedir_permiso_fotos():

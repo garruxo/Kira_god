@@ -9,6 +9,9 @@ Dos fuentes, las dos solo de LECTURA (el texto se guarda, nunca se ejecuta):
     cada función del módulo y cómo se llama. Solo módulos de una lista segura (importarlos no hace nada raro).
 Además hay un PLAN DE ESTUDIO (programación, sistemas, redes, ciberseguridad, IA…) que Kira recorre poco a poco
 cuando le dices «aprende sola»: un tema cada cierto tiempo, mientras la app está abierta.
+Y su SABER DE INGENIERÍA (recetas_ingenieria_kira: algoritmos, estructuras de datos, sistemas operativos, redes, bases
+de datos, compiladores, seguridad defensiva, IA…): «estudia ingeniería» lo guarda en el baúl sin internet, y al
+«aprender sola» lo hace la primera vez.
 
 Lo bajado de internet no se mezcla en lo que se le pide a una IA (así una web no puede darle órdenes a Kira).
 """
@@ -24,6 +27,7 @@ import urllib.parse
 MAX_RESUMEN = 1500
 POR_TEMA = 3                    # artículos por tema del plan
 INTERVALO = 10 * 60             # segundos entre temas cuando aprende sola
+FUENTE_INGENIERIA = "saber de ingeniería de Kira"   # fichas propias (recetas_ingenieria_kira), sin internet
 
 PLAN = [
     "Programación", "Python", "Algoritmo", "Estructura de datos", "Programación orientada a objetos",
@@ -84,12 +88,13 @@ class Estudiante:
         self.indice = int(d.get("indice", 0)) if str(d.get("indice", 0)).isdigit() else 0
         self.aprendidos = int(d.get("aprendidos", 0)) if str(d.get("aprendidos", 0)).isdigit() else 0
         self.ultimo = str(d.get("ultimo", ""))[:120]
+        self.ingenieria = int(d.get("ingenieria", 0)) if str(d.get("ingenieria", 0)).isdigit() else 0
 
     def _guardar(self):
         tmp = self.ruta + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"sola": self.sola, "indice": self.indice, "aprendidos": self.aprendidos,
-                       "ultimo": self.ultimo}, f, ensure_ascii=False)
+                       "ultimo": self.ultimo, "ingenieria": self.ingenieria}, f, ensure_ascii=False)
         os.replace(tmp, self.ruta)
 
     # ---------- Wikipedia ----------
@@ -164,10 +169,32 @@ class Estudiante:
             self._guardar()
         return nuevas
 
-    def _ficha(self, tema, texto):
+    def _ficha(self, tema, texto, fuente="documentación de Python"):
         antes = self.recuerdos.total()
-        self.recuerdos.guardar(_limpio(texto, MAX_RESUMEN), tema=tema, fuente="documentación de Python")
+        self.recuerdos.guardar(_limpio(texto, MAX_RESUMEN), tema=tema, fuente=fuente)
         return 1 if self.recuerdos.total() > antes else 0
+
+    # ---------- ingeniería informática (saber propio de Kira, sin internet) ----------
+    def estudiar_ingenieria(self):
+        """Guarda en el baúl las fichas de recetas_ingenieria_kira (algoritmos, estructuras de datos, sistemas,
+        redes, bases de datos, compiladores, seguridad defensiva, IA…). Devuelve (fichas nuevas, total de fichas).
+        Es texto escrito y revisado a mano en el proyecto: no viene de internet."""
+        import recetas_ingenieria_kira as ri
+        fichas = ri.fichas()
+        nuevas = sum(self._ficha(tema, texto, fuente=FUENTE_INGENIERIA) for tema, texto in fichas)
+        with self._lock:
+            self.aprendidos += nuevas
+            self.ingenieria = len(fichas)
+            self.ultimo = "ingeniería informática"
+            self._guardar()
+        return nuevas, len(fichas)
+
+    def ingenieria_pendiente(self):
+        try:
+            import recetas_ingenieria_kira as ri
+            return self.ingenieria < len(ri.fichas())
+        except ImportError:
+            return False
 
     # ---------- plan de estudio ----------
     def paso(self):
@@ -193,6 +220,11 @@ class Estudiante:
         self._parar = threading.Event()
 
         def bucle(parar=self._parar):
+            try:
+                if self.ingenieria_pendiente():          # lo propio primero: no necesita internet
+                    self.estudiar_ingenieria()
+            except Exception as e:
+                self.ultimo_error = str(e)[:200]
             while not parar.is_set() and self.sola:
                 try:
                     self.paso()
@@ -208,10 +240,12 @@ class Estudiante:
         return (f"Estudio: {self.aprendidos} ficha(s) aprendidas por mi cuenta. Plan: {hecho} de {len(PLAN)} temas"
                 f"{' (vuelta ' + str(self.indice // len(PLAN) + 1) + ')' if self.indice >= len(PLAN) else ''}.\n"
                 f"Aprender sola: {'SÍ, un tema cada ' + str(INTERVALO // 60) + ' min mientras la app está abierta' if self.sola else 'no'}."
+                + (f"\nIngeniería informática: {self.ingenieria} fichas en el baúl." if self.ingenieria else
+                   "\nIngeniería informática: aún no la he guardado («estudia ingeniería»).")
                 + (f"\nÚltimo: {self.ultimo}." if self.ultimo else "")
                 + (f"\nÚltimo problema: {self.ultimo_error}" if self.ultimo_error else "")
-                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «aprende sola», "
-                  "«deja de aprender», «plan de estudio».")
+                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «estudia ingeniería», "
+                  "«aprende sola», «deja de aprender», «plan de estudio».")
 
     def texto_plan(self):
         lineas = []

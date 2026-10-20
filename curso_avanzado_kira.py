@@ -2,8 +2,10 @@
 """
 curso_avanzado_kira.py - PROGRAMACIÓN AVANZADA sin internet (lógica PURA, sin Kivy).
 
-  CURSO_AVANZADO : lecciones de nivel alto (clases, decoradores, generadores, concurrencia, algoritmos, patrones…).
-  CODIGOS        : programas completos y avanzados para estudiar, ejecutar en el editor y modificar.
+  CURSO_AVANZADO   : lecciones de nivel alto (clases, decoradores, generadores, concurrencia, algoritmos, patrones…).
+  CODIGOS          : programas completos y avanzados para estudiar, ejecutar en el editor y modificar.
+  CURSO_INGENIERIA : ingeniería informática (estructuras de datos, grafos, sistemas, compiladores, IA…), sacado de
+                     recetas_ingenieria_kira: cada lección es un módulo probado que se ejecuta con sus pruebas.
 
 Todo el código de aquí se comprueba EJECUTÁNDOLO en las pruebas (tests/test_curso_avanzado.py), así que funciona.
 Ninguno usa archivos, red ni el sistema: se pueden ejecutar en el editor seguro de Kira.
@@ -221,8 +223,21 @@ CODIGOS = [
 ]
 
 
+def _ingenieria():
+    """Lecciones de INGENIERÍA: cada receta de recetas_ingenieria_kira como programa que se ejecuta en el editor
+    seguro (el módulo y, debajo, sus pruebas). tests/test_ingenieria.py las ejecuta todas."""
+    try:
+        import recetas_ingenieria_kira as ri
+    except ImportError:
+        return []
+    return [ri.leccion(r) for r in ri.RECETAS]
+
+
+CURSO_INGENIERIA = _ingenieria()
+
+
 def todas():
-    return CURSO_AVANZADO + CODIGOS
+    return CURSO_AVANZADO + CODIGOS + CURSO_INGENIERIA
 
 
 def buscar(id_):

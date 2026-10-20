@@ -370,6 +370,8 @@ class Recuerdos:
         candidatos = sorted(puntos.items(), key=lambda kv: (-kv[1], -kv[0]))
         salida = []
         for i, pt in candidatos[: max(n * 8, 20)]:
+            if len(salida) >= n and round(pt, 9) < salida[n - 1][0]:
+                break                                      # ya no puede empatar con los n primeros
             r = self.leer(i)
             if r is None:
                 continue
@@ -378,10 +380,10 @@ class Recuerdos:
             if excluir_web and r["fuente"].startswith("http"):
                 continue
             r["puntuacion"] = round(min(pt / denominador, 1.0), 3)
-            salida.append(r)
-            if len(salida) >= n:
-                break
-        return salida
+            salida.append((round(pt, 9), len(q & palabras(r.get("tema", ""))), r))
+        # a igualdad de puntos, primero el recuerdo cuyo TEMA nombra lo preguntado (el más específico)
+        salida.sort(key=lambda x: (-x[0], -x[1], -x[2]["n"]))
+        return [r for _, _, r in salida[:n]]
 
     def _parecida(self, q, pregunta):
         """¿Es la misma pregunta? Coincidencia de palabras (contando sinónimos) frente al total de las dos."""

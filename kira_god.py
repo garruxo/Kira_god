@@ -539,17 +539,25 @@ class KiraGodCore:
 
     def _orden_recetas(self, cmd_lower):
         import saber_mejoras_kira as sm_
+        pie = "\n\nDi «receta <nombre>» para verla o «abre la receta <nombre>» para llevarla al editor."
         if cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas"):
-            return (f"Técnicas probadas que uso al programar mejoras ({len(sm_.RECETAS)}):\n" + sm_.lista() +
-                    "\n\nDi «receta <nombre>» para verla o «abre la receta <nombre>» para llevarla al editor.")
+            return f"Técnicas probadas que uso al programar mejoras ({len(sm_.RECETAS)}):\n" + sm_.lista() + pie
+        if cmd_lower.startswith("recetas "):                    # «recetas de ingeniería», «recetas de grafos»…
+            filtro = re.sub(r"^recetas\s+(?:de\s+)?", "", cmd_lower)
+            texto = sm_.lista(filtro)
+            if not texto:
+                return (f"[x] No tengo recetas de «{filtro}». Áreas: " +
+                        ", ".join(sorted({sm_.area(r) for r in sm_.RECETAS})) + ".")
+            return f"Técnicas probadas de «{filtro}»:\n{texto}{pie}"
         nombre = cmd_lower.split("receta", 1)[1].strip()
         r = sm_.receta(nombre)
         if r is None:
             return f"[x] No tengo ninguna receta de «{nombre}». Di «recetas» para ver la lista."
-        self.lector.ultimo = r["codigo"].strip() + "\n"            # así «abre lo leído en el editor» también vale
+        self.lector.ultimo = sm_.programa(r)                        # así «abre lo leído en el editor» también vale
         if cmd_lower.startswith("abre"):
             return "[OK] ABRIR_EN_EDITOR " + r["id"]
-        return f"{r['titulo']}\n\n{r['idea']}\n\n```python\n{r['codigo'].strip()}\n```"
+        coste = f"\nCoste: {r['complejidad']}" if r.get("complejidad") else ""
+        return f"{r['titulo']}\n\n{r['idea']}{coste}\n\n```python\n{r['codigo'].strip()}\n```"
 
     def ver_imagen(self, ruta, pregunta):
         """Los ojos de Kira (visión dentro del móvil). Lanza RuntimeError si aún no los tiene."""
@@ -721,6 +729,15 @@ class KiraGodCore:
             return "[OK] Dejo de estudiar sola. Lo aprendido se queda en mi baúl."
         if cmd_lower.startswith("plan de estudio"):
             return est.texto_plan()
+        if re.match(r"^estudia\s*:?\s*(?:la\s+)?(?:ingenier[ií]a|algoritmos|inform[aá]tica)\b", cmd_lower):
+            try:
+                nuevas, total = est.estudiar_ingenieria()
+            except (ImportError, OSError) as e:
+                return f"[x] No pude guardar mi saber de ingeniería: {e}"
+            return (f"[OK] He estudiado ingeniería informática sin internet: {nuevas} ficha(s) nuevas (tengo {total}: "
+                    "algoritmos, estructuras de datos, sistemas operativos, redes, bases de datos, compiladores, "
+                    "seguridad defensiva, IA…). Pregúntame, por ejemplo, «qué es el teorema CAP» o «cómo funciona "
+                    "Dijkstra». Mis técnicas con código: «recetas de ingeniería».")
         m = re.match(r"^estudia\s+python\s*:?\s*([a-z_.]*)\s*$", cmd_lower)
         if m:
             try:
@@ -896,7 +913,7 @@ class KiraGodCore:
         elif re.match(r"^(?:mira|lee|léeme|explícame|explicame|explica)(?: la| mi)? pantalla\b|^qu[eé] (?:ves|hay en (?:la|mi) pantalla)\b"
                       r"|^(?:no mires|puedes mirar) (?:esta app|aqu[ií])\b|^apps? privadas?$", cmd_lower):
             return self._orden_vista(cmd_lower)
-        elif cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas") or cmd_lower.startswith(("receta ", "abre la receta ")):
+        elif cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas") or cmd_lower.startswith(("receta ", "recetas ", "abre la receta ")):
             return self._orden_recetas(cmd_lower)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()

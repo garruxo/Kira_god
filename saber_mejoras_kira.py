@@ -31,9 +31,15 @@ def normalizar(texto):
     return "".join(c for c in t if unicodedata.category(c) != "Mn")
 
 
+# palabras que no dicen nada del tema (si no, «una IA que…» en un título encajaría con cualquier pedido)
+_VACIAS = {"una", "uno", "unos", "unas", "que", "con", "los", "las", "del", "por", "para", "como", "sin", "mas",
+           "muy", "pero", "sus", "este", "esta", "esto", "ese", "esa", "eso", "hay", "son", "ser", "les", "nos",
+           "mis", "tus", "quiero", "hazme", "dame", "necesito", "puedes", "algo", "cosa", "the", "and", "for"}
+
+
 def _raices(texto):
-    """Raíces de las palabras (5 primeras letras): «partículas» y «partícula» coinciden."""
-    return {w[:5] for w in re.findall(r"[a-z0-9]{3,}", normalizar(texto))}
+    """Raíces de las palabras (5 primeras letras): «partículas» y «partícula» coinciden. «2d» y «3d» también cuentan."""
+    return {w[:5] for w in re.findall(r"[a-z0-9]{3,}|\b[23]d\b", normalizar(texto)) if w not in _VACIAS}
 
 
 def buscar(pedido, n=2):
@@ -61,14 +67,17 @@ def receta(id_o_nombre):
 
 
 def contexto_para(pedido, recuerdos=None, local=False):
-    """Texto que se añade al pedido de mejora: la técnica probada más parecida y lo que Kira ha estudiado."""
+    """Texto que se añade al pedido de mejora: la técnica probada más parecida y lo que Kira ha estudiado.
+    Si el código de la receta es demasiado largo para ese cerebro, va solo la idea (y su coste), que también ayuda."""
     partes = []
     tope_codigo = 2600 if local else 6000
     for _p, r in buscar(pedido, 1 if local else 2):
         codigo = r["codigo"].strip()
+        coste = f" Coste: {r['complejidad']}." if r.get("complejidad") else ""
         if len(codigo) > tope_codigo:
+            partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}{coste}")
             continue
-        partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}\n"
+        partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}{coste}\n"
                       f"Ejemplo que funciona (adáptalo, no lo copies si no encaja):\n```python\n{codigo}\n```")
     if recuerdos is not None:
         try:
@@ -80,5 +89,33 @@ def contexto_para(pedido, recuerdos=None, local=False):
     return "\n\n".join(partes)
 
 
-def lista():
-    return "\n".join(f"- {r['id']}: {r['titulo']}" for r in RECETAS)
+def programa(r):
+    """El código de la receta listo para el editor: si tiene pruebas, con ellas impresas debajo (así «Ejecutar»
+    enseña lo que hace)."""
+    if r.get("prueba"):
+        try:
+            import recetas_ingenieria_kira as ri
+            return ri.demo(r)
+        except ImportError:
+            pass
+    return r["codigo"].strip() + "\n"
+
+
+def area(r):
+    return r.get("area") or "Gráficos y juegos"
+
+
+def lista(filtro=""):
+    """Las recetas agrupadas por área. Con filtro («ingeniería», «grafos», «gráficos»…) solo las de esas áreas."""
+    f = normalizar(filtro).strip()
+    if f.startswith("ingenier"):
+        elegidas = [r for r in RECETAS if r.get("area")]
+    elif f:
+        elegidas = [r for r in RECETAS if _raices(f) & _raices(area(r))]
+    else:
+        elegidas = RECETAS
+    grupos = {}
+    for r in elegidas:
+        grupos.setdefault(area(r), []).append(r)
+    return "\n".join(f"{a}:\n" + "\n".join(f"- {r['id'].replace('_', ' ')}: {r['titulo']}" for r in rs)
+                     for a, rs in grupos.items())

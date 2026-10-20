@@ -40,7 +40,12 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - líneas y polígonos en el motor;
   - 17 recetas de gráficos en `recetas_graficos_kira.py`;
   - `saber_mejoras_kira.py` da la receta más parecida y lo estudiado al cerebro cuando programa una mejora.
+- **Hecho en la v2.14 (ingeniería informática avanzada):**
+  - `recetas_ingenieria_kira.py`: 57 recetas probadas en 12 áreas (estructuras de datos, técnicas, grafos, cadenas, programación dinámica, matemáticas, sistemas operativos, distribuidos, compiladores, compresión, IA, búsqueda/lógica) y 49 fichas de teoría (`CONCEPTOS`);
+  - cada receta: su `"prueba"`, `area` y `complejidad`; `tests/test_ingenieria.py` las pasa por el laboratorio real (`servidor_lab.probar`) y por el editor seguro;
+  - «estudia ingeniería» guarda las fichas en el baúl sin internet (y «aprende sola» lo hace la primera vez); Kira las responde sola;
+  - nivel «Ingeniería» en la terminal y en los ejemplos del editor; «recetas de ingeniería» / «recetas de grafos»; «abre la receta X» la abre con sus pruebas;
+  - la búsqueda de recetas ignora palabras vacías y, en el baúl, a igualdad de puntos gana el recuerdo cuyo tema nombra lo preguntado.
 - **Pendiente:**
-  - `recetas_ingenieria_kira.py`: algoritmos y estructuras de datos, en el mismo formato que `recetas_graficos_kira.py`, con su `"prueba"`. `saber_mejoras_kira` lo carga solo si existe y `tests/test_saber.py` lo verifica;
   - motor local para generar imágenes (stable-diffusion.cpp), siendo honesto sobre lo lento que es en un móvil;
   - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real.

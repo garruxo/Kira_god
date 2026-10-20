@@ -193,6 +193,10 @@ MAPA = {
     "lector_kira.py": "lee texto y código de capturas (Tesseract) y reconstruye la sangría",
     "pantalla_lector_kira.py": "pantalla «Lector» (leer captura, abrir en el editor, guardar, explicar)",
     "recuerdos_kira.py": "baúl de recuerdos en disco: índice, firmas, buscar sin cargar todo en la RAM",
+    "saber_mejoras_kira.py": "lo que Kira usa al programar una mejora: la receta más parecida y lo estudiado",
+    "recetas_graficos_kira.py": "recetas probadas de gráficos y juegos (partículas, 3D, fractales, física…)",
+    "recetas_ingenieria_kira.py": "ingeniería informática: recetas probadas (estructuras de datos, grafos, sistemas, "
+                                  "compiladores, IA…) y fichas de teoría para el baúl («estudia ingeniería»)",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }
 

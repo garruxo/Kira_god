@@ -13,6 +13,8 @@ def ok(c, m):
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAB = os.path.join(RAIZ, "kira_laboratorio", "tests_fijos", "test_juegos.py")
 ok(len(sm_.RECETAS) >= 15 and len({r["id"] for r in sm_.RECETAS}) == len(sm_.RECETAS), "hay recetas y sin repetir")
+ok(sum(1 for r in sm_.RECETAS if r.get("area")) >= 50, "carga también las recetas de ingeniería (recetas_ingenieria_kira)")
+ok("Gráficos y juegos:" in sm_.lista() and "Grafos:" in sm_.lista(), "la lista va agrupada por áreas")
 # cada receta: pasa la revisión, carga, sus juegos pasan el laboratorio y sus órdenes responden
 for r in sm_.RECETAS:
     ok(all(r.get(k) for k in ("id", "titulo", "temas", "idea", "codigo")), f"{r['id']}: ficha completa")

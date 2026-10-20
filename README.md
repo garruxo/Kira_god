@@ -210,6 +210,32 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Ingeniería informática avanzada (nuevo, v2.14)
+- `recetas_ingenieria_kira.py`: **57 recetas** de algoritmos y programación avanzada, cada una un módulo completo de Kira
+  que se prueba solo. Áreas: estructuras de datos (Union-Find, trie, montículo, caché LRU, Fenwick, árbol de segmentos,
+  Bloom, AVL, árbol B), técnicas (ventana deslizante, Kadane, búsqueda binaria sobre la respuesta, Newton), grafos
+  (Dijkstra, Bellman-Ford, Floyd-Warshall, Kruskal, orden topológico, Tarjan, flujo máximo, emparejamiento), cadenas
+  (KMP, Aho-Corasick, Levenshtein, diff, array de sufijos), programación dinámica (mochila, LIS, monedas, viajante con
+  máscaras de bits), matemáticas (criba, Miller-Rabin y Pollard, RSA didáctico, FFT, exponenciación rápida, Gauss),
+  sistemas operativos (planificador de CPU, reemplazo de páginas, banquero, productor-consumidor, filósofos),
+  distribuidos (relojes vectoriales, hash consistente, limitador de peticiones), compiladores (mini compilador a
+  bytecode con máquina de pila, expresiones regulares con autómatas de Thompson y **KiraLang**, un lenguaje propio con
+  funciones y recursión), compresión (LZW, Burrows-Wheeler, Hamming y CRC-32), IA (minimax alfa-beta, recocido
+  simulado, algoritmo genético, k-means++, red neuronal con retropropagación, regresión) y lógica (N reinas, SAT/DPLL,
+  ordenaciones comparadas).
+- Cuando Kira programa una mejora, recibe la receta más parecida (o solo su idea y su coste si el código es largo
+  para el modelo del móvil).
+- **Teoría**: 49 fichas (complejidad, P y NP, memoria y CPU, procesos e hilos, memoria virtual, redes, TLS, bases de
+  datos, CAP, Raft, compiladores, tipos, SOLID, patrones, pruebas, git, CI/CD, seguridad DEFENSIVA, LLM, cuantización…).
+  «estudia ingeniería» las guarda en el baúl **sin internet** y desde ahí Kira responde sola («qué es el teorema CAP»,
+  «cómo funciona Dijkstra»). «aprende sola» también lo hace la primera vez.
+- Órdenes: «recetas de ingeniería», «recetas de grafos», «receta dijkstra», «abre la receta kmp» (se abre en el editor
+  con sus pruebas: pulsa «Ejecutar»). En la terminal de la Sala Hacker hay un nivel nuevo: **Ingeniería**.
+- Pruebas: `tests/test_ingenieria.py` (cada receta pasa el laboratorio de verdad y se ejecuta en el editor seguro con
+  sus pruebas; el baúl responde; la terminal y el editor funcionan) y `tests/test_saber.py`.
+- Honesto: el RSA es para aprender (claves de juguete, sin relleno). No probado aún en el móvil real: cuánto tarda en
+  abrirse la lista larga de lecciones.
+
 ## Lector de capturas: texto y código, sin internet (nuevo)
 - `lector_kira.py`: Tesseract (Tesseract4Android 4.9.0, Apache 2.0, desde JitPack) dentro del APK; idiomas español e
   inglés (`tessdata_fast`) se descargan una vez. Para CÓDIGO reconstruye la sangría con la posición de cada palabra
