@@ -53,15 +53,36 @@ class Oido:
         self._servicio = self._oyente = self._modelo = self._recon = None
 
     # ---------- disponibilidad ----------
-    @staticmethod
-    def libreria_disponible():
-        """¿Está la librería de Vosk dentro de la app? (solo en Android)"""
+    _lib = None                          # se comprueba una vez: True / False
+    error_lib = ""                       # por qué no está (para enseñarlo en «Cerebro y oído»)
+
+    @classmethod
+    def libreria_disponible(cls):
+        """¿Está la librería de Vosk dentro de la app? (solo en Android). Busca la clase con el cargador de clases
+        de la app y SIN inicializarla (así no carga aún la librería nativa ni falla por el hilo)."""
+        if cls._lib is not None:
+            return cls._lib
         try:
             from jnius import autoclass
-            autoclass("org.vosk.Model")
-            return True
         except Exception:
+            cls._lib, cls.error_lib = False, "no es Android"
             return False
+        errores = []
+        try:
+            act = autoclass("org.kivy.android.PythonActivity").mActivity
+            autoclass("java.lang.Class").forName("org.vosk.Model", False, act.getClassLoader())
+            cls._lib = True
+            return True
+        except Exception as e:
+            errores.append(str(e))
+        try:
+            autoclass("org.vosk.Model")
+            cls._lib = True
+            return True
+        except Exception as e:
+            errores.append(str(e))
+        cls._lib, cls.error_lib = False, " / ".join(errores)[:300]
+        return False
 
     def modelo_instalado(self):
         return os.path.isdir(os.path.join(self.ruta_modelo, "am")) or os.path.isfile(os.path.join(self.ruta_modelo, "conf", "model.conf"))
@@ -136,51 +157,54 @@ class Oido:
         if not self.modelo_instalado():
             return False, "Falta descargar el oído de Kira (39 MB)."
         if not self.libreria_disponible():
-            return False, "Esta versión de Kira no trae el oído propio."
+            return False, "No encuentro la librería del oído propio: " + (self.error_lib or "?")
         self.estado, self.mensaje = "cargando", "Preparando el oído…"
+        oido = self
+        try:                                       # clases y oyente se preparan en el hilo principal (el de la app)
+            from jnius import autoclass, PythonJavaClass, java_method
 
-        def cargar():
+            class Oyente(PythonJavaClass):
+                __javainterfaces__ = ["org/vosk/android/RecognitionListener"]
+                __javacontext__ = "app"
+
+                @java_method("(Ljava/lang/String;)V")
+                def onPartialResult(self, hipotesis):
+                    pass
+
+                @java_method("(Ljava/lang/String;)V")
+                def onResult(self, hipotesis):
+                    t = texto_de_resultado(hipotesis)
+                    if t:
+                        al_frase(t)
+
+                @java_method("(Ljava/lang/String;)V")
+                def onFinalResult(self, hipotesis):
+                    t = texto_de_resultado(hipotesis)
+                    if t:
+                        al_frase(t)
+
+                @java_method("(Ljava/lang/Exception;)V")
+                def onError(self, e):
+                    oido.estado, oido.mensaje = "error", f"Error del oído: {e.toString()}"
+                    if al_estado:
+                        al_estado(oido.estado)
+
+                @java_method("()V")
+                def onTimeout(self):
+                    pass
+
+            Model, Recognizer, SpeechService = (autoclass("org.vosk.Model"), autoclass("org.vosk.Recognizer"),
+                                                autoclass("org.vosk.android.SpeechService"))
+            self._oyente = Oyente()                # se guarda: si Python lo borra, Java se queda sin oyente
+        except Exception as e:
+            self.estado, self.mensaje = "error", f"No se pudo preparar el oído: {e}"
+            return False, self.mensaje
+
+        def cargar():                              # cargar el modelo tarda unos segundos: en otro hilo
             try:
-                from jnius import autoclass, PythonJavaClass, java_method
-
-                class Oyente(PythonJavaClass):
-                    __javainterfaces__ = ["org/vosk/android/RecognitionListener"]
-                    __javacontext__ = "app"
-
-                    @java_method("(Ljava/lang/String;)V")
-                    def onPartialResult(self, hipotesis):
-                        pass
-
-                    @java_method("(Ljava/lang/String;)V")
-                    def onResult(self, hipotesis):
-                        t = texto_de_resultado(hipotesis)
-                        if t:
-                            al_frase(t)
-
-                    @java_method("(Ljava/lang/String;)V")
-                    def onFinalResult(self, hipotesis):
-                        t = texto_de_resultado(hipotesis)
-                        if t:
-                            al_frase(t)
-
-                    @java_method("(Ljava/lang/Exception;)V")
-                    def onError(self, e):
-                        oido.estado, oido.mensaje = "error", f"Error del oído: {e.toString()}"
-                        if al_estado:
-                            al_estado(oido.estado)
-
-                    @java_method("()V")
-                    def onTimeout(self):
-                        pass
-
-                oido = self
-                Model = autoclass("org.vosk.Model")
-                Recognizer = autoclass("org.vosk.Recognizer")
-                SpeechService = autoclass("org.vosk.android.SpeechService")
                 self._modelo = Model(self.ruta_modelo)
                 self._recon = Recognizer(self._modelo, FRECUENCIA)
                 self._servicio = SpeechService(self._recon, FRECUENCIA)
-                self._oyente = Oyente()                       # se guarda: si Python lo borra, Java se queda sin oyente
                 self._servicio.startListening(self._oyente)
                 self.estado, self.mensaje = "escuchando", "Te escucho (oído propio, sin internet)."
             except Exception as e:

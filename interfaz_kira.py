@@ -381,7 +381,11 @@ def construir_interfaz(core, consola=None):
         st["esc_reloj"] = Clock.schedule_interval(ciclo_escucha, 0.4)
         if modelo.estado == "reposo":
             modelo.poner_estado("escuchando")
-        pintar_escucha()
+        if platform == "android" and ajustes.oido_propio and not oido.libreria_disponible():
+            pintar_escucha("Uso el reconocedor de Android (solo en esta pantalla): no encuentro mi oído propio. "
+                           "Mira Menú › Cerebro y oído.")
+        else:
+            pintar_escucha()
         return True
 
     def parar_escucha():

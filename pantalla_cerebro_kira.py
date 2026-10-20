@@ -106,9 +106,11 @@ def montar_cerebro(sm, p):
         elif oido.modelo_instalado():
             lb_oid.text = ("Oído instalado. " + ({"escuchando": "Escuchando ahora.", "pausa": "En pausa mientras habla.",
                                                    "cargando": "Preparándose…", "error": oido.mensaje}.get(oido.estado, ""))
-                           if oido.libreria_disponible() else "Oído descargado, pero esta versión de la app no trae su librería.")
+                           if oido.libreria_disponible() else "Oído descargado, pero no encuentro su librería: " + (oido.error_lib or "?"))
+        elif not oido.libreria_disponible():
+            lb_oid.text = "No encuentro la librería del oído propio (" + (oido.error_lib or "?") + "). Mándale esta pantalla a Claude."
         else:
-            lb_oid.text = "Sin oído propio: Kira usa el reconocedor de Android (con sus pitidos)."
+            lb_oid.text = "Sin oído propio todavía: pulsa «Descargar el oído»."
         btn_oid.disabled = oido.modelo_instalado() or oido.estado == "descargando"
         btn_uso.text = "Usar oído propio: " + ("SÍ" if ajustes.oido_propio else "NO")
         btn_siempre.text = "Siempre activa: " + ("SÍ" if vista.siempre_activa else "NO")
