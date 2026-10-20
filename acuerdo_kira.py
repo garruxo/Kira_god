@@ -59,12 +59,18 @@ class Parar(Exception):
 #  AJUSTE: activo / inactivo
 # =====================================================================================
 class Ajuste:
+    """Desde la v2.26 viene APAGADO (lo pidió el dueño: las mejoras, solo con su criterio y el de Kira). Lo guardado
+    antes de la v2.26 no cuenta; si el dueño lo vuelve a encender («activa el acuerdo con claude»), se respeta."""
+    VERSION = 2
+
     def __init__(self, ruta):
         self.ruta = ruta
-        self.activo = True
+        self.activo = False
         try:
             with open(ruta, encoding="utf-8") as f:
-                self.activo = json.load(f).get("activo", True) is not False
+                d = json.load(f)
+            if d.get("v") == self.VERSION:
+                self.activo = d.get("activo") is True
         except (OSError, ValueError, AttributeError):
             pass
 
@@ -72,7 +78,7 @@ class Ajuste:
         self.activo = bool(valor)
         tmp = self.ruta + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"activo": self.activo}, f)
+            json.dump({"activo": self.activo, "v": self.VERSION}, f)
         os.replace(tmp, self.ruta)
         return self.activo
 

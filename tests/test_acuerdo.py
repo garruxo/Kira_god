@@ -71,7 +71,12 @@ ok("ACUERDO entre Kira y Claude" in ak.texto_historial({"acuerdo": True, "histor
 
 # ---------- ajuste y órdenes ----------
 A = ak.Ajuste(os.path.join(T, "ac.json"))
-ok(A.activo and not A.poner(False) and ak.Ajuste(os.path.join(T, "ac.json")).activo is False, "activo por defecto y se guarda")
+ok(not A.activo, "APAGADO por defecto desde la v2.26 (lo pidió el dueño)")
+import json as _json
+_json.dump({"activo": True}, open(os.path.join(T, "viejo.json"), "w"))
+ok(ak.Ajuste(os.path.join(T, "viejo.json")).activo is False, "lo guardado antes de la v2.26 no cuenta")
+ok(A.poner(True) and ak.Ajuste(os.path.join(T, "ac.json")).activo is True, "si el dueño lo enciende, se guarda")
+ok(not A.poner(False) and ak.Ajuste(os.path.join(T, "ac.json")).activo is False, "y si lo apaga, también")
 ok(all(ak.es_orden(x) for x in ("acuerdo con claude", "activa el acuerdo con Claude", "desactiva el acuerdo con claude.")),
    "órdenes del acuerdo")
 ok(not ak.es_orden("acuerdo") and not ak.es_orden("hablemos de claude"), "solo esas órdenes")
@@ -82,6 +87,8 @@ core = kira_god.KiraGodCore()
 core.cerebro_ia.local_disponible = lambda forzar=False: True
 ok(core.reparto("codigo") == ("local", None), "solo cerebro del móvil: Kira sola")
 open(os.path.join(T, "api_key.txt"), "w").write("clave-de-prueba-123456")
+ok(core.reparto("codigo")[1] is None, "con los dos pero el acuerdo APAGADO (de serie): nadie revisa")
+core.acuerdo.poner(True)
 ok(core.reparto("codigo") == ("local", "claude"), "los dos: propone Kira y revisa Claude")
 ok(core.reparto("general") == ("local", "claude"), "también para diseñar")
 core.cerebro_ia.poner_codigo("claude")

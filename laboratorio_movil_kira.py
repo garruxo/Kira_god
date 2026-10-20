@@ -449,4 +449,9 @@ class LaboratorioDoble:
             return res
         if not (pc.get("ok") and pc.get("sha256") == res["sha256"]):
             res["ok"] = False
+            res["rechazo"] = "ordenador"
+            res["etapas"].append({"nombre": "ordenador", "ok": False, "detalle": (
+                "el laboratorio del ORDENADOR no la aprueba (el del móvil sí). Si cambiaste sus pruebas, vuelve a "
+                "sellarlo (python kira_master.py → sellar SELLAR NUCLEO); si no lo quieres usar, dile a Kira "
+                "«desconéctate del ordenador» y bastará con el del móvil.")})
         return res
