@@ -38,7 +38,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer setuptools cython==0.29.34
 
-      - name: Incluir plyer (la voz) dentro del proyecto
+      - name: Incluir plyer (voz de reserva) dentro del proyecto
         run: python herramientas_pc/incluir_plyer.py
 
       - name: Revisión previa (falla en segundos en vez de tras una hora)
@@ -129,10 +129,11 @@ jobs:
         run: |
           APK=$(ls bin/*.apk | head -1)
           LIBS=$(unzip -l "$APK" | grep -oE "lib/arm64-v8a/lib(kira_cerebro[a-z_]*|vosk|tesseract|leptonica|jnidispatch|pngx|jpeg)[a-z0-9_]*\.so" | sort -u | tr '\n' ' ')
-          DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;|Lorg/kira/servicio/ServicioKira;|Lorg/kira/servicio/CamaraKira;" | sort -u | tr '\n' ' ')
+          DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;|Lorg/kira/servicio/ServicioKira;|Lorg/kira/servicio/CamaraKira;|Lorg/kira/servicio/VozKira;" | sort -u | tr '\n' ' ')
           TAM=$(du -h "$APK" | cut -f1)
           echo "::notice title=Contenido del APK::Tamaño $TAM. Librerías: $LIBS. Clases Java: $DEX"
           echo "$LIBS" | grep -q kira_cerebro || echo "::warning title=Falta el cerebro::El APK no lleva libkira_cerebro*.so"
+          echo "$DEX" | grep -q VozKira || echo "::warning title=Falta la voz::El APK no lleva VozKira: hablará con la voz antigua (lenta)"
           # el manifiesto: servicio «siempre activa», lista de apps (para «abre WhatsApp») y permiso de segundo plano
           AAPT=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
           if [ -n "$AAPT" ]; then

@@ -202,6 +202,8 @@ MAPA = {
     "recetas_graficos_kira.py": "recetas probadas de gráficos y juegos (partículas, 3D, fractales, física…)",
     "recetas_ingenieria_kira.py": "ingeniería informática: recetas probadas (estructuras de datos, grafos, sistemas, "
                                   "compiladores, IA…) y fichas de teoría para el baúl («estudia ingeniería»)",
+    "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
+    "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
 }
 
@@ -216,6 +218,8 @@ HISTORIA = [
     "Bitácora (memoria de pasos y diagnóstico) y Sala de Ciberseguridad (solo defensa y lectura).",
     "Mesa de mezcla y editor de vídeo integrados (ffmpeg restringido, aquí o en el PC).",
     "Revisión antes de compilar y compilación en la nube para PCs antiguos.",
+    "Kira más ágil (v2.16): voz propia en español que habla frase a frase, cerebro que reutiliza lo ya leído, letras "
+    "que siempre caben y pantalla de carga limpia con barra y tiempo.",
 ]
 
 DIAGNOSTICOS = [

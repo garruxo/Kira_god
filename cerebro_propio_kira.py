@@ -227,7 +227,8 @@ class CerebroPropio:
         if self.ojos_instalados() if ojos is None else ojos:
             args += ["--mmproj", self.ruta_ojos()]       # con ojos: entiende fotos y capturas
         if extra:
-            args += ["--reasoning-budget", "0"]     # sin «pensar en voz alta»: responde mucho antes
+            args += ["--reasoning-budget", "0",     # sin «pensar en voz alta»: responde mucho antes
+                     "-np", "1"]                    # una sola conversación: toda la memoria para ella y lo leído se reutiliza
         return args
 
     def encendido(self):

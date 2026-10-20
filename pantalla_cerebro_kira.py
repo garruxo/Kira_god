@@ -24,15 +24,15 @@ def montar_cerebro(sm, p):
 
     _, c = pantalla("cerebro_kira", "CEREBRO Y OÍDO")
 
+    import estilo_kira as _est
+
     def titulo(t):
-        return Label(text=t, size_hint_y=None, height=dp(28), color=NEON, font_size=sp(16), bold=True,
-                     halign="left", **FUENTE)
+        return _est.ajustar(Label(text=t, size_hint_y=None, height=dp(30), color=NEON, font_size=_est.tam(16), bold=True,
+                                  halign="left", **FUENTE), lineas=1)
 
     def etiqueta(alto=56):
-        lb = Label(text="", size_hint_y=None, height=dp(alto), color=TXT, font_size=sp(13), halign="left",
-                   valign="middle", **FUENTE)
-        lb.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))
-        return lb
+        lb = Label(text="", size_hint_y=None, height=dp(alto), color=TXT, font_size=_est.tam(13), halign="left", **FUENTE)
+        return _est.ajustar(lb, minimo=10, lineas=max(2, int(alto // 16)))
 
     c.add_widget(titulo("CEREBRO PROPIO (su IA, dentro del móvil)"))
     lb_cer = etiqueta(70)

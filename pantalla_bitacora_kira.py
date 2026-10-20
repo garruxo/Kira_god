@@ -27,7 +27,8 @@ def montar_bitacora(sm, ctx):
     raiz = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
     barra = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
     barra.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-    barra.add_widget(Label(text="BITÁCORA DE KIRA", color=NEON, font_size=sp(16), halign="left", **FUENTE))
+    import estilo_kira as _est
+    barra.add_widget(_est.ajustar(Label(text="BITÁCORA DE KIRA", color=NEON, font_size=_est.tam(16), bold=True, halign="left", **FUENTE), lineas=1))
     raiz.add_widget(barra)
     pest = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
     b_res = boton("RESUMEN", lambda: modo("resumen"), VERDE)

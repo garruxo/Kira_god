@@ -212,6 +212,21 @@ def _sombrear(color, normal, dist, emisiva, niebla=NIEBLA, luz=None):
 def render_caras(escena, pose, w, h, f=None, niebla=NIEBLA, luz=None, anim=None, t=0.0):
     """[(puntos_pantalla, (r,g,b), hotspot)] de atrás hacia delante. y de pantalla hacia ARRIBA.
     luz/anim (opcionales, de luz3d_kira.preparar): factor de luz por cara y animación de lo que brilla."""
+    return [(pp, col, hot) for pp, col, hot, _i, _d in render_caras_idx(escena, pose, w, h, f, niebla, luz, anim, t)]
+
+
+def color_cara(escena, i, dist, niebla=NIEBLA, luz=None, anim=None, t=0.0):
+    """Color de la cara i (a 'dist' de la cámara) en el instante t. Sirve para repintar SOLO lo que brilla."""
+    _pts, color, normal, _capa, _hot, emi = escena[i]
+    if emi and anim is not None:
+        import luz3d_kira
+        color = luz3d_kira.color_animado(color, anim[i], t)
+    return _sombrear(color, normal, dist, emi, niebla, luz[i] if luz is not None else None)
+
+
+def render_caras_idx(escena, pose, w, h, f=None, niebla=NIEBLA, luz=None, anim=None, t=0.0):
+    """Como render_caras, pero cada cara lleva también su índice en la escena y su distancia:
+    [(puntos_pantalla, (r,g,b), hotspot, indice, distancia)]."""
     f = f or 0.9 * w
     ex, ey, ez = pose[0], pose[1], pose[2]
     visibles = []
@@ -238,10 +253,11 @@ def render_caras(escena, pose, w, h, f=None, niebla=NIEBLA, luz=None, anim=None,
             continue
         if emi and anim is not None:
             color = luz3d_kira.color_animado(color, anim[i], t)
-        visibles.append((capa, -dist2, pp, _sombrear(color, normal, math.sqrt(dist2), emi, niebla,
-                                                     luz[i] if luz is not None else None), hot))
+        dist = math.sqrt(dist2)
+        visibles.append((capa, -dist2, pp, _sombrear(color, normal, dist, emi, niebla,
+                                                     luz[i] if luz is not None else None), hot, i, dist))
     visibles.sort(key=lambda v: (v[0], v[1]))
-    return [(pp, col, hot) for _, _, pp, col, hot in visibles]
+    return [(pp, col, hot, i, dist) for _, _, pp, col, hot, i, dist in visibles]
 
 
 def punto_en_poligono(x, y, pts):
@@ -333,6 +349,7 @@ class Recorrido:
             self.escena, self.luz, self.anim, self.luces = prep["caras"], prep["luz"], prep["anim"], prep["luces"]
         self.reloj = 0.0                                   # para las animaciones (lo que brilla, cursores)
         self._ultimo_anim = 0.0
+        self.anim_sucio = False                            # solo cambió el brillo: se repinta el color, no la sala
         self.reiniciar()
 
     def reiniciar(self):
@@ -357,7 +374,7 @@ class Recorrido:
         self.reloj += dt
         if self.anim is not None and self.reloj - self._ultimo_anim > 0.12:   # animación suave aunque estés quieto
             self._ultimo_anim = self.reloj
-            self.sucio = True
+            self.anim_sucio = True                          # quieto: basta con cambiar el color de lo que brilla
         if self.estado in ("libre", "dentro"):
             return None
         self.t += dt
@@ -482,7 +499,10 @@ def crear_widgets():
             ev = self.rec.paso(dt)
             if self.rec.sucio:                                       # no se redibuja si nada se mueve
                 self._dibujar()
-                self.rec.sucio = False
+                self.rec.sucio = self.rec.anim_sucio = False
+            elif self.rec.anim_sucio:                                # quieto: solo cambia el color de lo que brilla
+                self._repintar_brillos()
+                self.rec.anim_sucio = False
             if ev and self.al_evento:
                 self.al_evento(ev)
 
@@ -490,14 +510,19 @@ def crear_widgets():
             w, h = self.width, self.height
             if w < 10 or h < 10:
                 return
-            caras = self.rec.render(w, h)
+            rec = self.rec
+            caras = render_caras_idx(rec.escena, rec.pose, w, h, niebla=rec.cfg["niebla"], luz=rec.luz, anim=rec.anim,
+                                     t=rec.reloj)
             ox, oy = self.x, self.y
+            self._brillos = []                                       # (instrucción Color, cara, distancia)
             self.canvas.clear()
             with self.canvas:
                 Color(*self.rec.cfg["niebla"], 1)
                 Rectangle(pos=self.pos, size=self.size)
-                for pp, col, _hot in caras:
-                    Color(*col, 1)
+                for pp, col, _hot, i, dist in caras:
+                    c = Color(*col, 1)
+                    if rec.anim is not None and rec.anim[i] is not None:
+                        self._brillos.append((c, i, dist))
                     p0 = (pp[0][0] + ox, pp[0][1] + oy)
                     for i in range(1, len(pp) - 1):
                         Triangle(points=[*p0, pp[i][0] + ox, pp[i][1] + oy, pp[i + 1][0] + ox, pp[i + 1][1] + oy])
@@ -526,6 +551,11 @@ def crear_widgets():
             for texto, lb in self._rotulos.items():
                 if texto not in vistos:
                     lb.opacity = 0
+
+        def _repintar_brillos(self):
+            rec = self.rec
+            for c, i, dist in getattr(self, "_brillos", ()):
+                c.rgb = color_cara(rec.escena, i, dist, niebla=rec.cfg["niebla"], luz=rec.luz, anim=rec.anim, t=rec.reloj)
 
         # ---- gestos: arrastrar = mirar; tocar = ir al objeto ----
         def on_touch_down(self, touch):

@@ -110,9 +110,12 @@ def dentro_del_orbe(px, py, cx, cy, radio_px, margen=1.15):
 #  TEXTO QUE SE ESCRIBE MIENTRAS KIRA "HABLA"
 # =====================================================================================
 class Maquina:
-    def __init__(self, texto, cps=45.0):
+    """Texto que se escribe letra a letra. Nunca tarda más de 'tope' segundos: con respuestas largas acelera
+    (antes, 300 letras a 45 por segundo eran casi 7 s mirando cómo se escribía)."""
+
+    def __init__(self, texto, cps=45.0, tope=2.0):
         self.texto = str(texto)
-        self.cps = max(5.0, min(float(cps), 400.0))
+        self.cps = max(5.0, min(float(cps), 400.0), len(self.texto) / max(0.3, float(tope)))
         self.t = 0.0
 
     def paso(self, dt):
@@ -134,10 +137,10 @@ def saludo(hora, tiene_clave, voz_hablar_ok=False, voz_escuchar_ok=False):
     parte = "Buenos días" if 6 <= hora < 13 else ("Buenas tardes" if 13 <= hora < 21 else "Buenas noches")
     frases = [f"{parte}. Soy Kira."]
     if tiene_clave:
-        frases.append("Puedes hablar conmigo o darme órdenes. Toca el botón para entrar al menú.")
+        frases.append("Dime lo que necesites.")
     else:
-        frases.append("Todavía no tengo cerebro de IA, así que solo entiendo órdenes, no puedo charlar. "
-                      "En el menú, «Cerebro y oído», puedes descargar el mío: funciona sin internet ni clave.")
+        frases.append("Aún no tengo cerebro para charlar: descárgalo en «Cerebro y oído» (luego va sin internet "
+                      "ni clave).")
     if not voz_hablar_ok:
         frases.append("En este dispositivo no puedo hablar en voz alta: te escribo.")
     elif not voz_escuchar_ok:
@@ -291,16 +294,124 @@ class Conversacion:
 
 
 # =====================================================================================
-#  VOZ (opcional, vía plyer)
+#  VOZ: la propia de Kira en Android (VozKira.java: un motor, en español, frase a frase); plyer si no está
 # =====================================================================================
+_FIN_FRASE = re.compile(r"[.!?…;:](?=\s)|\n+")
+_MARCAS = re.compile(r"\[(?:OK|x|i|!)\]|[*#`_]{1,3}")
+
+
+def limpiar_para_voz(texto):
+    """Lo que se lee en voz alta: sin marcas [OK]/[x], asteriscos ni almohadillas de formato."""
+    return re.sub(r"\s+", " ", _MARCAS.sub("", str(texto or ""))).strip()
+
+
+def frases_listas(texto, desde, minimo=28, maximo=180):
+    """Trozo de 'texto' a partir de 'desde' que ya se puede decir (acaba en fin de frase), o ('', desde).
+    Junta frases cortas hasta 'minimo' letras para que no suene a golpes; si una frase es muy larga, corta en una
+    coma o un espacio. Devuelve (trozo, nuevo_desde)."""
+    resto = texto[desde:]
+    fin = None
+    for m in _FIN_FRASE.finditer(resto):
+        if m.end() >= minimo:
+            fin = m.end()
+            break
+    if fin is None and len(resto) > maximo:
+        corte = max(resto.rfind(", ", 0, maximo), resto.rfind(" ", 0, maximo))
+        fin = corte + 1 if corte > minimo else None
+    if fin is None:
+        return "", desde
+    return resto[:fin].strip(), desde + fin
+
+
+class HablaEnVivo:
+    """Kira dice la respuesta FRASE A FRASE mientras el cerebro la va escribiendo, en vez de esperar a tenerla entera
+    (así empieza a hablar en uno o dos segundos). Si no hay voz propia (o está apagada), no hace nada y la respuesta
+    se lee entera al final, como antes."""
+
+    def __init__(self, voz, activa=True):
+        self.voz = voz
+        self.activa = bool(activa) and callable(getattr(voz, "encolar", None))
+        self.desde = 0            # hasta dónde del texto parcial ya se ha dicho
+        self.dicho = []           # frases ya dichas (sin espacios de más)
+        self.empezo = False
+
+    def trozo(self, parcial):
+        if not self.activa:
+            return
+        while True:
+            frase, desde = frases_listas(parcial, self.desde)
+            if not frase:
+                return
+            self.desde = desde
+            frase = " ".join(frase.split())
+            if not self.voz.encolar(frase, primero=not self.empezo):
+                self.activa = False              # sin voz propia: lo que falte se dirá al final
+                return
+            self.empezo = True
+            self.dicho.append(frase)
+
+    def final(self, texto):
+        """Dice lo que faltaba de la respuesta final. True si la voz ya está resuelta (no hay que leerla entera)."""
+        if not self.empezo:
+            return False
+        fin = " ".join(str(texto or "").split())
+        hecho = " ".join(self.dicho)
+        if fin.startswith(hecho):
+            resto = fin[len(hecho):]
+        else:                                    # la respuesta final se retocó: sigue tras la última frase dicha
+            i = fin.find(self.dicho[-1])
+            resto = fin[i + len(self.dicho[-1]):] if i >= 0 else ""
+        resto = resto.strip()
+        if resto:
+            self.voz.encolar(resto)
+        return True
+
+
+class _VozJava:
+    """Puente con org.kira.servicio.VozKira (solo Android). Se crea en el hilo principal."""
+
+    def __init__(self):
+        from jnius import autoclass
+        self.V = autoclass("org.kira.servicio.VozKira")
+        self.V.iniciar(autoclass("org.kivy.android.PythonActivity").mActivity)
+
+    def lista(self):
+        return bool(self.V.lista())
+
+    def hablar(self, texto, encolar):
+        return bool(self.V.hablar(texto, bool(encolar)))
+
+    def hablando(self):
+        return bool(self.V.hablando())
+
+    def callar(self):
+        self.V.callar()
+
+    def aviso(self):
+        return str(self.V.error() or "")
+
+
+def voz_java():
+    try:
+        return _VozJava()
+    except Exception:
+        return None
+
+
 class Voz:
-    def __init__(self, plyer_modulo=None):
+    def __init__(self, plyer_modulo=None, java=None):
         self._plyer = plyer_modulo
+        self.java = java if java is not None else (voz_java() if plyer_modulo is None else None)
         self.error = ""
         self._stt = None
         self.hablando_hasta = 0.0
 
     def hablando(self):
+        if self.java is not None:
+            try:
+                return self.java.hablando()
+            except Exception:
+                pass
         return time.monotonic() < self.hablando_hasta
 
     def _cargar(self):
@@ -314,6 +425,8 @@ class Voz:
         return self._plyer
 
     def puede_hablar(self):
+        if self.java is not None:
+            return True
         p = self._cargar()
         try:
             return bool(p and p.tts)
@@ -329,13 +442,34 @@ class Voz:
             self.error = str(e)
             return False
 
+    def _decir_java(self, texto, encolar):
+        """La primera vez el motor tarda un momento en estar listo: espera (en un hilo) hasta 6 s."""
+        if self.java.lista():
+            return self.java.hablar(texto, encolar)
+
+        def esperar():
+            fin = time.monotonic() + 6
+            while time.monotonic() < fin and not self.java.lista():
+                time.sleep(0.1)
+            try:
+                self.java.hablar(texto, encolar)
+            except Exception as e:
+                self.error = f"voz: {e}"
+        threading.Thread(target=esperar, daemon=True).start()
+        return True
+
     def hablar(self, texto):
-        """Lee el texto en voz alta sin bloquear. Devuelve True si lo intentó."""
-        texto = limpiar_entrada(texto)[:500]
+        """Lee el texto en voz alta (corta lo que estuviera diciendo). No bloquea. True si lo intentó."""
+        texto = limpiar_para_voz(limpiar_entrada(texto))[:600]
         if not texto or not self.puede_hablar():
             return False
         # mientras habla no debe escucharse a sí misma: tiempo aproximado de lectura (unas 14 letras por segundo)
         self.hablando_hasta = time.monotonic() + 1.0 + len(texto) / 14.0
+        if self.java is not None:
+            try:
+                return self._decir_java(texto, False)
+            except Exception as e:
+                self.error = f"voz: {e}"
 
         def decir():
             try:
@@ -344,6 +478,34 @@ class Voz:
                 self.error = f"voz: {e}"
         threading.Thread(target=decir, daemon=True).start()
         return True
+
+    def encolar(self, texto, primero=False):
+        """Dice una frase DETRÁS de lo que ya está diciendo (para hablar mientras piensa). Solo con la voz propia;
+        devuelve False si no puede (entonces se dice todo al final, como siempre)."""
+        texto = limpiar_para_voz(texto)
+        if self.java is None or not texto:
+            return False
+        self.hablando_hasta = max(self.hablando_hasta, time.monotonic()) + len(texto) / 14.0
+        try:
+            return self._decir_java(texto, not primero)
+        except Exception as e:
+            self.error = f"voz: {e}"
+            return False
+
+    def aviso(self):
+        """Problema de la voz que conviene contar (p. ej. «no hay voz en español instalada»), o ''."""
+        try:
+            return self.java.aviso() if self.java is not None and hasattr(self.java, "aviso") else ""
+        except Exception:
+            return ""
+
+    def callar(self):
+        self.hablando_hasta = 0.0
+        if self.java is not None:
+            try:
+                self.java.callar()
+            except Exception:
+                pass
 
     def iniciar_escucha(self, idioma="es-ES"):
         """Empieza a escuchar. Devuelve (ok, mensaje)."""

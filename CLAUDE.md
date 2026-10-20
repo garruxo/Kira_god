@@ -52,8 +52,15 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - `enlace_lab_kira.py` (móvil) + `kira_laboratorio/lab_enlace.py` (PC): faro UDP 8766, código de 6 cifras con límites, `/hola`, `/emparejar`, `/emparejar/pedir`; `PasarelaCliente` relee `pasarela.json` y `reubicar()` busca el PC si cambia de IP;
   - `iniciar_laboratorio.py` escucha por la WiFi por defecto; `Arrancar laboratorio.bat` y `Arrancar con Windows.bat` (CRLF, `.gitattributes`);
   - pruebas: `tests/test_navegar.py`, `tests/test_enlace.py`. Se cambió código del laboratorio: hay que volver a sellar.
+- **Hecho en la v2.16 (rapidez y legibilidad):**
+  - voz propia `android_src/org/kira/servicio/VozKira.java` (un motor, es-ES, cola) usada por `inicio_kira.Voz` (plyer de reserva); `HablaEnVivo` dice la respuesta frase a frase mientras llega;
+  - cerebro local: recuerdos en el último mensaje (no en el system, para reutilizar la caché), `cache_prompt`, `enable_thinking: False`, `-np 1`, 6 turnos;
+  - `estilo_kira.py` (`tam`, `ajustar`, `fondo_redondeado`): Roboto, letra con tope, textos que caben; menú en tarjetas; `NoTransition`; `maxfps` 30; portada y salas 3D más ligeras;
+  - pantalla de carga: fondo de Kira + barra abajo con texto y tiempo restante (`arranque_kira.Preparacion.progreso`);
+  - pruebas: `tests/test_voz.py`. Capturas con Kivy real en el contenedor: compilado desde el código fuente (pip está bloqueado).
 - **Pendiente:**
   - nada de lo de moverse fuera de la app ni el faro se ha probado en el móvil real ni en la WiFi de casa;
   - pulsar botones dentro de otras apps (necesitaría servicio de accesibilidad: pedir permiso al dueño antes);
   - motor local para generar imágenes (stable-diffusion.cpp), siendo honesto sobre lo lento que es en un móvil;
-  - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real.
+  - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real;
+  - la voz nueva y la rapidez (v2.16) no se han medido en el móvil real.

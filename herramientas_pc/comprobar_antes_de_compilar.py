@@ -92,8 +92,9 @@ def main():
     except OSError:
         errores.append("No encuentro buildozer.spec")
     if "plyer" not in reqs and not os.path.isfile(os.path.join(RAIZ, "plyer", "__init__.py")):
-        avisos.append("La voz de Kira usa plyer y no está ni en requirements ni dentro del proyecto. Ejecuta antes:  "
-                      "python herramientas_pc/incluir_plyer.py   (sin él la app funciona, pero sin voz)")
+        avisos.append("plyer (voz de reserva si falla VozKira, y el reconocedor de Android si no hay oído propio) no está "
+                      "ni en requirements ni dentro del proyecto. Ejecuta antes:  python herramientas_pc/incluir_plyer.py   "
+                      "(la compilación en GitHub ya lo hace)")
     if not os.path.isfile(os.path.join(RAIZ, "main.py")):
         errores.append("Falta main.py (buildozer arranca la app desde ahí)")
     if sys.platform.startswith("linux") and any(x.startswith("/mnt/") for x in os.environ.get("PATH", "").split(":")):

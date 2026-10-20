@@ -40,7 +40,7 @@ def montar_codigo(sm, p):
     fila_nom.add_widget(campo_nombre)
     fila_nom.add_widget(boton("Guardar", lambda: guardar(), VERDE, size_hint_x=None, width=dp(96)))
     c_ed.add_widget(fila_nom)
-    codigo = TextInput(text="", multiline=True, size_hint_y=0.48, font_size=sp(14), **FUENTE,
+    codigo = TextInput(text="", multiline=True, size_hint_y=0.48, font_size=sp(14), **p.get("FUENTE_MONO", FUENTE),
                        background_color=(1, 1, 1, 1), foreground_color=TXT, cursor_color=(0, 0.5, 0.8, 1),
                        hint_text="Escribe aquí tu programa de Python…", hint_text_color=TENUE,
                        write_tab=False, do_wrap=False)
@@ -136,8 +136,10 @@ def montar_codigo(sm, p):
     #  JUEGOS
     # =================================================================================
     _, c_jue = pantalla("juegos", "JUEGOS")
-    c_jue.add_widget(Label(text="Juegos hechos con el motor de Kira. Todos son programas: ábrelos y cámbialos.",
-                           size_hint_y=None, height=dp(40), color=TENUE, font_size=sp(13), **FUENTE))
+    import estilo_kira as _est
+    c_jue.add_widget(_est.ajustar(Label(text="Juegos hechos con el motor de Kira. Todos son programas: ábrelos y cámbialos.",
+                                        size_hint_y=None, height=dp(40), color=TENUE, font_size=_est.tam(13), halign="left",
+                                        **FUENTE), minimo=10))
     sv_j = ScrollView(do_scroll_x=False)
     lista_j = GridLayout(cols=1, spacing=dp(6), size_hint_y=None)
     lista_j.bind(minimum_height=lista_j.setter("height"))

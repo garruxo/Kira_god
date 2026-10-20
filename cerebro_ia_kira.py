@@ -177,7 +177,10 @@ class Cerebro:
             {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
             for m in mensajes]
         cuerpo = json.dumps({"messages": msgs, "max_tokens": int(min(max_tokens, MAX_TOKENS_LOCAL)),
-                             "temperature": 0.6, "stream": bool(al_trozo)}).encode("utf-8")
+                             "temperature": 0.6, "stream": bool(al_trozo),
+                             "cache_prompt": True,                               # reutiliza lo ya leído: responde antes
+                             "chat_template_kwargs": {"enable_thinking": False}  # sin «pensar en voz baja» (Qwen)
+                             }).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
                                      headers={"Content-Type": "application/json"})
         try:

@@ -48,7 +48,16 @@ for nombre, cons, cfg in (("hacker", hk.construir_escena, hk.CFG_HACKER), ("dise
 r = hk.Recorrido()
 r.estado, r.sucio = "libre", False
 r.paso(0.05); ok(not r.sucio, "no redibuja en cada fotograma")
-r.paso(0.1); ok(r.sucio, "redibuja cada ~0,12 s para las animaciones")
+r.paso(0.1); ok(r.anim_sucio and not r.sucio, "cada ~0,12 s repinta SOLO el color de lo que brilla (no toda la sala)")
+import luz3d_kira as _l3
+_ix = [i for i, a in enumerate(r.anim) if a is not None]
+ok(_ix and all(hk.color_cara(r.escena, i, 2.0, niebla=r.cfg["niebla"], luz=r.luz, anim=r.anim, t=r.reloj)
+               == hk._sombrear(_l3.color_animado(r.escena[i][1], r.anim[i], r.reloj), r.escena[i][2], 2.0, r.escena[i][5],
+                               r.cfg["niebla"], r.luz[i]) for i in _ix[:5]), "el color repintado es el mismo que el del dibujo")
+_full = hk.render_caras(r.escena, r.pose, 400, 700, niebla=r.cfg["niebla"], luz=r.luz, anim=r.anim, t=r.reloj)
+_idx = hk.render_caras_idx(r.escena, r.pose, 400, 700, niebla=r.cfg["niebla"], luz=r.luz, anim=r.anim, t=r.reloj)
+ok([c[:3] for c in _idx] == _full and all(hk.color_cara(r.escena, c[3], c[4], niebla=r.cfg["niebla"], luz=r.luz,
+                                                        anim=r.anim, t=r.reloj) == c[1] for c in _idx), "render con índice")
 r.pose = hk.POSE_MESA
 h = r.halos(400, 700)
 ok(h and all(len(x) == 4 and x[2] > 0 for x in h), "resplandor de las lámparas pequeñas")

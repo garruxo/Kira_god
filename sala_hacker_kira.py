@@ -17,6 +17,8 @@ import os
 def montar_sala_hacker(sm, ctx):
     """Añade las pantallas al ScreenManager 'sm'. ctx: ayudas de interfaz_kira (ver abajo).
     Devuelve {'detener': fn, 'volver_a_sala': fn} para que la interfaz gestione la navegación."""
+    import estilo_kira as _est
+    _tam = _est.tam
     from kivy.clock import Clock
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.gridlayout import GridLayout
@@ -38,15 +40,14 @@ def montar_sala_hacker(sm, ctx):
     estado = {"volver": False, "escuchando": None}
 
     def etiqueta(texto="", alto=24, color=TENUE, **kw):
-        lb = Label(text=texto, size_hint_y=None, height=dp(alto), color=color, font_size=sp(13), halign="left",
+        lb = Label(text=texto, size_hint_y=None, height=dp(alto), color=color, font_size=_tam(13), halign="left",
                    valign="middle", **FUENTE, **kw)
-        lb.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))
-        return lb
+        return _est.ajustar(lb, minimo=10, lineas=max(1, int(alto // 17)))
 
     def barra(titulo, destino_texto, accion):
         b = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
         b.add_widget(boton(destino_texto, accion, GRIS, alto=44, size_hint_x=None, width=dp(100)))
-        b.add_widget(Label(text=titulo, color=NEON, font_size=sp(16), halign="left", **FUENTE))
+        b.add_widget(_est.ajustar(Label(text=titulo, color=NEON, font_size=_tam(16), bold=True, halign="left", **FUENTE), lineas=1))
         return b
 
     # =================================================================================
@@ -206,6 +207,7 @@ def montar_sala_hacker(sm, ctx):
 
     def pintar_lecciones(nivel="Básico"):
         rej.clear_widgets()
+        rej.cols = 1 if max(len(l["titulo"]) for l in niveles[nivel]) > 26 else 2   # títulos largos: uno por fila
         for n_, b_ in botones_niv.items():
             b_.background_color = VERDE if n_ == nivel else GRIS
         for l in niveles[nivel]:

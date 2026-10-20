@@ -31,10 +31,10 @@ def montar_taller(sm, ctx):
     raiz = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
     barra = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
     barra.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-    barra.add_widget(Label(text="TALLER DE KIRA", color=NEON, font_size=sp(16), halign="left", **FUENTE))
+    import estilo_kira as _est
+    barra.add_widget(_est.ajustar(Label(text="TALLER DE KIRA", color=NEON, font_size=_est.tam(16), bold=True, halign="left", **FUENTE), lineas=1))
     raiz.add_widget(barra)
-    resumen = Label(text="", size_hint_y=None, height=dp(44), color=TENUE, font_size=sp(12), halign="left", valign="middle", **FUENTE)
-    resumen.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))
+    resumen = _est.ajustar(Label(text="", size_hint_y=None, height=dp(44), color=TENUE, font_size=_est.tam(12), halign="left", **FUENTE), minimo=10)
     raiz.add_widget(resumen)
     sv = ScrollView(size_hint_y=0.42, do_scroll_x=False)
     lista = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(4))

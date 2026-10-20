@@ -210,6 +210,29 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Kira más ágil y más fácil de leer (nuevo, v2.16)
+- **Habla antes y en español**: la voz ya no crea un motor nuevo en cada frase (la librería plyer lo hacía, y en
+  inglés). Ahora hay una sola voz de Android (`android_src/org/kira/servicio/VozKira.java`), en español, creada una
+  vez. Kira dice la respuesta **frase a frase mientras la piensa** (`HablaEnVivo` en `inicio_kira.py`): empieza a hablar
+  con la primera frase, sin esperar a tenerla entera. Y sabe de verdad cuándo ha terminado de hablar (para no
+  escucharse a sí misma). Si esa voz no está, usa la de antes.
+- **Responde antes**: el cerebro del móvil guarda lo ya leído y solo lee lo nuevo. Antes los recuerdos iban dentro de
+  las instrucciones fijas, cambiaban en cada pregunta y le obligaban a releerlo todo; ahora van con la pregunta. Además:
+  sin «razonamiento oculto», una sola conversación en el motor (`-np 1`), algo menos de historial y respuestas cortas.
+- **Más fluida**: cambio de pantalla al instante (el fundido iba a tirones), 30 fotogramas como máximo, el botón de la
+  portada ya no se reconstruye entero en cada fotograma, las salas 3D quietas solo repintan lo que brilla (no toda la
+  sala) y la lluvia de código va más ligera. El texto nunca tarda más de 2 s en escribirse.
+- **Se lee todo**: letra normal (Roboto) en la interfaz (la de máquina de escribir solo para código), tamaño que
+  respeta la letra del sistema pero con tope, y `estilo_kira.ajustar()`: si un texto no cabe, se parte en dos líneas o
+  la letra baja un poco (medido sin dibujar, para que las pantallas abran rápido). Menú con tarjetas de colores y
+  descripción, paneles de las salas opacos, tarjeta blanca para lo que dice Kira.
+- **Pantalla de carga limpia**: solo el fondo de Kira con su botón de neón y, abajo, una línea («Descargando el
+  cerebro… 41 % · quedan 4 min», «Despertando el cerebro de Kira…»), una barra y «Entrar ya». El tiempo se calcula con
+  la velocidad real de la descarga. Al terminar entra sola y ya puedes hablarle.
+- Pruebas: `tests/test_voz.py` (frases, cola de voz, recuerdos fuera de las instrucciones), `tests/test_arranque.py`.
+- Honesto: nada de esto se ha probado todavía en tu móvil. La voz nueva necesita una voz en español instalada en
+  Android (Ajustes › Texto a voz); si no la hay, Kira lo dirá.
+
 ## Kira se mueve y se conecta sola al laboratorio (nuevo, v2.15)
 - **Moverse por la app** (`navegar_kira.py`): «Kira, abre la sala hacker», «ve a los juegos», «llévame al editor»,
   «enséñame mis notas», «juega a la serpiente», «atrás», «ve al menú». Por voz funciona desde cualquier pantalla (ya

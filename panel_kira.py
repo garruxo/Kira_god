@@ -359,8 +359,8 @@ def construir_panel(core, consola=None, pantalla=None):
     TXT, NEON, TENUE = (0.72, 1.0, 0.82, 1), (0.1, 0.9, 0.4, 1), (0.5, 0.7, 0.6, 1)
     AZUL, VERDE, ROJO, GRIS = (0.05, 0.34, 0.24, 1), (0.1, 0.5, 0.28, 1), (0.55, 0.15, 0.18, 1), (0.12, 0.2, 0.17, 1)
     ACTIVO = (0.08, 0.5, 0.3, 1)
-    ruta_mono = os.path.join(kivy_data_dir, "fonts", "RobotoMono-Regular.ttf")
-    FUENTE = {"font_name": ruta_mono} if os.path.exists(ruta_mono) else {}
+    import estilo_kira as _est
+    FUENTE = {}                                  # fuente normal (se lee mejor); la de máquina, solo para código
 
     # ---------- piezas ----------
     def etiqueta(texto="", color=TXT, **kw):
@@ -372,9 +372,9 @@ def construir_panel(core, consola=None, pantalla=None):
 
     def boton(texto, accion, color=AZUL, alto=48, **kw):
         b = Button(text=texto, size_hint_y=None, height=dp(alto), background_color=color,
-                   font_size=sp(15), **FUENTE, **kw)
+                   font_size=_est.tam(15), **FUENTE, **kw)
         b.bind(on_release=lambda *_: accion())
-        return b
+        return _est.ajustar(b)
 
     def entrada(hint, alto=44, **kw):
         return TextInput(hint_text=hint, size_hint_y=None, height=dp(alto), font_size=sp(15),
@@ -430,12 +430,12 @@ def construir_panel(core, consola=None, pantalla=None):
     raiz_orden = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8), size_hint=(1, 1))
     banner = etiqueta("KIRA//LAB > sala hacker  [acceso concedido]", color=NEON)
     lbl_estado = etiqueta("", color=TENUE)
-    fondo(banner, (0, 0, 0, 0.7))      # legibles sobre la lluvia de código
-    fondo(lbl_estado, (0, 0, 0, 0.7))
+    fondo(banner, (0.01, 0.03, 0.02, 0.92))      # opacos: la lluvia de código no se mete detrás del texto
+    fondo(lbl_estado, (0.01, 0.03, 0.02, 0.92))
     campo_orden = entrada("Escribe qué quieres que Kira haga o mejore. Ej: agrega un comando 'hora' que diga la hora",
                           alto=120, multiline=True)
     sv_res, caja_res = desplazable()
-    fondo(sv_res, (0, 0, 0, 0.68))
+    fondo(sv_res, (0.01, 0.03, 0.02, 0.92))
     lbl_res = etiqueta("Escribe una orden y pulsa «Enviar a Kira». Kira creará el código, el laboratorio lo "
                        "probará y tú decides si se aplica.")
     caja_res.add_widget(lbl_res)
@@ -669,7 +669,7 @@ def construir_panel(core, consola=None, pantalla=None):
     if sala is not None:
         entradas_nav.insert(0, ("Sala", "sala"))
     for texto_nav, nombre in entradas_nav:
-        b = Button(text=texto_nav, font_size=sp(14), background_color=GRIS, **FUENTE)
+        b = _est.ajustar(Button(text=texto_nav, font_size=_est.tam(14), background_color=GRIS, **FUENTE), lineas=1)
         b.bind(on_release=lambda _b, n=nombre: ir(n))
         botones_nav[nombre] = b
         nav.add_widget(b)

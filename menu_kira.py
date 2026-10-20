@@ -29,7 +29,7 @@ APARTADOS = [
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
     {"id": "taller",    "titulo": "Taller",          "desc": "Qué le falta y cómo prepararse", "color": (0.90, 0.75, 0.25), "destino": ("pantalla", "taller")},
-    {"id": "ciber",     "titulo": "Ciberseguridad", "desc": "Búnker: defensa, aprendizaje, dispositivo", "color": (0.15, 0.85, 0.45), "destino": ("pantalla", "sala_ciber")},
+    {"id": "ciber",     "titulo": "Ciberseguridad", "desc": "Búnker de defensa y estudio", "color": (0.15, 0.85, 0.45), "destino": ("pantalla", "sala_ciber")},
     {"id": "bitacora",  "titulo": "Bitácora",        "desc": "Pasos, guías y arreglos",       "color": (0.70, 0.70, 0.78), "destino": ("pantalla", "bitacora")},
     {"id": "mejoras",   "titulo": "Mejoras",         "desc": "Pide una función nueva",      "color": (0.20, 0.70, 0.60), "destino": ("panel", "orden")},
     {"id": "pasarela",  "titulo": "Pasarela",        "desc": "Laboratorio de pruebas",      "color": (0.25, 0.55, 1.00), "destino": ("pantalla", "pasarela")},

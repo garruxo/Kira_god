@@ -31,6 +31,11 @@ except Exception:
 # 2. Importar Kivy de forma aislada
 KIVY_AVAILABLE = False
 try:
+    from kivy.config import Config
+    Config.set("graphics", "maxfps", "30")   # 30 fotogramas bastan en el móvil: deja la CPU para el cerebro y la voz
+except Exception:
+    pass
+try:
     from kivy.app import App
     from kivy.clock import Clock
     from kivy.uix.boxlayout import BoxLayout

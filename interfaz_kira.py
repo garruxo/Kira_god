@@ -28,7 +28,7 @@ def construir_interfaz(core, consola=None):
     from kivy.uix.button import Button
     from kivy.uix.gridlayout import GridLayout
     from kivy.uix.label import Label
-    from kivy.uix.screenmanager import FadeTransition, Screen, ScreenManager
+    from kivy.uix.screenmanager import NoTransition, Screen, ScreenManager
     from kivy.uix.widget import Widget
     from kivy.uix.scrollview import ScrollView
     from kivy.uix.textinput import TextInput
@@ -86,8 +86,10 @@ def construir_interfaz(core, consola=None):
     OSCURA = {"TXT": (0.72, 1.0, 0.82, 1), "NEON": (0.1, 0.9, 0.5, 1), "TENUE": (0.5, 0.7, 0.6, 1),
               "GRIS": (0.12, 0.2, 0.17, 1), "VERDE": (0.08, 0.45, 0.28, 1), "ROJO": (0.55, 0.15, 0.18, 1),
               "CAMPO": (0.05, 0.1, 0.09, 1), "FONDO": (0.015, 0.03, 0.03, 1)}
-    ruta_mono = os.path.join(kivy_data_dir, "fonts", "RobotoMono-Regular.ttf")
-    FUENTE = {"font_name": ruta_mono} if os.path.exists(ruta_mono) else {}
+    import estilo_kira as est
+    FUENTE = {}                                   # Roboto normal: se lee mejor y cabe más (antes, máquina de escribir)
+    FUENTE_MONO = est.fuente_mono()               # la de máquina de escribir, solo para código
+    tam = est.tam
 
     def _luminosidad(c):
         return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
@@ -96,20 +98,21 @@ def construir_interfaz(core, consola=None):
     def hacer_piezas(P):
         def boton(texto, accion, color=P["GRIS"], alto=48, **kw):
             kw.setdefault("color", P["TXT"] if _luminosidad(color) > 0.6 else (1, 1, 1, 1))
+            kw.setdefault("font_size", tam(15))
             b = Button(text=texto, size_hint_y=None, height=dp(alto), background_normal="", background_color=color,
-                       font_size=sp(15), **FUENTE, **kw)
+                       **FUENTE, **kw)
             b.bind(on_release=lambda *_: accion())
-            return b
+            return est.ajustar(b)                  # el texto se parte o encoge: nunca se sale del botón
 
         def entrada(hint, **kw):
-            return TextInput(hint_text=hint, multiline=False, size_hint_y=None, height=dp(48), font_size=sp(15),
+            return TextInput(hint_text=hint, multiline=False, size_hint_y=None, height=dp(48), font_size=tam(15),
                              background_color=P["CAMPO"], foreground_color=P["TXT"],
                              hint_text_color=P["TENUE"], cursor_color=P["NEON"], padding=(dp(10), dp(12)), **kw)
 
         def texto_largo(inicial=""):
             sv = ScrollView(do_scroll_x=False)
             lb = Label(text=inicial, size_hint_y=None, halign="left", valign="top", color=P["TXT"],
-                       font_size=sp(15), **FUENTE)
+                       font_size=tam(15), line_height=1.15, **FUENTE)
             lb.bind(width=lambda w, a: setattr(lb, "text_size", (a - dp(8), None)),
                     texture_size=lambda w, ts: setattr(lb, "height", ts[1] + dp(12)))
             sv.add_widget(lb)
@@ -121,7 +124,7 @@ def construir_interfaz(core, consola=None):
     TXT, NEON, TENUE, GRIS, VERDE, ROJO = (CLARA[k] for k in ("TXT", "NEON", "TENUE", "GRIS", "VERDE", "ROJO"))
     PIEZAS_SALA = {"boton": boton_o, "entrada": entrada_o, "texto_largo": texto_largo_o,
                    "TXT": OSCURA["TXT"], "NEON": OSCURA["NEON"], "TENUE": OSCURA["TENUE"], "GRIS": OSCURA["GRIS"],
-                   "VERDE": OSCURA["VERDE"], "ROJO": OSCURA["ROJO"], "FUENTE": FUENTE}
+                   "VERDE": OSCURA["VERDE"], "ROJO": OSCURA["ROJO"], "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO}
 
     def fondo_claro(widget):
         """Pinta un fondo claro detrás de una pantalla (las salas siguen con el suyo)."""
@@ -139,7 +142,7 @@ def construir_interfaz(core, consola=None):
             Clock.schedule_once(lambda _dt: al_terminar(r), 0)
         threading.Thread(target=correr, daemon=True).start()
 
-    sm = ScreenManager(transition=FadeTransition(duration=0.25))
+    sm = ScreenManager(transition=NoTransition())   # cambio de pantalla al instante (el fundido iba a tirones)
     ganchos = {}                     # nombre de pantalla -> función a llamar al entrar
 
     def pantalla(nombre, titulo):
@@ -148,8 +151,9 @@ def construir_interfaz(core, consola=None):
         fondo_claro(p)
         raiz = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
         barra = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        barra.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-        barra.add_widget(Label(text=titulo, color=NEON, font_size=sp(18), halign="left", **FUENTE))
+        barra.add_widget(boton("‹ Menú", lambda: ir("menu"), GRIS, alto=44, size_hint_x=None, width=dp(96)))
+        barra.add_widget(est.ajustar(Label(text=titulo, color=NEON, font_size=tam(18), bold=True, halign="left",
+                                           **FUENTE), lineas=1))
         raiz.add_widget(barra)
         p.add_widget(raiz)
         sm.add_widget(p)
@@ -172,20 +176,19 @@ def construir_interfaz(core, consola=None):
 
     sv_burbuja, burbuja = texto_largo("")
     sv_burbuja.size_hint_y = 0.30
-    with sv_burbuja.canvas.before:                # panel blanco detrás del texto: se lee bien sobre las letras
-        Color(1, 1, 1, 0.88)
-        panel_b = Rectangle(pos=sv_burbuja.pos, size=sv_burbuja.size)
-    sv_burbuja.bind(pos=lambda w, v: setattr(panel_b, "pos", v), size=lambda w, v: setattr(panel_b, "size", v))
+    burbuja.font_size = tam(16)
+    est.fondo_redondeado(sv_burbuja, (1, 1, 1, 0.97), radio=16)   # tarjeta blanca: se lee bien sobre el fondo
     capa.add_widget(sv_burbuja)
-    lbl_escucha = Label(text="", size_hint_y=None, height=dp(22), color=TENUE, font_size=sp(12), **FUENTE)
+    lbl_escucha = est.ajustar(Label(text="", size_hint_y=None, height=dp(24), color=TENUE, font_size=tam(12.5), **FUENTE),
+                              minimo=10, lineas=1)
     capa.add_widget(lbl_escucha)
 
-    campo = entrada("Escríbele a Kira o dale una orden…")
+    campo = entrada("Escríbele a Kira…")
     fila = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(6))
     fila.add_widget(campo)
-    btn_escucha = boton("", lambda: alternar_escucha(), GRIS, alto=48, size_hint_x=None, width=dp(96))
+    btn_escucha = boton("", lambda: alternar_escucha(), GRIS, alto=48, size_hint_x=None, width=dp(88), font_size=tam(13))
     fila.add_widget(btn_escucha)
-    fila.add_widget(boton("Enviar", lambda: enviar(), VERDE, alto=48, size_hint_x=None, width=dp(84)))
+    fila.add_widget(boton("Enviar", lambda: enviar(), VERDE, alto=48, size_hint_x=None, width=dp(78)))
     capa.add_widget(fila)
     p_ini.add_widget(capa)
     sm.add_widget(p_ini)
@@ -264,6 +267,7 @@ def construir_interfaz(core, consola=None):
         escucha.olvidar()
 
         flujo = {"hubo": False}
+        en_vivo = ik.HablaEnVivo(voz, activa=ajustes.voz_hablar)   # dice cada frase en cuanto está completa
 
         def mostrar_trozo(parcial):                      # la respuesta va apareciendo mientras Kira piensa
             if not st["ocupado"]:
@@ -272,6 +276,7 @@ def construir_interfaz(core, consola=None):
             burbuja.text = parcial + " …"
             if modelo.estado != "hablando":
                 modelo.poner_estado("hablando")
+            en_vivo.trozo(parcial)
 
         def trozo(parcial):                              # llega desde otro hilo: se pinta en el de la pantalla
             Clock.schedule_once(lambda _dt, p_=parcial: mostrar_trozo(p_), 0)
@@ -282,7 +287,8 @@ def construir_interfaz(core, consola=None):
                 decir(f"[x] Algo falló: {r}", hablar=False)
             else:
                 texto_r, via = r
-                decir(texto_r, hablar=(via != "error"), ya_escrito=flujo["hubo"] and via == "charla")
+                ya_dicho = via == "charla" and en_vivo.final(texto_r)   # lo fue diciendo mientras llegaba
+                decir(texto_r, hablar=(via != "error" and not ya_dicho), ya_escrito=flujo["hubo"] and via == "charla")
                 if via == "escena" and cerebro.ultima_escena:
                     mostrar_escena(cerebro.ultima_escena, texto_r)
                 enl = getattr(core, "enlace", None)
@@ -604,10 +610,10 @@ def construir_interfaz(core, consola=None):
     raiz_menu = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
     cab_m = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
     cab_m.add_widget(boton("‹ Kira", lambda: ir("inicio"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-    cab_m.add_widget(Label(text="MENÚ", color=NEON, font_size=sp(19), bold=True, halign="left", **FUENTE))
+    cab_m.add_widget(est.ajustar(Label(text="Menú", color=NEON, font_size=tam(20), bold=True, halign="left", **FUENTE), lineas=1))
     raiz_menu.add_widget(cab_m)
     sv_m = ScrollView(do_scroll_x=False)
-    rejilla = GridLayout(cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(96), row_force_default=True)
+    rejilla = GridLayout(cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(92), row_force_default=True)
     rejilla.bind(minimum_height=rejilla.setter("height"))
     menu_st = {"todos": False}
 
@@ -617,13 +623,29 @@ def construir_interfaz(core, consola=None):
     ajustar_columnas()
 
     def baldosa(a):
-        t = Button(text=f"[b]{a['titulo']}[/b]\n[size={int(sp(12))}]{a['desc']}[/size]", markup=True,
-                   halign="center", valign="middle", background_normal="",
-                   background_color=mk.color_claro(a["color"]), color=mk.color_oscuro(a["color"]),
-                   font_size=sp(16), **FUENTE)
-        t.bind(size=lambda w, s_: setattr(w, "text_size", (s_[0] - dp(10), None)))
-        t.bind(on_release=lambda _b, d=a["destino"]: ir(d[1] if d[0] == "pantalla" else "panel",
-                                                        d[1] if d[0] == "panel" else None))
+        """Tarjeta del menú: título arriba (una línea) y descripción corta debajo (hasta dos), cada uno en su sitio."""
+        tinta = mk.color_oscuro(a["color"])
+        t = Button(text=f"[b]{a['titulo']}[/b]", markup=True, halign="left", valign="top", background_normal="",
+                   background_down="", background_color=(0, 0, 0, 0), color=tinta, font_size=tam(15.5),
+                   shorten=True, shorten_from="right", **FUENTE)
+        fondo_c = est.fondo_redondeado(t, mk.color_claro(a["color"]), radio=14)
+        with t.canvas.before:                                     # franja de color a la izquierda
+            Color(*a["color"], 1)
+            franja = Rectangle(pos=t.pos, size=(dp(5), t.height))
+        desc = est.ajustar(Label(text=a["desc"], color=tinta[:3] + (0.8,), font_size=tam(13), halign="left",
+                                 size_hint=(None, None), **FUENTE), minimo=10.5, lineas=2, margen=0)
+        t.add_widget(desc)
+
+        def colocar(*_):
+            t.text_size = (max(1, t.width - dp(28)), max(1, t.height - dp(22)))
+            franja.pos, franja.size = (t.x + dp(6), t.y + dp(12)), (dp(4), max(1, t.height - dp(24)))
+            desc.size = (max(1, t.width - dp(28)), max(1, t.height * 0.5))
+            desc.pos = (t.x + dp(14), t.y + dp(8))
+        t.bind(pos=colocar, size=colocar)
+        t.bind(on_press=lambda *_: setattr(fondo_c, "a", 0.75),
+               on_release=lambda _b, d=a["destino"]: (setattr(fondo_c, "a", 1),
+                                                      ir(d[1] if d[0] == "pantalla" else "panel",
+                                                         d[1] if d[0] == "panel" else None)))
         return t
 
     def pintar_menu():
@@ -797,6 +819,7 @@ def construir_interfaz(core, consola=None):
                  "Después me conecto sola, aunque el ordenador cambie de dirección.")
         txt_pas.text = conectado + "\n\n" + pasos + (f"\n\n{pas_st['extra']}" if pas_st["extra"] else "")
         fila_codigo.opacity, fila_codigo.disabled = (1, False) if esperando else (0, True)
+        fila_codigo.height = dp(52) if esperando else 0              # oculto no deja hueco
 
     def conectar_pasarela():
         pintar_pasarela("Buscando el laboratorio en tu WiFi…")
@@ -829,7 +852,7 @@ def construir_interfaz(core, consola=None):
     #  CONFIGURACIÓN
     # =================================================================================
     _, c_cfg = pantalla("config", "CONFIGURACIÓN")
-    msg_cfg = Label(text="", size_hint_y=None, height=dp(60), color=TENUE, font_size=sp(13), halign="left",
+    msg_cfg = Label(text="", size_hint_y=None, height=dp(60), color=TENUE, font_size=tam(13), halign="left",
                     valign="top", **FUENTE)
     msg_cfg.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))
     btn_voz = boton("", lambda: alternar_voz(), GRIS)
@@ -843,6 +866,8 @@ def construir_interfaz(core, consola=None):
         extra = ""
         if not voz.puede_hablar():
             extra += "Voz de salida no disponible aquí. "
+        elif getattr(voz, "aviso", lambda: "")():
+            extra += f"Voz: {voz.aviso()}. "
         if not voz.puede_escuchar():
             extra += "Micrófono no disponible aquí. "
         msg_cfg.text = (texto + " " + extra).strip() or f"Velocidad del texto: {ajustes.velocidad} letras/seg."
@@ -866,7 +891,8 @@ def construir_interfaz(core, consola=None):
               boton("Texto más rápido", lambda: velocidad(10)),
               boton("Que abra apps aunque esté en segundo plano", permiso_fondo),
               boton("Conectar con el laboratorio del ordenador", lambda: ir("pasarela"), VERDE),
-              boton("Clave de la API", lambda: ir("panel", "ajustes")), msg_cfg):
+              boton("Clave de la API", lambda: ir("panel", "ajustes")), msg_cfg,
+              Widget()):                                  # hueco flexible: los botones quedan arriba, no abajo
         c_cfg.add_widget(w)
     ganchos["config"] = pintar_config
 
@@ -981,7 +1007,8 @@ def construir_interfaz(core, consola=None):
     codigo_ui = montar_codigo(sm, {
         "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
         "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
-        "FUENTE": FUENTE, "dir_datos": dir_datos, "ganchos": ganchos, "juegos_extra": juegos_de_mejoras})
+        "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO, "dir_datos": dir_datos, "ganchos": ganchos,
+        "juegos_extra": juegos_de_mejoras})
 
     # =================================================================================
     #  CEREBRO Y OÍDO PROPIOS
@@ -1111,6 +1138,7 @@ def construir_interfaz(core, consola=None):
         Clock.schedule_once(saludar, 0.8)
     arranque = arranque_kira.montar_arranque(sm, {"boton": boton, "fondo_claro": fondo_claro, "TXT": TXT, "NEON": NEON,
                                                   "VERDE": VERDE, "FUENTE": FUENTE, "preparacion": preparacion,
+                                                  "Portada": PortadaKira, "TENUE": TENUE,
                                                   "al_terminar": empezar_kira})
     if preparacion.hace_falta():
         sm.current = "arranque"

@@ -273,12 +273,12 @@ class KiraGodCore:
     NO_RECONOCIDA = "[i] No reconozco la orden"
 
     @staticmethod
-    def armar_mensajes(historial, texto):
+    def armar_mensajes(historial, texto, turnos=8, largo=400):
         """historial: [(rol 'tu'|'kira', texto)]. Devuelve mensajes que alternan user/assistant y acaban en user."""
         msgs = []
-        for rol, t in list(historial)[-8:]:
+        for rol, t in list(historial)[-turnos:]:
             r = "user" if rol == "tu" else "assistant"
-            t = str(t)[:400]
+            t = str(t)[:largo]
             if msgs and msgs[-1]["role"] == r:
                 msgs[-1]["content"] += "\n" + t
             else:
@@ -345,10 +345,17 @@ class KiraGodCore:
                   "lo pide con otras palabras, dile cómo pedirlo así, nunca que no puedes. "
                   "No afirmes haber hecho acciones que no has hecho.")
         ctx = self._contexto_recuerdos(texto)
-        if ctx:
+        local = clave == cerebro_ia_kira.LOCAL
+        # El modelo del móvil guarda lo ya leído (instrucciones + charla) y solo lee lo nuevo; si los recuerdos fueran
+        # en las instrucciones, cambiarían en cada pregunta y tendría que releerlo TODO (segundos de espera). Por eso,
+        # en local van pegados a la última pregunta y se recuerdan menos turnos.
+        mensajes = self.armar_mensajes(historial, texto, turnos=6 if local else 8, largo=300 if local else 400)
+        if ctx and local:
+            mensajes[-1]["content"] = ctx + "\n\nPregunta: " + mensajes[-1]["content"]
+        elif ctx:
             system += "\n\n" + ctx
         extra = {"al_trozo": al_trozo} if al_trozo is not None else {}
-        r = self._llamar_api(clave, system, "", max_tokens=300, mensajes=self.armar_mensajes(historial, texto), **extra)
+        r = self._llamar_api(clave, system, "", max_tokens=220 if local else 300, mensajes=mensajes, **extra)
         r = " ".join(cerebro_ia_kira.limpiar_respuesta(r).split())[:1200] or "…"
         if clave != cerebro_ia_kira.LOCAL:
             self.aprender_de_ia(texto, r)

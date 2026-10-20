@@ -27,7 +27,7 @@ def esperar(cond, seg=3):
         time.sleep(0.02)
     return False
 ok(sm.current == "inicio", "arranca en el orbe")
-campo = buscar("TextInput", hint_text="Escríbele a Kira o dale una orden…")
+campo = buscar("TextInput", hint_text="Escríbele a Kira…")
 burbuja = [w for w in sm.walk() if type(w).__name__ == "Label"]
 Clock.correr(40, 0.1)
 sal = [w.text for w in burbuja if "Soy Kira" in w.text]

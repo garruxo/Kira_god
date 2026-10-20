@@ -141,7 +141,7 @@ def crear_widgets():
         return textura(texto, max(sp(8), int(tam * ancho_max / tex.width)))
 
     class LluviaCodigo(Widget):
-        opacidad = NumericProperty(0.45)
+        opacidad = NumericProperty(0.22)          # sutil: es decoración, no debe tapar nada
 
         def __init__(self, **kw):
             super().__init__(**kw)
@@ -160,7 +160,7 @@ def crear_widgets():
             if self.modelo is None:
                 self._reiniciar()  # no depender de que Kivy ya haya avisado del tamaño
             if self._evento is None:
-                self._evento = Clock.schedule_interval(self._paso, 1 / 15.0)
+                self._evento = Clock.schedule_interval(self._paso, 1 / 8.0)   # 8 fps: gasta la mitad
 
         def detener(self):
             if self._evento is not None:

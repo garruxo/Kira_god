@@ -74,6 +74,26 @@ class Nada:
 C4 = Core(); C4.cerebro_propio, C4.lector, C4.vista = Nada(), Nada(), Nada()
 ok(not ak.Preparacion(C4, Nada(), Ajustes(), encender_oido=lambda: None).hace_falta(), "en el PC no se enseña")
 
+# ---------- progreso: barra y tiempo que queda ----------
+reloj = [100.0]
+C5 = core_con(Cerebro(instalado=False)); C5.cerebro_propio.modelo = "ligero"
+P5 = ak.Preparacion(C5, O2, Ajustes(), encender_oido=lambda: None, red=lambda: False)
+P5._reloj = lambda: reloj[0]
+C5.cerebro_propio.estado, C5.cerebro_propio.progreso = "descargando", 0.10
+P5.piezas = lambda: [("Oído", "listo", True), ("Cerebro", "descargando", False)]
+pr = P5.progreso()
+ok("Descargando el cerebro… 10 %" in pr["texto"] and pr["quedan"] is None and 0.15 < pr["fraccion"] < 0.25, "descargando: % y aún sin velocidad")
+reloj[0] += 10; C5.cerebro_propio.progreso = 0.20
+pr = P5.progreso()
+ok(abs(pr["quedan"] - (80 + ak.CARGA_CEREBRO["ligero"])) < 1, f"con la velocidad calcula lo que falta ({pr['quedan']:.0f} s)")
+ok(ak.texto_tiempo(pr["quedan"]) == "quedan 2 min", ak.texto_tiempo(pr["quedan"]))
+ok(ak.texto_tiempo(12) == "quedan unos 10 s" and ak.texto_tiempo(None) is None, "textos de tiempo")
+C5.cerebro_propio.estado, C5.cerebro_propio.inst = "arrancando", True
+pr = P5.progreso()
+ok(pr["texto"] == "Despertando el cerebro de Kira…" and pr["fraccion"] > 0.85 * 6 / 7, "cargando en la memoria")
+P5.piezas = lambda: [("Oído", "listo", True), ("Cerebro", "listo", True)]
+ok(P5.progreso() == {"fraccion": 1.0, "texto": "¡Lista!", "quedan": None, "listo": True}, "todo listo")
+
 # ---------- cerebro reutilizado ----------
 import cerebro_propio_kira as cp, subprocess
 d = tempfile.mkdtemp()
@@ -124,7 +144,10 @@ def correr(seg, cond):
 labels = lambda: [w.text for w in sm.walk() if type(w).__name__ == "Label"]
 ok(sm.current == "arranque", "al abrir, sale «Preparando a Kira»")
 correr(1, lambda: False)
-ok(any("Cerebro: cargándolo" in l for l in labels()) and any("Oído: listo" in l for l in labels()), "enseña cómo va cada cosa")
+ok(any("Despertando el cerebro" in l and "quedan unos" in l for l in labels()), "una sola línea: qué hace y cuánto falta")
+ok(not any("Oído:" in l or "[OK]" in l for l in labels()), "sin listas de letras en la pantalla de carga")
+barra = next(w for w in sm.get_screen("arranque").walk() if type(w).__name__ == "Barra")
+ok(0.5 < barra.valor < 1.0, f"la barra va avanzando ({barra.valor:.2f})")
 ok(sm.current == "arranque" and not VOZ.dichos, "espera al cerebro antes de empezar")
 CER.on = True
 ok(correr(3, lambda: sm.current == "inicio"), "con todo listo, entra sola")
