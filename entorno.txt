@@ -1,0 +1,6 @@
+ANDROID_HOME=/usr/local/lib/android/sdk
+ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.3.13750724
+ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+ANDROID_NDK_LATEST_HOME=/usr/local/lib/android/sdk/ndk/30.0.16248370
+ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
+ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
