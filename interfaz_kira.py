@@ -239,6 +239,16 @@ def construir_interfaz(core, consola=None):
             else:
                 decir("Todavía no he leído ninguna captura.")
             return
+        if re.match(r"^abre la receta ", bajo):          # una técnica probada, al editor para verla o cambiarla
+            import saber_mejoras_kira as smk
+            r = smk.receta(bajo.split("receta", 1)[1])
+            if r is None:
+                decir("No tengo esa receta. Di «recetas» para ver la lista.")
+            else:
+                decir(f"Te abro «{r['titulo']}» en el editor.")
+                codigo_ui["cargar_en_editor"](r["codigo"].strip() + "\n", r["id"],
+                                              "Receta probada: pulsa «Ejecutar» o «Jugar» para verla funcionar.")
+            return
         if re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura", bajo) and not pedir_permiso_fotos():
             decir("Necesito permiso para ver tus capturas. Concédelo y pídemelo otra vez.")
             return

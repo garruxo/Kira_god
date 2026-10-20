@@ -492,7 +492,9 @@ class KiraGodCore:
             raise RuntimeError(self._sin_cerebro())
         local = clave == cerebro_ia_kira.LOCAL
         existentes = ", ".join(sorted(n for n, _ in set(self.comandos_modulos.values()))) or "ninguno"
-        usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}"
+        import saber_mejoras_kira as sm_
+        saber = sm_.contexto_para(pedido.split("\n\n")[0], getattr(self, "recuerdos", None), local=local)
+        usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, mi.SISTEMA_MEJORA_LOCAL if local else mi.SISTEMA_MEJORA, usuario)
         return mi.extraer_modulo(texto)
 
@@ -534,6 +536,20 @@ class KiraGodCore:
                 return f"[x] {e}"
         return (f"En tu pantalla pone:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}\n\n"
                 "Puedes decir «explícame lo leído», «guarda lo leído» o «abre lo leído en el editor».")
+
+    def _orden_recetas(self, cmd_lower):
+        import saber_mejoras_kira as sm_
+        if cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas"):
+            return (f"Técnicas probadas que uso al programar mejoras ({len(sm_.RECETAS)}):\n" + sm_.lista() +
+                    "\n\nDi «receta <nombre>» para verla o «abre la receta <nombre>» para llevarla al editor.")
+        nombre = cmd_lower.split("receta", 1)[1].strip()
+        r = sm_.receta(nombre)
+        if r is None:
+            return f"[x] No tengo ninguna receta de «{nombre}». Di «recetas» para ver la lista."
+        self.lector.ultimo = r["codigo"].strip() + "\n"            # así «abre lo leído en el editor» también vale
+        if cmd_lower.startswith("abre"):
+            return "[OK] ABRIR_EN_EDITOR " + r["id"]
+        return f"{r['titulo']}\n\n{r['idea']}\n\n```python\n{r['codigo'].strip()}\n```"
 
     def ver_imagen(self, ruta, pregunta):
         """Los ojos de Kira (visión dentro del móvil). Lanza RuntimeError si aún no los tiene."""
@@ -880,6 +896,8 @@ class KiraGodCore:
         elif re.match(r"^(?:mira|lee|léeme|explícame|explicame|explica)(?: la| mi)? pantalla\b|^qu[eé] (?:ves|hay en (?:la|mi) pantalla)\b"
                       r"|^(?:no mires|puedes mirar) (?:esta app|aqu[ií])\b|^apps? privadas?$", cmd_lower):
             return self._orden_vista(cmd_lower)
+        elif cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas") or cmd_lower.startswith(("receta ", "abre la receta ")):
+            return self._orden_recetas(cmd_lower)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()
             if not pend:
