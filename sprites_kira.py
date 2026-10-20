@@ -162,16 +162,21 @@ def color_del_borde(w, h, rgba):
     return tuple(v * 16 + 8 for v in c)
 
 
-def quitar_fondo(w, h, rgba, tolerancia=48):
+def quitar_fondo(w, h, rgba, tolerancia=60):
     """Vuelve transparente el fondo liso que rodea al personaje (relleno desde los bordes). Devuelve rgba nuevo y
     la fracción quitada (si es casi todo o casi nada, el fondo no era liso)."""
     rgba = bytearray(rgba)
     fr, fg, fb = color_del_borde(w, h, rgba)
     tol2 = tolerancia * tolerancia * 3
 
+    claro = fr + fg + fb > 600                          # fondo blanco: también vale el blanco grisáceo de las sombras
+
     def parecido(j):
-        dr, dg, db = rgba[j] - fr, rgba[j + 1] - fg, rgba[j + 2] - fb
-        return dr * dr + dg * dg + db * db <= tol2
+        r, g, b = rgba[j], rgba[j + 1], rgba[j + 2]
+        dr, dg, db = r - fr, g - fg, b - fb
+        if dr * dr + dg * dg + db * db <= tol2:
+            return True
+        return claro and min(r, g, b) > 200 and max(r, g, b) - min(r, g, b) < 18
     visto = bytearray(w * h)
     pila = [y * w + x for x in range(w) for y in (0, h - 1)] + [y * w + x for y in range(h) for x in (0, w - 1)]
     quitados = 0

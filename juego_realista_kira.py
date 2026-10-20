@@ -14,8 +14,8 @@ import unicodedata
 
 import sprites_kira as spk
 
-ESTILO_PERSONAJE = ("full body, centered, single character, isolated on a plain white background, realistic, "
-                    "highly detailed, game character art")
+ESTILO_PERSONAJE = ("only one, alone, full body, centered, isolated on a pure white background, realistic photo, "
+                    "highly detailed, no text")
 ESTILO_FONDO = "empty scene with no characters, wide view, realistic photo, natural light, highly detailed, game background"
 
 SISTEMA_PLAN = (
@@ -23,6 +23,7 @@ SISTEMA_PLAN = (
     "Responde SOLO con un objeto JSON: {\"titulo\": str (español, corto), \"protagonista\": str (español), "
     "\"enemigo\": str (español, lo que hay que esquivar), \"premio\": str (español, lo que se recoge), "
     "\"escenario\": str (español), \"protagonista_en\": str, \"enemigo_en\": str, \"premio_en\": str, "
+    "(personajes y objetos en SINGULAR: uno solo) "
     "\"escenario_en\": str} — los *_en son descripciones visuales en INGLÉS de 6 a 15 palabras para pintarlos.")
 
 _RE_PEDIDO = re.compile(
@@ -89,12 +90,24 @@ def plan_desde_ia(texto):
     return normalizar(json.loads(m.group(0)))
 
 
+def singular(texto):
+    """«dragons» -> «a dragon»: un personaje de juego es UNO (en plural el pintor dibuja varios)."""
+    palabras = str(texto or "").split()
+    sal = []
+    for p in palabras:
+        if len(p) > 3 and p.lower().endswith("s") and not p.lower().endswith(("ss", "us", "is")):
+            p = p[:-3] + "y" if p.lower().endswith("ies") else p[:-1]
+        sal.append(p)
+    t = " ".join(sal)
+    return t if re.match(r"^(?:a|an|one|the)\b", t, re.I) else ("an " if t[:1].lower() in "aeiou" else "a ") + t
+
+
 def dibujos(plan):
     """{nombre: descripción en inglés} con el estilo realista ya puesto."""
     return {"fondo": f"{plan['escenario_en']}, {ESTILO_FONDO}",
-            "jugador": f"{plan['protagonista_en']}, {ESTILO_PERSONAJE}",
-            "enemigo": f"{plan['enemigo_en']}, {ESTILO_PERSONAJE}",
-            "premio": f"{plan['premio_en']}, {ESTILO_PERSONAJE}"}
+            "jugador": f"{singular(plan['protagonista_en'])}, {ESTILO_PERSONAJE}",
+            "enemigo": f"{singular(plan['enemigo_en'])}, {ESTILO_PERSONAJE}",
+            "premio": f"{singular(plan['premio_en'])}, {ESTILO_PERSONAJE}"}
 
 
 def codigo(plan):
