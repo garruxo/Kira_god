@@ -186,7 +186,8 @@ pas = sm.get_screen("pasarela")
 def texto_pas():
     return " ".join(w.text for w in pas.walk() if type(w).__name__ == "Label")
 sm.ir("pasarela")
-ok("Todavía no estoy conectada" in texto_pas() and "Arrancar laboratorio" in texto_pas(), "explica los 3 pasos")
+ok("no hace falta" in texto_pas() and "Ya no necesito el ordenador" in texto_pas() and "Arrancar laboratorio" in texto_pas(),
+   "explica que el ordenador es opcional y los 3 pasos")
 campo = next(w for w in pas.walk() if type(w).__name__ == "TextInput" and "6 cifras" in w.hint_text)
 fila = next(w for w in pas.walk() if campo in getattr(w, "children", []))
 ok(fila.disabled and fila.opacity == 0, "el campo del código solo sale cuando hace falta")

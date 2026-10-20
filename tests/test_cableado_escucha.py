@@ -104,10 +104,7 @@ MICRO.cola.append("Kira, aprende a convertir euros a dólares")
 ok(correr(3, lambda: any("necesito un cerebro" in d for d in MICRO.dichos)), "sin cerebro: lo dice claro")
 ok(not charlas, "no lo trata como charla")
 core.cerebro_para_codigo = lambda: "claude"
-ctl = sm.control; ctl.pasarela.url = ""
-MICRO.cola.append("Kira, aprende a convertir euros a dólares")
-ok(correr(3, lambda: any("laboratorio conectado" in d for d in MICRO.dichos)), "sin laboratorio: lo dice claro")
-ctl.pasarela.url = "http://127.0.0.1:8765"; ctl.pasarela.token = "token-de-prueba-largo-123"   # conectado (url y token)
+ctl = sm.control; ctl.pasarela.url = ""                     # SIN ordenador: ya no hace falta (laboratorio del móvil)
 pedidos, aplicadas = [], []
 class Pend:
     nombre = "euros_dolares"; resultado = {"avisos": []}
@@ -115,8 +112,10 @@ def enviar_orden(p): pedidos.append(p); ctl.pendiente = Pend(); return {"ok": Tr
 ctl.enviar_orden = enviar_orden
 ctl.aplicar = lambda confirmado=False: (aplicadas.append(confirmado), {"ok": True, "texto": "[OK] aplicado"})[1]
 MICRO.cola.append("Kira, aprende a convertir euros a dólares")
-ok(correr(3, lambda: any("me pongo a programar" in d for d in MICRO.dichos)), "confirma que se pone a programar")
-ok(correr(6, lambda: pedidos), "envía el pedido al laboratorio")
+ok(correr(3, lambda: any("me pongo a programar" in d and "aquí en el móvil" in d for d in MICRO.dichos)),
+   "sin ordenador se pone a programar y lo prueba en el móvil")
+ok(not any("laboratorio conectado" in d for d in MICRO.dichos), "ya no exige el laboratorio del ordenador")
+ok(correr(6, lambda: pedidos), "envía el pedido al laboratorio (del móvil)")
 ok("convertir euros a dólares" in pedidos[0] and sm.current == "terminal", "abre la terminal de mejoras con el pedido: " + repr(pedidos))
 ok(correr(3, lambda: any("ha pasado las pruebas" in d for d in MICRO.dichos)), "lee el resultado en voz alta")
 ok(not aplicadas, "la voz NO aplica nada: hay que tocar Aplicar dos veces")

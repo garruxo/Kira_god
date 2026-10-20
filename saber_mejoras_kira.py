@@ -66,13 +66,16 @@ def receta(id_o_nombre):
     return hallado[0][1] if hallado else None
 
 
-def contexto_para(pedido, recuerdos=None, local=False):
+def contexto_para(pedido, recuerdos=None, local=False, para_editor=False):
     """Texto que se añade al pedido de mejora: la técnica probada más parecida y lo que Kira ha estudiado.
-    Si el código de la receta es demasiado largo para ese cerebro, va solo la idea (y su coste), que también ayuda."""
+    Si el código de la receta es demasiado largo para ese cerebro, va solo la idea (y su coste), que también ayuda.
+    para_editor=True: para un PROGRAMA del editor (las recetas de ingeniería van como programa con sus pruebas)."""
     partes = []
     tope_codigo = 2600 if local else 6000
     for _p, r in buscar(pedido, 1 if local else 2):
-        codigo = r["codigo"].strip()
+        codigo = (programa(r) if para_editor and r.get("prueba") else r["codigo"]).strip()
+        if para_editor and "def registrar" in codigo:
+            codigo = "# (receta en forma de MÓDULO de Kira: en el editor, un juego es una clase que hereda de Juego)\n" + codigo
         coste = f" Coste: {r['complejidad']}." if r.get("complejidad") else ""
         if len(codigo) > tope_codigo:
             partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}{coste}")

@@ -210,6 +210,29 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Sin ordenador y en equipo con Claude (nuevo, v2.17)
+- **Ya no hace falta el ordenador para las mejoras.** «Kira, aprende a…», «Kira, mejora…» o «Kira, añade…»: Kira la
+  programa y la prueba en su **laboratorio del móvil** (`laboratorio_movil_kira.py`): solo módulos seguros (sin
+  archivos, red ni sistema), tiempo máximo, el contrato de los módulos, los juegos se juegan 20 s simulados y cada orden
+  se prueba con frases de ejemplo. Si el laboratorio del ordenador está conectado, se prueba **también** allí y los dos
+  tienen que dar OK. Instalarla sigue siendo **solo con tus dos toques** en «Aplicar». Al instalarla, Kira la apunta en
+  su baúl y en la charla sabe que tiene esa orden nueva.
+- **Kira y Claude se ponen de acuerdo** (`acuerdo_kira.py`), si están los dos (su cerebro encendido y la clave de
+  Claude): propone Kira y revisa Claude; si Claude no está de acuerdo, dice por qué y puede traer su versión (que
+  también se prueba), y Kira la acepta o hace otra que resuelva las dos cosas. Como mucho 3 rondas. Te enseñan la
+  conversación y decides tú. «cerebro mejoras claude» = propone Claude y revisa Kira. «acuerdo con claude» lo explica;
+  «desactiva el acuerdo con claude» (o Configuración) para no gastar a Claude.
+- **Programas por voz**: «Kira, escríbeme un programa que…» o «Kira, hazme un juego de…» → lo escribe con lo que ha
+  estudiado, lo prueba en modo seguro (los juegos, jugándolos) y te lo deja en el **editor**. No se instala nada.
+- **Diseño por voz**: «Kira, diséñame una web para…», «hazme una maqueta de app de…», «crea un videoclip de…» → va al
+  ordenador de diseño y lo crea **con lo que ha estudiado del tema**; si está Claude, lo repasa y lo mejora.
+- **Estudiar en equipo**: «Kira, estudia …» lee la Wikipedia y, si está Claude, él repasa las fichas, corrige lo que
+  esté mal y añade lo que falte (la ficha repasada queda en el baúl).
+- Honesto: el laboratorio del móvil corre dentro de la propia app (Android no deja abrir otro Python aparte). Protege
+  contra errores y accidentes, pero no es una caja fuerte contra código hecho para saltársela: por eso decides tú.
+  Cada revisión de Claude gasta de tu clave. Nada de esto se ha probado aún en tu móvil.
+- Pruebas: `tests/test_laboratorio_movil.py`, `tests/test_acuerdo.py`, `tests/test_equipo_voz.py`.
+
 ## Kira más ágil y más fácil de leer (nuevo, v2.16)
 - **Habla antes y en español**: la voz ya no crea un motor nuevo en cada frase (la librería plyer lo hacía, y en
   inglés). Ahora hay una sola voz de Android (`android_src/org/kira/servicio/VozKira.java`), en español, creada una

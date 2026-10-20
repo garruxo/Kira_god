@@ -80,7 +80,7 @@ ok(core.procesar_orden("cerebro local").startswith("[OK]") and core.cerebro_acti
 srv.shutdown(); srv.server_close()
 core.cerebro_ia._cache = (0.0, None)
 try: core.conversar("hola"); ok(False, "local apagado")
-except RuntimeError as e: ok("no responde" in str(e) and "Termux" in str(e), "local apagado en modo local: lo dice: " + str(e))
+except RuntimeError as e: ok("apagado" in str(e) and "Cerebro y oído" in str(e) and "Termux" not in str(e), "local apagado en modo local: lo dice (sin mandar a Termux): " + str(e))
 ok(core.registrar_error("charla", "El cerebro local no responde en http://127.0.0.1:8080").startswith("Cómo arreglarlo"), "la bitácora sabe arreglarlo")
 # con Claude como respaldo en auto
 core.procesar_orden("cerebro auto"); core._leer_clave_api = lambda: "clave-falsa"

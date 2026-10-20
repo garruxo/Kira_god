@@ -64,6 +64,8 @@ class KiraGodCore:
         self.bitacora = bitacora_kira.Bitacora(os.path.join(self.dir, "bitacora.json"))
         import cerebro_ia_kira
         self.cerebro_ia = cerebro_ia_kira.Cerebro(self.dir)
+        import acuerdo_kira                      # Kira y Claude se ponen de acuerdo (mejoras, programas, diseño, estudio)
+        self.acuerdo = acuerdo_kira.Ajuste(os.path.join(self.dir, "acuerdo.json"))
         import lector_kira                       # lee texto y código de imágenes (Tesseract, dentro del móvil)
         self.lector = lector_kira.Lector(self.dir)
         import vista_kira                        # ver la pantalla (con tu permiso) y estar siempre activa
@@ -338,12 +340,21 @@ class KiraGodCore:
         if not clave:
             raise RuntimeError(self._sin_cerebro())
         system = ("Eres Kira, la asistente de esta app. Responde en español, en 1 a 3 frases cortas, sin markdown ni listas, "
-                  "porque tu respuesta se lee en voz alta. No tienes acceso a internet ni a los archivos del usuario y no "
-                  "puedes cambiar tu propio código: si lo pide, dile que use 'mejorar' en la Sala Hacker. "
+                  "porque tu respuesta se lee en voz alta. No tienes acceso a internet ni a los archivos del usuario. "
+                  "SÍ puedes aprender habilidades nuevas, programar y diseñar, pero lo hace la app al oír: «Kira, aprende a "
+                  "…» (programas una mejora, la pruebas en el móvil y él la aprueba con dos toques), «escríbeme un "
+                  "programa que…» o «hazme un juego de…» (te queda en el editor), «diséñame una web / una app / un "
+                  "videoclip de…» y «estudia …»: si lo pide con otras palabras, dile cómo pedirlo así. "
                   "SÍ puedes moverte por la app y abrir otras apps, pero lo hace la app al oír órdenes como «Kira, abre la "
                   "sala hacker», «ve a los juegos», «abre WhatsApp», «ajustes del wifi» o «conéctate al ordenador»: si te "
                   "lo pide con otras palabras, dile cómo pedirlo así, nunca que no puedes. "
                   "No afirmes haber hecho acciones que no has hecho.")
+        nuevas = sorted(p for p in getattr(self, "comandos_modulos", {}) if isinstance(p, str))[:20]
+        if nuevas:                                     # lo que aprendió con mejoras (cambia solo al instalar una)
+            system += " Órdenes nuevas que has aprendido: " + ", ".join(f"«{p}»" for p in nuevas) + "."
+        juegos = sorted(getattr(self, "juegos_modulos", {}))[:10]
+        if juegos:
+            system += " Juegos que has aprendido: " + ", ".join(juegos) + "."
         ctx = self._contexto_recuerdos(texto)
         local = clave == cerebro_ia_kira.LOCAL
         # El modelo del móvil guarda lo ya leído (instrucciones + charla) y solo lee lo nuevo; si los recuerdos fueran
@@ -413,14 +424,40 @@ class KiraGodCore:
         descripcion = " ".join(str(descripcion).split())[:300]
         if not descripcion:
             raise ValueError("Describe lo que quieres crear.")
-        clave = self._leer_clave()
+        autor, revisor = self.reparto("general")
+        clave = self._clave_de(autor) if revisor else self._clave_para("general")
+        peticion = f"Petición: {descripcion}"
+        sabe = self._saber_de(descripcion, 600)
+        if sabe:                                       # lo que ha estudiado del tema también le sirve para diseñar
+            peticion += "\n\nLo que sabes del tema (de tus estudios; úsalo si encaja):\n" + sabe
+        contenido, origen = None, "ia"
         if clave:
             try:
-                texto = self._llamar_api(clave, dk.SISTEMAS[tipo], f"Petición: {descripcion}", max_tokens=1500)
-                return dk.interpretar_respuesta(tipo, texto), "ia"
+                texto = self._llamar_api(clave, dk.SISTEMAS[tipo], peticion, max_tokens=1500)
+                contenido = dk.interpretar_respuesta(tipo, texto)
             except (RuntimeError, ValueError):
-                pass                                   # sin red o respuesta inútil: plantilla local
-        return dk.LOCALES[tipo](descripcion), "local"
+                contenido = None                       # sin red o respuesta inútil: plantilla local
+        if contenido is not None and revisor:          # el otro cerebro lo repasa y lo mejora: diseño acordado
+            import acuerdo_kira as ak
+            try:
+                texto = self._llamar_api(self._clave_de(revisor), ak.SISTEMA_DISENO_REVISION + dk.SISTEMAS[tipo],
+                                         peticion + "\n\nPropuesta de " + ak.NOMBRES[autor] + ":\n" +
+                                         json.dumps(contenido, ensure_ascii=False), max_tokens=1500)
+                contenido, origen = dk.interpretar_respuesta(tipo, texto), "acuerdo"
+            except (RuntimeError, ValueError):
+                pass                                   # si el repaso falla, vale la propuesta
+        if contenido is None:
+            return dk.LOCALES[tipo](descripcion), "local"
+        return contenido, origen
+
+    def _saber_de(self, tema, maximo=600):
+        rec = getattr(self, "recuerdos", None)
+        if rec is None:
+            return ""
+        try:
+            return rec.contexto(tema, n=2, maximo=maximo) or ""
+        except Exception:
+            return ""
 
     # ---------- generación de mejoras (solo PROPONE; no aplica nada) ----------
     def _leer_clave(self, tarea="general"):
@@ -496,12 +533,13 @@ class KiraGodCore:
             raise RuntimeError(f"No se pudo contactar con la API: {e}")
         return "".join(b.get("text", "") for b in datos.get("content", []) if b.get("type") == "text")
 
-    def generar_mejora(self, pedido: str):
-        """Devuelve (nombre, codigo). main.py lo envía al laboratorio; aquí NO se instala nada.
+    def generar_mejora(self, pedido: str, quien=None):
+        """Devuelve (nombre, codigo). Se prueba en el laboratorio; aquí NO se instala nada.
+        quien: 'local' | 'claude' para elegir quién la escribe (al trabajar en equipo); None = el de siempre.
         Con el modelo local usa instrucciones cortas con ejemplos (los modelos pequeños se pierden con textos largos)."""
         import cerebro_ia_kira
         import mejoras_ia_kira as mi
-        clave = self._clave_para("codigo")
+        clave = self._clave_de(quien) if quien else self._clave_para("codigo")
         if not clave:
             raise RuntimeError(self._sin_cerebro())
         local = clave == cerebro_ia_kira.LOCAL
@@ -511,6 +549,106 @@ class KiraGodCore:
         usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, mi.SISTEMA_MEJORA_LOCAL if local else mi.SISTEMA_MEJORA, usuario)
         return mi.extraer_modulo(texto)
+
+    # ---------- trabajar en EQUIPO: Kira (cerebro del móvil) + Claude ----------
+    def reparto(self, tarea="codigo"):
+        """(autor, revisor): 'local' | 'claude' | None. revisor=None si no hay con quién ponerse de acuerdo (falta uno
+        de los dos, «cerebro local|claude» lo impide o «desactiva el acuerdo con claude»).
+        En equipo propone Kira y revisa Claude; con «cerebro mejoras claude», al revés."""
+        import cerebro_ia_kira
+        c = self._clave_para(tarea)
+        autor = "local" if c == cerebro_ia_kira.LOCAL else ("claude" if c else None)
+        cer, aj = getattr(self, "cerebro_ia", None), getattr(self, "acuerdo", None)
+        if autor is None or cer is None or aj is None or not aj.activo or getattr(cer, "motor", "auto") != "auto":
+            return autor, None
+        if not self._leer_clave_api() or not cer.local_disponible():
+            return autor, None
+        if tarea == "codigo" and getattr(cer, "codigo", "auto") == "claude":
+            return "claude", "local"
+        return "local", "claude"
+
+    def _clave_de(self, quien):
+        import cerebro_ia_kira
+        if quien == "local":
+            return cerebro_ia_kira.LOCAL
+        return self._leer_clave_api() if quien == "claude" else ""
+
+    def revisar_codigo(self, quien, pedido, autor, codigo, informe, tipo="mejora", objecion=""):
+        """El cerebro 'quien' revisa el código que escribió 'autor'. Devuelve acuerdo_kira.interpretar_revision(...)
+        o None si no pudo (sin red, sin respuesta). Claude puede traer su versión corregida; Kira solo dice sí o no."""
+        import acuerdo_kira as ak
+        import mejoras_ia_kira as mi
+        import programar_kira as pk
+        clave = self._clave_de(quien)
+        if not clave:
+            return None
+        msg = ak.mensaje_revision(pedido, ak.NOMBRES.get(autor, autor), codigo, informe, objecion)
+        if quien == "local":
+            system, tope, extraer = ak.SISTEMA_REVISION_LOCAL, 120, None
+        else:
+            reglas = mi.REGLAS_MODULO if tipo == "mejora" else pk.REGLAS_PROGRAMA
+            system, tope = ak.SISTEMA_REVISION + reglas, 3000
+            extraer = mi.extraer_modulo if tipo == "mejora" else pk.extraer_programa
+        try:
+            texto = self._llamar_api(clave, system, msg, max_tokens=tope)
+        except Exception:
+            return None
+        return ak.interpretar_revision(texto, extraer)
+
+    def generar_programa(self, pedido, quien=None):
+        """(nombre, codigo) de un programa para el EDITOR (no se instala nada). Usa recetas y lo estudiado."""
+        import cerebro_ia_kira
+        import programar_kira as pk
+        import saber_mejoras_kira as sm_
+        clave = self._clave_de(quien) if quien else self._clave_para("codigo")
+        if not clave:
+            raise RuntimeError(self._sin_cerebro())
+        local = clave == cerebro_ia_kira.LOCAL
+        partes = pedido.split("\n\n", 1)
+        saber = sm_.contexto_para(partes[0], getattr(self, "recuerdos", None), local=local, para_editor=True)
+        usuario = f"Programa pedido: {pedido}" + (f"\n\n{saber}" if saber else "")
+        texto = self._llamar_api(clave, pk.SISTEMA_PROGRAMA_LOCAL if local else pk.SISTEMA_PROGRAMA, usuario,
+                                 max_tokens=1200 if local else 3000)
+        return pk.extraer_programa(texto)
+
+    def programa_acordado(self, pedido):
+        """Escribe, prueba en modo seguro y (si están los dos) acuerda con Claude un programa para el editor.
+        Devuelve el resultado de acuerdo_kira.negociar(...) (+ 'texto' para enseñar)."""
+        import acuerdo_kira as ak
+        import programar_kira as pk
+        autor, revisor = self.reparto("codigo")
+        if autor is None:
+            raise RuntimeError(self._sin_cerebro())
+        estado = {"objecion": ""}
+
+        def proponer(aviso):
+            try:
+                return self.generar_programa(pedido + (f"\n\n{aviso}" if aviso else ""), quien=autor if revisor else None)
+            except ValueError as e:
+                raise ak.Reintentar(f"{e} Responde con NOMBRE: … y el programa en un bloque ```python.")
+            except RuntimeError as e:
+                raise ak.Parar(str(e))
+
+        def probar(nombre, codigo):
+            ok, motivo, dato = pk.probar_programa(codigo)
+            return ok, motivo, dato
+
+        def revisar(rol, nombre, codigo, dato, objecion):
+            quien = revisor if rol == "revisor" else autor
+            de = autor if rol == "revisor" else revisor
+            return self.revisar_codigo(quien, pedido, de, codigo, pk.informe(dato), tipo="programa", objecion=objecion)
+
+        r = ak.negociar(proponer, probar, revisar if revisor else None, autor=autor, revisor=revisor,
+                        intentos=4 if autor == "local" else 3)
+        hist = ak.texto_historial(r)
+        if r["ok"]:
+            d = r["dato"] or {}
+            r["texto"] = ("Programa listo y probado en modo seguro." + (" Avisos: " + "; ".join(d.get("avisos", []))
+                          if d.get("avisos") else "") + (f"\n{hist}" if hist else ""))
+        else:
+            r["texto"] = ("[x] No he conseguido un programa que funcione. " + (r.get("error") or "")).strip() + \
+                (f"\n{hist}" if hist else "")
+        return r
 
     def cerebro_para_codigo(self):
         """'local' | 'claude' | None: quién programaría una mejora ahora mismo."""
@@ -797,17 +935,65 @@ class KiraGodCore:
                     f"móvil: {n} ficha(s) nuevas. Pregúntame, por ejemplo: «qué hace json.loads».")
         m = re.match(r"^estudia\s*:?\s*(.+)$", command.strip(), re.I)
         if m:
+            tema = m.group(1).strip()
             try:
-                titulos = est.estudiar(m.group(1))
+                titulos = est.estudiar(tema)
             except ValueError as e:
                 return f"[x] {e}"
             except Exception as e:
                 return f"[x] No pude conectar con la Wikipedia ({str(e)[:120]}). ¿Hay internet?"
-            if not titulos:
+            repaso = self._repasar_con_claude(tema)       # Claude corrige y completa lo que aprendió
+            if not titulos and not repaso:
                 return "[i] No he encontrado nada nuevo sobre eso (o ya lo sabía)."
-            return ("[OK] He estudiado y guardado: " + "; ".join(titulos) + ". (Fuente: Wikipedia.) "
-                    "Pregúntame sobre ello cuando quieras.")
+            partes = []
+            if titulos:
+                partes.append("He estudiado y guardado: " + "; ".join(titulos) + ". (Fuente: Wikipedia.)")
+            if repaso:
+                partes.append("Y lo he repasado con Claude: me ha corregido y completado la ficha.")
+            return "[OK] " + " ".join(partes) + " Pregúntame sobre ello cuando quieras."
         return est.estado_texto() + "\n" + (self.recuerdos.estado_texto() if self.recuerdos else "")
+
+    def _repasar_con_claude(self, tema):
+        """Estudiar EN EQUIPO: Claude lee las fichas que Kira acaba de guardar, corrige lo que esté mal y añade lo que
+        falte; la ficha de repaso va al baúl. Solo con la clave de Claude y el acuerdo activo. True si lo guardó."""
+        import acuerdo_kira as ak
+        aj, cer, rec = getattr(self, "acuerdo", None), getattr(self, "cerebro_ia", None), getattr(self, "recuerdos", None)
+        clave = self._leer_clave_api()
+        if not clave or rec is None or aj is None or not aj.activo or getattr(cer, "motor", "auto") == "local":
+            return False
+        fichas = self._saber_de(tema, 1500)
+        try:
+            texto = self._llamar_api(clave, ak.SISTEMA_REPASO, f"Tema: {tema}\n\nFichas de Kira:\n{fichas or '(ninguna)'}",
+                                     max_tokens=600)
+        except Exception:
+            return False
+        texto = " ".join(str(texto or "").split())
+        if len(texto) < 40:
+            return False
+        return bool(rec.guardar(texto, tema=f"{tema} (repaso con Claude)"[:80], fuente="claude"))
+
+    def _orden_acuerdo(self, cmd_lower):
+        import acuerdo_kira as ak
+        if re.match(r"^(?:activa|enciende|pon)\b", cmd_lower):
+            self.acuerdo.poner(True)
+        elif re.match(r"^(?:desactiva|apaga|quita)\b", cmd_lower):
+            self.acuerdo.poner(False)
+        cer = self.cerebro_ia
+        local, claude = cer.local_disponible(), bool(self._leer_clave_api())
+        autor, revisor = self.reparto("codigo")
+        if not self.acuerdo.activo:
+            ahora = "Ahora trabajo sola con mi cerebro (o solo con Claude), sin revisión."
+        elif revisor:
+            ahora = f"Ahora trabajamos en equipo: propone {ak.NOMBRES[autor]} y revisa {ak.NOMBRES[revisor]}."
+        else:
+            falta = [] if local else ["mi cerebro encendido («Cerebro y oído»)"]
+            falta += [] if claude else ["la clave de Claude («config clave: …»)"]
+            if cer.motor != "auto":
+                falta.append("«cerebro auto» (ahora está en «cerebro " + cer.motor + "»)")
+            ahora = "Ahora no puede ser: falta " + " y ".join(falta) + "."
+        return (f"[OK] Acuerdo con Claude: {'SÍ' if self.acuerdo.activo else 'NO'}. {ahora} "
+                "En equipo, las mejoras, los programas y los diseños los propone uno y los revisa el otro hasta ponerse "
+                "de acuerdo; al estudiar, Claude repasa mis fichas. Instalar una mejora lo sigues decidiendo tú.")
 
     # ---------- acciones con confirmación ----------
     def _ejecutar_pendiente(self):
@@ -955,6 +1141,8 @@ class KiraGodCore:
             return self._orden_recuerdos(command, cmd_lower)
         elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):
             return self._orden_estudio(command, cmd_lower)
+        elif __import__("acuerdo_kira").es_orden(cmd_lower):
+            return self._orden_acuerdo(cmd_lower)
         elif cmd_lower in ("cerebro propio", "mi cerebro") or re.match(r"^(?:descarga|descargar) (?:el )?cerebro\b", cmd_lower) \
                 or cmd_lower in ("enciende cerebro", "enciende tu cerebro", "apaga cerebro", "apaga tu cerebro"):
             return self._orden_cerebro_propio(cmd_lower)

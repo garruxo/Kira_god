@@ -119,8 +119,17 @@ def ejecutar(codigo, entrada="", limite=LIMITE_SEGUNDOS, extra=None):
         globales.update(extra)
 
     fin = time.monotonic() + float(limite)
+    hilo = threading.get_ident()
+    activo = {"si": True}
 
     def rastreo(frame, evento, arg):
+        # se vigila el hilo del programa y el código del programa (también en hilos que abra él); los demás hilos de
+        # Kira que arranquen mientras tanto no se tocan y se sueltan al acabar (antes podían cortarse por error)
+        propio = frame.f_code.co_filename == "<tu programa>"
+        if not propio and (not activo["si"] or threading.get_ident() != hilo):
+            if not activo["si"]:
+                sys.settrace(None)
+            return None
         if time.monotonic() > fin:
             raise TiempoAgotado()
         return rastreo
@@ -147,6 +156,7 @@ def ejecutar(codigo, entrada="", limite=LIMITE_SEGUNDOS, extra=None):
         linea = next((f.lineno for f in reversed(tb) if f.filename == "<tu programa>"), None)
         error = f"{type(e).__name__}: {e}" + (f" (línea {linea})" if linea else "")
     finally:
+        activo["si"] = False
         sys.settrace(viejo)
         threading.settrace(viejo_hilos)
         threading.excepthook = viejo_gancho

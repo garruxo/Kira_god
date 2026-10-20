@@ -4,7 +4,7 @@ sala_hacker_kira.py - Pantallas de la SALA HACKER inmersiva (Kivy). Se montan de
 
   sala_hacker : la habitación 3D (habitacion_kira.py). Caminas hasta la mesa y miras alrededor.
   terminal    : el ordenador. Dos modos:  APRENDER (mini-curso, lecciones, comprobar sintaxis)
-                                          MEJORAR  (pedir un módulo a Kira -> laboratorio -> tú decides)
+                                          MEJORAR  (pedir un módulo a Kira -> laboratorio del móvil -> tú decides)
   biblioteca  : tus libros (lecciones, apuntes), los módulos instalados y lo que Kira ha aprendido.
 
 Honesto: las mejoras se instalan como MÓDULOS (comandos nuevos) y solo tras la prueba del laboratorio y tu
@@ -279,8 +279,9 @@ def montar_sala_hacker(sm, ctx):
         botones_al[n] = boton(n, lambda n_=n: elegir(n_), VERDE if n == "Kira" else GRIS, alto=40)
         fila_al.add_widget(botones_al[n])
     c_mej.add_widget(fila_al)
-    c_mej.add_widget(etiqueta("Las mejoras se instalan como MÓDULOS (comandos nuevos), tras probarlas en el laboratorio y "
-                              "con tu confirmación. No cambian el núcleo.", alto=52))
+    c_mej.add_widget(etiqueta("Kira la programa (con Claude, si están los dos), la prueba en su laboratorio del móvil "
+                              "(y en el del ordenador si está) y se instala como orden nueva solo con tus dos toques.",
+                              alto=52))
     campo_mej = entrada("Qué quieres que Kira aprenda a hacer…")
     c_mej.add_widget(campo_mej)
     btn_env = boton("Pedir mejora", lambda: enviar_mejora(), VERDE)

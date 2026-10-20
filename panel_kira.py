@@ -60,8 +60,9 @@ class PanelControl:
             self.promotor = promotor
             self.pasarela = pasarela or promotor.pasarela
         else:
+            import laboratorio_movil_kira as lm
             self.pasarela = pasarela or pc.PasarelaCliente()
-            self.promotor = pc.Promotor(self.pasarela)
+            self.promotor = pc.Promotor(lm.LaboratorioDoble(self.pasarela))   # en el móvil siempre; y en el PC si está
         self.pendiente = None
         self.pedido_actual = ""
         self._lock = threading.Lock()
@@ -95,8 +96,9 @@ class PanelControl:
 
     def texto_estado(self) -> str:
         e = self.estado()
+        lab = "en el móvil" + (" + ordenador" if e["lab_ok"] else "")
         return (f"Clave API: {'sí' if e['clave'] else 'FALTA'}   |   "
-                f"Laboratorio: {e['lab']}   |   Módulos: {e['modulos']}")
+                f"Laboratorio: {lab}   |   Módulos: {e['modulos']}")
 
     # ---------- ajustes ----------
     def guardar_clave(self, clave) -> dict:
@@ -124,7 +126,10 @@ class PanelControl:
             pass
         os.replace(tmp, ruta)
         self.pasarela = self.pc.PasarelaCliente()
-        self.promotor.pasarela = self.pasarela
+        if hasattr(self.promotor.pasarela, "movil"):          # laboratorio doble: cambia solo la parte del ordenador
+            self.promotor.pasarela.pasarela = self.pasarela
+        else:
+            self.promotor.pasarela = self.pasarela
         return {"ok": True, "texto": "[OK] Laboratorio guardado."}
 
     def probar_conexion(self) -> dict:
@@ -193,7 +198,11 @@ class PanelControl:
         return str(r.get("error") or "el laboratorio rechazó la mejora")
 
     def enviar_orden(self, pedido, max_intentos=MAX_INTENTOS) -> dict:
-        """Genera, prueba y deja una mejora PENDIENTE de tu decisión. Reintenta con el motivo del fallo."""
+        """Genera, prueba y deja una mejora PENDIENTE de tu decisión. Reintenta con el motivo del fallo.
+        Si están Kira (cerebro del móvil) y Claude, la escribe uno, la revisa el otro y se ponen de acuerdo
+        (acuerdo_kira). Se prueba en el móvil (y en el ordenador si está conectado). Instalar: solo con tus dos toques."""
+        import acuerdo_kira as ak
+        import mejoras_ia_kira
         pedido = (pedido or "").strip()
         if not pedido:
             return {"ok": False, "aprobable": False, "intentos": 0, "texto": "[x] Escribe qué quieres que haga Kira."}
@@ -203,57 +212,80 @@ class PanelControl:
         if not callable(getattr(self.core, "generar_mejora", None)):
             return {"ok": False, "aprobable": False, "intentos": 0, "texto": "[x] Este núcleo no sabe generar mejoras."}
         quien = self.core.cerebro_para_codigo() if callable(getattr(self.core, "cerebro_para_codigo", None)) else None
+        autor, revisor = (self.core.reparto("codigo") if callable(getattr(self.core, "reparto", None)) else (quien, None))
+        if revisor:
+            quien = autor
         tope = MAX_INTENTOS_LOCAL if quien == "local" else MAX_INTENTOS
         if quien == "local" and max_intentos == MAX_INTENTOS:
             max_intentos = MAX_INTENTOS_LOCAL
         max_intentos = max(1, min(int(max_intentos), tope))
+        registrar = getattr(self.core, "registrar_error", None)
         with self._lock:
             self.pendiente = None
             contexto = self.lecciones_texto()
             bit = getattr(self.core, "bitacora", None)
             if bit is not None:                               # mapa del proyecto + fallos recientes (contexto, no órdenes)
                 contexto = (contexto + "\n\n" if contexto else "") + bit.texto_para_mejoras()
-            feedback, ultimo = "", "[x] Sin resultado."
-            for i in range(1, max_intentos + 1):
-                texto_pedido = pedido
-                if contexto:
-                    texto_pedido += "\n\n" + contexto
-                if feedback:
-                    texto_pedido += "\n\nEl intento anterior falló: " + feedback
+            est = {"ultimo": "[x] Sin resultado.", "lab_caido": False, "error_gen": ""}
+
+            def proponer(aviso):
+                texto_pedido = pedido + (f"\n\n{contexto}" if contexto else "") + (f"\n\n{aviso}" if aviso else "")
                 try:
-                    nombre, codigo = self.core.generar_mejora(texto_pedido)
+                    if revisor:
+                        return self.core.generar_mejora(texto_pedido, quien=autor)
+                    return self.core.generar_mejora(texto_pedido)
                 except ValueError as e:                        # formato mal: se le explica a la IA y se reintenta
-                    feedback, ultimo = _limpia(str(e) + " Responde con NOMBRE: … y el código en un bloque ```python.", 300), f"[x] {e}"
-                    continue
+                    est["ultimo"] = f"[x] {e}"
+                    raise ak.Reintentar(_limpia(str(e) + " Responde con NOMBRE: … y el código en un bloque ```python.", 300))
                 except Exception as e:
-                    if callable(getattr(self.core, "registrar_error", None)):
-                        self.core.registrar_error("mejoras", f"Kira no pudo generar la mejora: {e}")
-                    return {"ok": False, "aprobable": False, "intentos": i,
-                            "texto": f"[x] Kira no pudo generar la mejora: {e}"}
-                import mejoras_ia_kira
-                previo = mejoras_ia_kira.precomprobar(codigo)    # revisión rápida aquí, antes de gastar un viaje al laboratorio
+                    if callable(registrar):
+                        registrar("mejoras", f"Kira no pudo generar la mejora: {e}")
+                    est["error_gen"] = f"[x] Kira no pudo generar la mejora: {e}"
+                    raise ak.Parar(str(e))
+
+            def probar(nombre, codigo):
+                previo = mejoras_ia_kira.precomprobar(codigo)  # revisión rápida, antes de gastar una prueba
                 if previo:
-                    feedback, ultimo = _limpia(previo, 300), "[x] Revisión previa: " + previo
-                    continue
+                    est["ultimo"] = "[x] Revisión previa: " + previo
+                    raise ak.Reintentar(_limpia(previo, 300))
                 pend, err = self.promotor.preparar(nombre, codigo)
                 if err:
-                    feedback, ultimo = _limpia(err, 300), "[x] " + err
-                    continue
+                    est["ultimo"] = "[x] " + err
+                    raise ak.Reintentar(_limpia(err, 300))
                 if pend.aprobable:
-                    self.pendiente, self.pedido_actual = pend, pedido
-                    return {"ok": True, "aprobable": True, "intentos": i, "texto": pend.resumen(),
-                            "avisos": list(pend.resultado.get("avisos", [])), "nombre": pend.nombre}
-                ultimo = pend.resumen()
+                    return True, "", pend
+                est["ultimo"] = pend.resumen()
                 if not pend.resultado.get("etapas") and pend.resultado.get("error"):
-                    if callable(getattr(self.core, "registrar_error", None)):
-                        self.core.registrar_error("laboratorio", _limpia(pend.resultado.get("error", ""), 200))
-                    return {"ok": False, "aprobable": False, "intentos": i,  # laboratorio caído: no gastar más
-                            "texto": ultimo + "\n\nNo se reintenta: el laboratorio no está disponible."}
-                feedback = _limpia(self._motivo(pend), 300)
-            if callable(getattr(self.core, "registrar_error", None)):
-                self.core.registrar_error("mejoras", f"No se consiguió la mejora «{_limpia(pedido, 80)}»: {_limpia(feedback or ultimo, 200)}")
-            return {"ok": False, "aprobable": False, "intentos": max_intentos,
-                    "texto": ultimo + f"\n\nNo se consiguió tras {max_intentos} intentos."}
+                    if callable(registrar):
+                        registrar("laboratorio", _limpia(pend.resultado.get("error", ""), 200))
+                    est["lab_caido"] = True                    # laboratorio caído: no gastar más
+                    raise ak.Parar("el laboratorio no está disponible")
+                return False, _limpia(self._motivo(pend), 300), pend
+
+            def revisar(rol, nombre, codigo, pend, objecion):
+                q = revisor if rol == "revisor" else autor
+                de = autor if rol == "revisor" else revisor
+                return self.core.revisar_codigo(q, pedido, de, codigo, ak.informe_lab(pend.resultado), "mejora", objecion)
+
+            r = ak.negociar(proponer, probar, revisar if revisor else None, autor=autor or "local", revisor=revisor,
+                            intentos=max_intentos + (2 if revisor else 0))
+            hist = ak.texto_historial(r)
+            if r["ok"]:
+                pend = r["dato"]
+                self.pendiente, self.pedido_actual = pend, pedido
+                return {"ok": True, "aprobable": True, "intentos": r["intentos"],
+                        "texto": pend.resumen() + (f"\n\n{hist}" if hist else ""), "acuerdo": r["acuerdo"],
+                        "avisos": list(pend.resultado.get("avisos", [])), "nombre": pend.nombre}
+            if est["error_gen"]:
+                return {"ok": False, "aprobable": False, "intentos": r["intentos"], "texto": est["error_gen"]}
+            if est["lab_caido"]:
+                return {"ok": False, "aprobable": False, "intentos": r["intentos"],
+                        "texto": est["ultimo"] + "\n\nNo se reintenta: el laboratorio no está disponible."}
+            if callable(registrar):
+                registrar("mejoras", f"No se consiguió la mejora «{_limpia(pedido, 80)}»: {_limpia(est['ultimo'], 200)}")
+            return {"ok": False, "aprobable": False, "intentos": r["intentos"],
+                    "texto": est["ultimo"] + f"\n\nNo se consiguió tras {r['intentos']} intentos." +
+                    (f"\n\n{hist}" if hist else "")}
 
     def aplicar(self, confirmado=False) -> dict:
         """Solo desde un botón, después de que la persona confirme. Sin confirmado=True no hace nada."""
@@ -270,7 +302,26 @@ class PanelControl:
                 n = self.core.cargar_modulos()
                 self._guardar_leccion(pend.nombre, "aprobada", "aplicada desde el panel", self.pedido_actual)
                 msg += f" Comandos de módulos activos: {n}."
+                if self._aprender_habilidad(pend.nombre, self.pedido_actual):
+                    msg += " Kira ya sabe usarla: la tiene apuntada en su baúl."
             return {"ok": ok, "texto": ("[OK] " if ok else "[x] ") + msg}
+
+    def _aprender_habilidad(self, nombre, pedido):
+        """Kira se ADAPTA a su mejora nueva: apunta en su baúl qué hace y cómo se pide (y la charla la conoce)."""
+        rec = getattr(self.core, "recuerdos", None)
+        if rec is None:
+            return False
+        ordenes = sorted(p for p, v in getattr(self.core, "comandos_modulos", {}).items()
+                         if isinstance(v, tuple) and v and v[0] == nombre)
+        juegos = sorted(j for j, c in getattr(self.core, "juegos_modulos", {}).items()
+                        if getattr(c, "__module__", "").endswith(nombre))
+        como = ", ".join(f"«{o} …»" for o in ordenes) or ", ".join(f"«juega a {j}»" for j in juegos)
+        texto = (f"Sé hacer algo nuevo (mejora «{nombre}»): {_limpia(pedido, 200) or nombre}."
+                 + (f" Se usa diciendo {como}." if como else ""))
+        try:
+            return bool(rec.guardar(texto, tema=f"habilidad {nombre}", fuente="mejora aprobada"))
+        except Exception:
+            return False
 
     def rechazar(self, motivo="") -> dict:
         with self._lock:

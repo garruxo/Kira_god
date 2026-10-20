@@ -630,6 +630,31 @@ NORMALIZADORES = {"web": normalizar_spec, "app": normalizar_app, "clip": normali
 LOCALES = {"web": spec_pagina_local, "app": spec_app_local, "clip": guion_local}
 
 
+_PIDE_DISENO = re.compile(
+    r"^(?:por\s+favor\s+)?(?P<verbo>dis[eé][ñn]a(?:me)?|hazme|haz|cr[eé]a(?:me)?|prep[aá]rame|monta(?:me)?)\s+"
+    r"(?:(?:una?|el|la|otra?)\s+)?(?P<que>p[aá]gina(?:\s+web)?|web|landing|maqueta(?:\s+de\s+(?:una?\s+)?app)?|"
+    r"app|aplicaci[oó]n|v[ií]deo\s*clip|videoclip|clip|storyboard)\b\s*(?P<resto>.*)$", re.I | re.S)
+
+
+def pedido_diseno(texto):
+    """«Kira, diséñame una web para mi bar», «hazme una maqueta de app de tareas», «crea un videoclip de la playa»
+    -> ('web' | 'app' | 'clip', descripción). Si no es un pedido de diseño, None. «diséñame …» sin decir qué -> web."""
+    t = " ".join(str(texto or "").split()).strip(" .!¡?¿")
+    m = _PIDE_DISENO.match(t)
+    if m:
+        que = _norm(m.group("que"))
+        tipo = "web" if que.startswith(("pagina", "web", "landing")) else (
+            "clip" if any(x in que for x in ("clip", "storyboard")) else "app")
+        resto = m.group("resto").strip(" ,.:")
+        if len(resto) < 3:
+            return None
+        return tipo, (m.group("que") + " " + resto)[:300]
+    m = re.match(r"^dis[eé][ñn]a(?:me)?\s+(.{3,})$", t, re.I)
+    if m:
+        return "web", m.group(1)[:300]
+    return None
+
+
 def interpretar_respuesta(tipo, texto):
     """Respuesta de la IA -> contenido validado. Lanza ValueError si no sirve."""
     d = extraer_json(texto)

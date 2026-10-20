@@ -15,7 +15,8 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
 
 ## Reglas que el dueño pidió (no romperlas)
 - **Las mejoras nunca se aplican solas.** La voz puede pedirlas, pero aplicar exige su aprobación (dos toques).
-- **El laboratorio** (`kira_laboratorio/`) es un búnker: solo prueba y devuelve un veredicto, nunca envía código al móvil. Si cambias `tests_fijos/`, recuérdale volver a sellar (`python kira_master.py` → `sellar SELLAR NUCLEO`).
+- **Laboratorio (cambiado por el dueño en la v2.17):** ya NO hace falta el ordenador. Las mejoras se prueban en el laboratorio del móvil (`laboratorio_movil_kira.py`: lista segura de módulos, sin archivos/red/sistema, tiempo máximo, contrato, juegos y prueba de uso) y, si el del PC está conectado, también allí (`LaboratorioDoble`: los dos tienen que dar OK). El del PC (`kira_laboratorio/`) sigue siendo opcional y nunca envía código al móvil. Si cambias `tests_fijos/` o el código del laboratorio del PC, recuérdale volver a sellar (`python kira_master.py` → `sellar SELLAR NUCLEO`).
+- **Kira y Claude en equipo** (`acuerdo_kira.py`): si están los dos (cerebro del móvil + clave), uno propone y el otro revisa hasta ponerse de acuerdo en mejoras, programas, diseños y estudio. El dueño lo quiere así; se puede desactivar («desactiva el acuerdo con claude» o en Configuración).
 - **La sala de ciberseguridad es solo defensiva.**
 - **Termux NO para hablar con Kira.** Solo se acepta para el laboratorio en el móvil.
 - **Nada de reconocedor de Android** (pitidos) si hay oído propio.
@@ -58,9 +59,18 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - `estilo_kira.py` (`tam`, `ajustar`, `fondo_redondeado`): Roboto, letra con tope, textos que caben; menú en tarjetas; `NoTransition`; `maxfps` 30; portada y salas 3D más ligeras;
   - pantalla de carga: fondo de Kira + barra abajo con texto y tiempo restante (`arranque_kira.Preparacion.progreso`);
   - pruebas: `tests/test_voz.py`. Capturas con Kivy real en el contenedor: compilado desde el código fuente (pip está bloqueado).
+- **Hecho en la v2.17 (sin ordenador y en equipo con Claude):**
+  - `laboratorio_movil_kira.py` (prueba dentro de la app) + `LaboratorioDoble`; la voz ya no exige el PC; aplicar sigue con dos toques; al instalar, Kira apunta la habilidad en el baúl y la charla conoce sus órdenes nuevas;
+  - `acuerdo_kira.negociar`: propone Kira y revisa Claude (con «cerebro mejoras claude», al revés), hasta 3 rondas; Claude puede traer su versión, que también se prueba;
+  - `programar_kira.py`: «escríbeme un programa que…» / «hazme un juego de…» → probado en modo seguro → editor (no instala nada);
+  - `diseno_kira.pedido_diseno`: «diséñame una web / maqueta de app / videoclip…» desde cualquier pantalla; el diseño usa lo estudiado y Claude lo repasa;
+  - «estudia X»: Claude repasa las fichas de Wikipedia y deja una ficha corregida en el baúl;
+  - el tope de tiempo (editor y laboratorio del móvil) ya no afecta a otros hilos de Kira;
+  - pruebas: `tests/test_acuerdo.py`, `tests/test_laboratorio_movil.py`, `tests/test_equipo_voz.py`.
 - **Pendiente:**
   - nada de lo de moverse fuera de la app ni el faro se ha probado en el móvil real ni en la WiFi de casa;
   - pulsar botones dentro de otras apps (necesitaría servicio de accesibilidad: pedir permiso al dueño antes);
   - motor local para generar imágenes (stable-diffusion.cpp), siendo honesto sobre lo lento que es en un móvil;
   - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real;
-  - la voz nueva y la rapidez (v2.16) no se han medido en el móvil real.
+  - la voz nueva y la rapidez (v2.16) no se han medido en el móvil real;
+  - el laboratorio del móvil y el acuerdo con Claude (v2.17) no se han probado en el móvil real; el laboratorio del móvil corre dentro de la app: protege contra errores y accidentes, no es una caja fuerte.

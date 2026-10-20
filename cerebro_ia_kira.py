@@ -2,8 +2,8 @@
 """
 cerebro_ia_kira.py - De dónde saca Kira sus respuestas de IA: un MODELO LOCAL o la API de Claude (solo librería estándar).
 
-  local  : un modelo pequeño (2-4B parámetros) corriendo con llama.cpp («llama-server») en el MISMO móvil (Termux) o en
-           otro equipo de casa. Kira le habla por http://127.0.0.1:8080 con el formato OpenAI (/v1/chat/completions).
+  local  : un modelo pequeño (2-4B parámetros) corriendo con llama.cpp («llama-server») DENTRO de la app (cerebro
+           propio, cerebro_propio_kira) o en otro equipo de casa. Kira le habla por http://127.0.0.1:8080 con el formato OpenAI (/v1/chat/completions).
            Sin internet y sin pagar API. Más lento y menos listo que Claude.
   claude : la API de Claude (necesita clave e internet).
   auto   : (por defecto) usa el local si está encendido; si no, Claude si hay clave.
@@ -164,11 +164,12 @@ class Cerebro:
 
     def motivo_sin_cerebro(self, clave_api):
         if self.motor == "local":
-            return (f"El cerebro local no responde en {self.url}. Arráncalo en Termux (llama-server) o di «cerebro auto».")
+            return ("Mi cerebro del móvil está apagado. Enciéndelo en Menú › «Cerebro y oído» (o di «enciende cerebro»), "
+                    "o di «cerebro auto» para usar también a Claude.")
         if self.motor == "claude":
             return "Falta la clave de la API. Usa: config clave: TU_CLAVE (o di «cerebro auto» para usar el modelo local)."
-        return ("No hay cerebro de IA: ni el modelo local está encendido ni hay clave de la API. Arranca llama-server en "
-                "el móvil (ver «cómo cerebro local») o pon la clave con «config clave: …».")
+        return ("No hay cerebro de IA: ni el del móvil está encendido ni hay clave de Claude. Descárgalo o enciéndelo en "
+                "Menú › «Cerebro y oído», o pon la clave con «config clave: …».")
 
     # ---- hablar con el modelo local (formato OpenAI de llama-server) ----
     def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None):

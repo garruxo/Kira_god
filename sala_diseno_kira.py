@@ -309,9 +309,24 @@ def montar_sala_diseno(sm, ctx):
                 return
             contenido, origen = r
             mostrar(modo, contenido)
-            est_est.text = ("Diseñado con la IA (contenido validado por Kira)." if origen == "ia" else
-                            "Diseñado con plantillas locales (sin IA: falta la clave o no hay red).") + " Revísalo y guárdalo."
+            est_est.text = {"acuerdo": "Diseñado por Kira y repasado con Claude (con lo que ha estudiado del tema).",
+                            "ia": "Diseñado con la IA (contenido validado por Kira)."}.get(
+                origen, "Diseñado con plantillas locales (sin IA: falta el cerebro o no hay red).") + " Revísalo y guárdalo."
+            if al_terminar is not None:
+                al_terminar(origen)
+        al_terminar = sel.pop("al_terminar", None)
         en_hilo(lambda: core.generar_diseno(modo, desc), terminado)
+
+    def disenar(modo, descripcion, al_terminar=None):
+        """Por VOZ («Kira, diséñame una web para mi bar»): abre el ordenador de diseño en ese modo y lo crea."""
+        if modo not in GUIAS:
+            return False
+        sel["modo"] = modo
+        ir("estudio")                                  # el gancho deja la pantalla en ese modo
+        campo_d.text = str(descripcion)[:300]
+        sel["al_terminar"] = al_terminar
+        crear()
+        return True
 
     def guardar(terminado_):
         c, modo = sel["contenido"], sel["modo"]
@@ -736,4 +751,4 @@ def montar_sala_diseno(sm, ctx):
             "volver_cine": volver_cine, "mediateca": mediateca, "proyectos": proyectos,
             "atras": {"estudio": volver_diseno, "mediateca": volver_diseno, "reproductor": volver_cine,
                       "sala_cine": lambda: (cine_hab["hab"].rec.reiniciar(), ir("sala_diseno"))},
-            "diseno": diseno_hab["hab"], "cine": cine_hab["hab"], "reproductor": repro}
+            "diseno": diseno_hab["hab"], "cine": cine_hab["hab"], "reproductor": repro, "disenar": disenar}

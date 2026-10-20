@@ -230,7 +230,18 @@ def construir_interfaz(core, consola=None):
         if not texto or st["ocupado"]:
             return
         campo.text = ""
-        pedido = ik.pedido_mejora(texto)
+        import diseno_kira as dk_
+        import programar_kira as pk_
+        orden = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto  # escrito «Kira, …»
+        prog = pk_.pedido_programa(orden)
+        if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
+            programa_por_voz(prog)
+            return
+        dis = dk_.pedido_diseno(orden)
+        if dis is not None:                             # «diséñame una web para…»: al ordenador de diseño
+            diseno_por_voz(*dis)
+            return
+        pedido = ik.pedido_mejora(orden)
         if pedido is not None:                          # «Kira, mejora…» / «aprende a…»: al flujo de mejoras
             mejora_por_voz(pedido)
             return
@@ -348,26 +359,81 @@ def construir_interfaz(core, consola=None):
         decir(("" if hecho else "[x] ") + frase)
         return True
 
-    # ---------- mejoras pedidas por voz ----------
+    # ---------- mejoras, programas y diseños pedidos por voz ----------
+    def en_equipo():
+        """'local' + 'claude' si van a trabajar juntos (para decirlo); si no, ''."""
+        rep = getattr(core, "reparto", None)
+        try:
+            autor, revisor = rep("codigo") if callable(rep) else (None, None)
+        except Exception:
+            return ""
+        return f"{'yo' if autor == 'local' else 'Claude'} y {'Claude' if revisor == 'claude' else 'yo'}" if revisor else ""
+
     def mejora_por_voz(pedido):
         quien = getattr(core, "cerebro_para_codigo", lambda: None)()
         if quien is None:
-            decir("Para programar mejoras necesito un cerebro de IA: la clave de Claude («config clave: …») o el "
-                  "modelo local. Cuando lo tenga, pídemelo otra vez.")
+            decir("Para programar mejoras necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude "
+                  "(«config clave: …»). Cuando lo tenga, pídemelo otra vez.")
             return
-        if not getattr(ctl.pasarela, "url", "") or not getattr(ctl.pasarela, "token", ""):
-            decir("Para probar mejoras necesito el laboratorio conectado. Enciéndelo en el ordenador (doble clic en "
-                  "«Arrancar laboratorio») y dime «Kira, conéctate al ordenador».")
-            return
-        decir(f"Vale, me pongo a programar: {pedido}. El laboratorio lo probará y te enseño el resultado. "
-              "Para instalarlo tendrás que tocar Aplicar dos veces.")
+        equipo = en_equipo()
+        decir(f"Vale, me pongo a programar: {pedido}. Lo pruebo aquí en el móvil"
+              + (" (y en el ordenador, que está conectado)" if getattr(ctl.pasarela, "url", "") else "")
+              + (". Lo haremos en equipo Claude y yo hasta ponernos de acuerdo" if equipo else "")
+              + ". Para instalarlo tendrás que tocar Aplicar dos veces.")
 
         def al_terminar(r):
             if r.get("aprobable"):
-                voz.hablar("La mejora ha pasado las pruebas del laboratorio. Revísala y toca Aplicar dos veces si te parece bien.")
+                voz.hablar(("Claude y yo estamos de acuerdo. " if r.get("acuerdo") else
+                            "Claude y yo no nos hemos puesto de acuerdo: mira lo que dice cada uno. "
+                            if r.get("acuerdo") is False else "")
+                           + "La mejora ha pasado las pruebas. Revísala y toca Aplicar dos veces si te parece bien.")
             else:
                 voz.hablar("No he conseguido una mejora que pase las pruebas. Te dejo el detalle en la terminal.")
         Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](pedido, al_terminar), 2.5)
+
+    def programa_por_voz(pedido):
+        """Kira escribe el programa (o juego), lo prueba en modo seguro, lo acuerda con Claude y lo deja en el editor.
+        No se instala nada: tú pulsas «Ejecutar» o «Jugar»."""
+        if getattr(core, "cerebro_para_codigo", lambda: None)() is None:
+            decir("Para escribir programas necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude.")
+            return
+        equipo = en_equipo()
+        st["ocupado"] = True
+        modelo.poner_estado("pensando")
+        decir(f"Vale, te escribo un {pedido}. Lo pruebo en modo seguro"
+              + (" y lo repaso con Claude" if equipo else "") + " antes de enseñártelo.")
+
+        def terminado(r):
+            st["ocupado"] = False
+            if isinstance(r, Exception):
+                decir(f"[x] No pude escribir el programa: {r}", hablar=False)
+                return
+            if not r.get("ok"):
+                decir(r["texto"].split("\n")[0], hablar=True)
+                return
+            juego = "juego" in pedido.split(" ", 1)[0]
+            aviso = (("Juego" if juego else "Programa") + " escrito por "
+                     + ({"local": "Kira", "claude": "Claude"}.get(r.get("de"), "Kira"))
+                     + (", acordado con " + ("Claude" if r.get("de") == "local" else "Kira") if r.get("acuerdo") else "")
+                     + f" y probado en modo seguro. Pulsa «{'Jugar' if juego else 'Ejecutar'}».")
+            if "input(" in r["codigo"]:
+                aviso += " Si pide datos, escríbelos en la caja de entrada (separados con ;)."
+            if r.get("acuerdo") is not None:
+                aviso += "\n\n" + r["texto"]
+            codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"] or "", aviso)
+            decir(("Listo, y Claude y yo estamos de acuerdo. " if r.get("acuerdo") else "Listo. ")
+                  + f"Te lo dejo en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
+        en_hilo(lambda: core.programa_acordado(pedido), terminado)
+
+    def diseno_por_voz(tipo, descripcion):
+        nombres = {"web": "la página", "app": "la maqueta", "clip": "el videoclip"}
+        decir(f"Vale, diseño {nombres.get(tipo, 'eso')}: {descripcion}.", hablar=True)
+
+        def hecho(origen):
+            voz.hablar({"acuerdo": "Hecho, y repasado con Claude. Revísalo y guárdalo si te gusta.",
+                        "ia": "Hecho. Revísalo y guárdalo si te gusta."}.get(
+                origen, "Lo he hecho con mis plantillas. Revísalo y guárdalo si te gusta."))
+        Clock.schedule_once(lambda _dt: diseno["disenar"](tipo, descripcion, hecho), 1.2)
 
     # ---------- escucha permanente con «Kira» ----------
     def pintar_escucha(texto=None):
@@ -808,10 +874,11 @@ def construir_interfaz(core, consola=None):
         nombre = getattr(ctl.pasarela, "nombre", "") or url
         enl = getattr(core, "enlace", None)
         esperando = enl is not None and enl.esperando_codigo()
-        conectado = (f"Laboratorio guardado: {nombre}" + (f"  ({url})" if url and nombre != url else "")) if url \
-            else "Todavía no estoy conectada a ningún laboratorio."
-        pasos = ("La pasarela es el laboratorio de tu ordenador: ahí se PRUEBAN las mejoras antes de aplicarlas.\n\n"
-                 "Para conectarme (una sola vez):\n"
+        conectado = (f"Ordenador guardado: {nombre}" + (f"  ({url})" if url and nombre != url else "")) if url \
+            else "No estoy conectada a ningún ordenador (no hace falta)."
+        pasos = ("Ya no necesito el ordenador: pruebo las mejoras aquí, en mi laboratorio del móvil, y tú decides si "
+                 "se instalan. Si conectas el laboratorio del ordenador, las pruebo también allí (más seguro).\n\n"
+                 "Para conectarlo (opcional, una sola vez):\n"
                  "  1. En el ordenador, doble clic en «Arrancar laboratorio» (carpeta kira_laboratorio). Si Windows "
                  "pregunta, pulsa «Permitir».\n"
                  "  2. Aquí pulsa «Conectar con el ordenador» (o dime «Kira, conéctate al ordenador»).\n"
@@ -858,11 +925,14 @@ def construir_interfaz(core, consola=None):
     btn_voz = boton("", lambda: alternar_voz(), GRIS)
     btn_esc_cfg = boton("", lambda: alternar_escucha(), GRIS)
     btn_efe = boton("", lambda: alternar_efectos(), GRIS)
+    btn_equipo = boton("", lambda: alternar_equipo(), GRIS)
 
     def pintar_config(texto=""):
         btn_voz.text = "Kira habla en voz alta: " + ("SÍ" if ajustes.voz_hablar else "NO")
         btn_esc_cfg.text = "Escucha permanente («Kira»): " + ("SÍ" if ajustes.escucha_permanente else "NO")
         btn_efe.text = "Efectos visuales: " + ("SÍ" if ctl.efectos_activos() else "NO (ahorra batería)")
+        aj = getattr(core, "acuerdo", None)
+        btn_equipo.text = "Kira y Claude en equipo: " + ("SÍ" if aj is None or aj.activo else "NO")
         extra = ""
         if not voz.puede_hablar():
             extra += "Voz de salida no disponible aquí. "
@@ -880,6 +950,12 @@ def construir_interfaz(core, consola=None):
         ctl.poner_efectos(not ctl.efectos_activos())
         pintar_config()
 
+    def alternar_equipo():
+        aj = getattr(core, "acuerdo", None)
+        if aj is None:
+            return
+        pintar_config(core.procesar_orden(("desactiva" if aj.activo else "activa") + " el acuerdo con claude"))
+
     def velocidad(delta):
         ajustes.cambiar_velocidad(delta)
         pintar_config(f"Velocidad del texto: {ajustes.velocidad} letras/seg.")
@@ -887,10 +963,10 @@ def construir_interfaz(core, consola=None):
         movil = getattr(core, "movil", None)
         _h, t = movil.hacer({"tipo": "permiso_fondo"}) if movil is not None else (False, nk.Movil.SOLO_MOVIL)
         pintar_config(t)
-    for w in (btn_voz, btn_esc_cfg, btn_efe, boton("Texto más lento", lambda: velocidad(-10)),
+    for w in (btn_voz, btn_esc_cfg, btn_efe, btn_equipo, boton("Texto más lento", lambda: velocidad(-10)),
               boton("Texto más rápido", lambda: velocidad(10)),
               boton("Que abra apps aunque esté en segundo plano", permiso_fondo),
-              boton("Conectar con el laboratorio del ordenador", lambda: ir("pasarela"), VERDE),
+              boton("Laboratorio del ordenador (opcional)", lambda: ir("pasarela"), GRIS),
               boton("Clave de la API", lambda: ir("panel", "ajustes")), msg_cfg,
               Widget()):                                  # hueco flexible: los botones quedan arriba, no abajo
         c_cfg.add_widget(w)

@@ -185,8 +185,9 @@ class Pendiente:
 
     def resumen(self):
         r = self.resultado
+        donde = f" ({r['donde']})" if r.get("donde") else ""
         lineas = [f"Mejora '{self.nombre}'  (id {self.id})",
-                  f"Pruebas del laboratorio: {'OK' if self.aprobable else 'FALLÓ'}"]
+                  f"Pruebas del laboratorio{donde}: {'OK' if self.aprobable else 'FALLÓ'}"]
         for e in r.get("etapas", []):
             lineas.append(f"  - {e.get('nombre')}: {'OK' if e.get('ok') else 'FALLÓ'}  {e.get('detalle', '')}")
         if r.get("error"):

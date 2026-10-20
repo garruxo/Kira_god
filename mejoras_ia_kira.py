@@ -17,6 +17,9 @@ IMPORTS_PROHIBIDOS = {"subprocess", "socket", "ctypes", "shutil", "os", "pickle"
                       "http", "multiprocessing", "sys"}
 LLAMADAS_PROHIBIDAS = {"eval", "exec", "compile", "__import__", "open", "input"}
 
+# lo que se puede importar (el laboratorio del móvil rechaza lo demás: laboratorio_movil_kira.PERMITIDOS)
+MODULOS = "Módulos permitidos: math, random, datetime, time (sin sleep), json, re, collections, itertools, statistics, string. "
+
 API_KIRA = (
     "Para audio, vídeo y archivos la función recibe (texto, kira): kira.medios(tipo=None) -> lista de dicts (titulo, tipo, "
     "estado, ruta); kira.importar(titulo) -> nombre de archivo en la carpeta de trabajo; kira.ffmpeg(entradas, salida, args) "
@@ -41,8 +44,8 @@ SISTEMA_MEJORA = (
     "audio, vídeo y archivos, funcion(texto, kira)->str. " + API_KIRA + " Filtros de ffmpeg habituales: volume, afade, amix, "
     "adelay, pan, atrim, atempo, aecho, bass, treble, loudnorm, scale, crop, trim, setpts, concat, fade. "
     "Si hay que hacer cosas con audio o vídeo, usa SIEMPRE 'kira' y no subprocess. Lanza ValueError con un mensaje claro "
-    "cuando la orden del usuario no se entienda. Solo librería estándar. "
-    "No uses subprocess, socket, eval, exec, os, shutil, open, ni borres archivos, ni leas claves. "
+    "cuando la orden del usuario no se entienda. Solo librería estándar. " + MODULOS +
+    "No uses subprocess, socket, eval, exec, os, shutil, open, sleep, ni borres archivos, ni leas claves. "
     "Código corto y comentado. No escribas nada fuera del formato."
 )
 
@@ -82,9 +85,16 @@ SISTEMA_MEJORA_LOCAL = (
     "NOMBRE: nombre_en_minusculas\n```python\n...código...\n```\n"
     "Reglas:\n1) Define registrar() que devuelve {\"orden en minúsculas\": funcion}.\n"
     "2) La función recibe (texto) o (texto, kira) y devuelve un texto.\n"
-    "3) Solo librería estándar. Prohibido: os, subprocess, shutil, socket, open, eval, exec.\n"
+    "3) " + MODULOS + "Prohibido: os, sys, subprocess, socket, open, eval, exec, sleep.\n"
     "4) " + API_KIRA + "\n" + EJEMPLOS + "\nAhora escribe SOLO el módulo pedido, con el mismo formato."
 )
+
+
+# las reglas, sin el formato de respuesta (para quien REVISA una mejora)
+REGLAS_MODULO = (
+    "debe definir registrar() que devuelva {\"orden en minúsculas\": funcion}; la función recibe (texto) o (texto, kira) "
+    "y devuelve un texto; lanza ValueError si no entiende la orden. " + MODULOS + API_KIRA +
+    " Prohibido: os, sys, subprocess, socket, open, eval, exec, sleep, borrar archivos o leer claves.")
 
 
 def extraer_modulo(texto):
