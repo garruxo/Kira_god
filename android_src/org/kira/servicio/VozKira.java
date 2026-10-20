@@ -2,6 +2,8 @@ package org.kira.servicio;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
@@ -24,49 +26,76 @@ public class VozKira {
     private static float velocidad = 1.05f;
     private static int contador = 0;
 
+    private static volatile boolean pedida = false;
+
+    /** Prepara la voz en el hilo principal de Android (donde debe crearse) y nunca lanza errores hacia fuera. */
     public static synchronized void iniciar(Context ctx) {
-        if (tts != null) {
+        if (tts != null || pedida) {
             return;
         }
+        pedida = true;
         final Context app = ctx.getApplicationContext();
-        tts = new TextToSpeech(app, new TextToSpeech.OnInitListener() {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
-            public void onInit(int estado) {
-                if (estado != TextToSpeech.SUCCESS) {
-                    error = "el motor de voz no arrancó (" + estado + ")";
-                    return;
-                }
-                int r = tts.setLanguage(new Locale("es", "ES"));
-                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    r = tts.setLanguage(new Locale("es"));
-                    if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        error = "no hay voz en español instalada (Ajustes > Texto a voz)";
-                    }
-                }
-                tts.setSpeechRate(velocidad);
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override
-                    public void onStart(String id) {
-                    }
-
-                    @Override
-                    public void onDone(String id) {
-                        fin(id);
-                    }
-
-                    @Override
-                    public void onError(String id) {
-                        fin(id);
-                    }
-
-                    @Override
-                    public void onStop(String id, boolean interrumpido) {
-                        fin(id);
-                    }
-                });
-                lista = true;
+            public void run() {
+                crear(app);
             }
         });
+    }
+
+    private static void crear(Context app) {
+        try {
+            tts = new TextToSpeech(app, new TextToSpeech.OnInitListener() {
+                @Override
+                public void onInit(int estado) {
+                    try {
+                        preparar(estado);
+                    } catch (Throwable t) {
+                        error = "la voz falló al prepararse: " + t;
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            error = "no se pudo crear la voz: " + t;
+            tts = null;
+        }
+    }
+
+    private static void preparar(int estado) {
+        TextToSpeech t = tts;
+        if (estado != TextToSpeech.SUCCESS || t == null) {
+            error = "el motor de voz no arrancó (" + estado + ")";
+            return;
+        }
+        int r = t.setLanguage(new Locale("es", "ES"));
+        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+            r = t.setLanguage(new Locale("es"));
+            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+                error = "no hay voz en español instalada (Ajustes > Texto a voz)";
+            }
+        }
+        t.setSpeechRate(velocidad);
+        t.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String id) {
+            }
+
+            @Override
+            public void onDone(String id) {
+                fin(id);
+            }
+
+            @Override
+            public void onError(String id) {
+                fin(id);
+            }
+
+            @Override
+            public void onStop(String id, boolean interrumpido) {
+                fin(id);
+            }
+        });
+        lista = true;
     }
 
     private static void fin(String id) {
@@ -91,7 +120,12 @@ public class VozKira {
         String id = "kira" + contador;
         ultimo = id;
         acabada = false;
-        int r = tts.speak(texto, encolar ? TextToSpeech.QUEUE_ADD : TextToSpeech.QUEUE_FLUSH, new Bundle(), id);
+        int r;
+        try {
+            r = tts.speak(texto, encolar ? TextToSpeech.QUEUE_ADD : TextToSpeech.QUEUE_FLUSH, new Bundle(), id);
+        } catch (Throwable t) {
+            r = TextToSpeech.ERROR;
+        }
         if (r != TextToSpeech.SUCCESS) {
             acabada = true;
             return false;
@@ -124,6 +158,7 @@ public class VozKira {
         }
         tts = null;
         lista = false;
+        pedida = false;
         acabada = true;
     }
 }

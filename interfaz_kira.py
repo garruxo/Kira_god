@@ -736,7 +736,13 @@ def construir_interfaz(core, consola=None):
             texto += " Estoy cargando mi cerebro: en unos segundos podré charlar contigo."
         if ajustes.escucha_permanente and voz.puede_escuchar():
             texto += " Para hablarme, di «Kira»."
-        decir(texto)
+        cierre = getattr(core, "aviso_cierre", "")
+        if cierre:                                   # la vez anterior se cerró de golpe: lo enseña para arreglarlo
+            burbuja.text = ("La última vez me cerré de golpe. Hazle una captura a esto y mándasela a Claude:\n\n"
+                            + cierre[-900:] + "\n\n" + texto)
+            core.aviso_cierre = ""
+        else:
+            decir(texto)
         if ajustes.escucha_permanente:
             arrancar_escucha()
         else:

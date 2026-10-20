@@ -12,7 +12,49 @@ Cambios respecto a la anterior:
 import os
 import sys
 import threading
+import time
 import traceback
+
+# 0. CAJA NEGRA: si la app se cierra de golpe, queda escrito por qué (y Kira lo enseña al volver a abrir)
+CARPETA_CAJA = os.environ.get("ANDROID_PRIVATE") or os.path.dirname(os.path.abspath(__file__))
+RUTA_CIERRE = os.path.join(CARPETA_CAJA, "kira_cierre.log")      # fallos graves (faulthandler: también los de C)
+RUTA_ERRORES = os.path.join(CARPETA_CAJA, "kira_errores.log")    # errores de Python que se han esquivado
+_caja = None
+try:
+    import faulthandler
+    if os.path.isfile(RUTA_CIERRE) and os.path.getsize(RUTA_CIERRE) > 200_000:
+        os.remove(RUTA_CIERRE)
+    _caja = open(RUTA_CIERRE, "a")
+    _caja.write(f"\n=== arranque {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+    _caja.flush()
+    faulthandler.enable(_caja, all_threads=True)
+except Exception:
+    pass
+
+
+def anotar_error(origen, texto):
+    """Apunta un error en la caja negra (sin que la app se caiga)."""
+    try:
+        if os.path.isfile(RUTA_ERRORES) and os.path.getsize(RUTA_ERRORES) > 200_000:
+            os.remove(RUTA_ERRORES)
+        with open(RUTA_ERRORES, "a", encoding="utf-8") as f:
+            f.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {origen} ===\n{texto}\n")
+    except Exception:
+        pass
+
+
+def ultimo_cierre():
+    """Si la vez anterior la app se cerró de golpe, el motivo (últimas líneas); si no, ''."""
+    try:
+        with open(RUTA_CIERRE, encoding="utf-8", errors="replace") as f:
+            bloques = f.read().split("=== arranque ")
+        anterior = bloques[-2] if len(bloques) >= 2 else ""
+        if "Fatal Python error" in anterior or "Segmentation fault" in anterior or "File " in anterior:
+            return "\n".join(anterior.strip().splitlines()[-12:])
+    except Exception:
+        pass
+    return ""
+
 
 # 1. Cargar el Núcleo Kira God, mostrando el error real si falla
 CORE_ERROR = None
@@ -247,17 +289,51 @@ if KIVY_AVAILABLE:
             self.ocupado = False
             self.submit_btn.text = 'Enviar al Núcleo'
 
+    try:                                       # un error de Python en la pantalla ya no cierra la app
+        from kivy.base import ExceptionHandler, ExceptionManager
+
+        class _Esquivar(ExceptionHandler):
+            vistos = {}
+
+            def handle_exception(self, inst):
+                if isinstance(inst, (KeyboardInterrupt, SystemExit)):
+                    return ExceptionManager.RAISE
+                clave = repr(inst)[:200]
+                n = self.vistos.get(clave, 0)
+                self.vistos[clave] = n + 1
+                if n < 3:                          # cada error, como mucho 3 veces (no llenar el disco)
+                    anotar_error("pantalla", traceback.format_exc())
+                return ExceptionManager.PASS
+        ExceptionManager.add_handler(_Esquivar())
+    except Exception:
+        pass
+
     class KiraApp(App):
         def build(self):
             # Carpeta escribible de la app (en Android el código del APK no se puede modificar)
             os.environ['KIRA_DATA_DIR'] = self.user_data_dir
-            self.kira_god = KiraGodCore()
+            aviso = ultimo_cierre()
+            try:
+                self.kira_god = KiraGodCore()
+            except Exception:
+                anotar_error("núcleo", traceback.format_exc())
+                consola = KiraMainView(nucleo=None)
+                consola.output_label.text += "\n[x] El núcleo de Kira no arrancó:\n" + traceback.format_exc()[-1500:]
+                return consola
+            if aviso:
+                self.kira_god.aviso_cierre = aviso         # la portada lo enseña (y la bitácora lo apunta)
+                try:
+                    self.kira_god.registrar_error("app", "La app se cerró de golpe: " + aviso.splitlines()[-1][:200])
+                except Exception:
+                    pass
             consola = KiraMainView(on_submit_callback=self.kira_god.procesar_orden,
                                    nucleo=self.kira_god)
             try:  # interfaz inmersiva (orbe + menú); la consola de siempre queda dentro como "Consola"
                 from interfaz_kira import construir_interfaz
                 return construir_interfaz(self.kira_god, consola=consola)
             except Exception:
+                anotar_error("interfaz", traceback.format_exc())
+                consola.output_label.text += "\n[x] La interfaz no arrancó (uso la consola):\n" + traceback.format_exc()[-1500:]
                 print("[!] Interfaz inmersiva no disponible, se prueba el panel:\n" + traceback.format_exc())
             try:
                 from panel_kira import construir_panel
