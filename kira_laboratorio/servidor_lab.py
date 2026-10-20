@@ -11,6 +11,8 @@ Uso:
   python servidor_lab.py --host 0.0.0.0           # accesible desde tu WiFi (el token es obligatorio)
 
 Vídeo (motor gráfico real): POST /video, GET /video/estado, GET /video/archivo, POST /audio (ver lab_video.py).
+Conectar sin líos (lab_enlace.py): un faro UDP para que Kira lo encuentre en la WiFi, y POST /emparejar con el código
+de 6 cifras que sale en esta ventana (una sola vez por móvil). GET /hola comprueba el token.
 
 Etapas:
   1. sintaxis      2. revisión de patrones sensibles (avisos para el humano)
@@ -32,6 +34,7 @@ import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import lab_enlace
 import lab_instalar
 import lab_video
 
@@ -43,6 +46,11 @@ IMPORTS_SENSIBLES = {"subprocess", "socket", "shutil", "ctypes", "urllib", "requ
 LLAMADAS_SENSIBLES = {"eval", "exec", "compile", "__import__", "open"}
 
 TRABAJOS = lab_video.Trabajos()
+EMPAREJADOR = None          # lab_enlace.Emparejador: lo crea main() (o una prueba) con el token
+
+
+def _nombre():
+    return EMPAREJADOR.nombre if EMPAREJADOR is not None else lab_enlace.nombre_equipo()
 
 LOADER = (
     "import importlib.util,sys\n"
@@ -152,6 +160,10 @@ class Handler(BaseHTTPRequestHandler):
         ruta, _, consulta = self.path.partition("?")
         if ruta == "/salud":
             return self._json(200, {"ok": True})
+        if ruta == "/hola":                              # ¿este token vale aquí? (Kira lo usa para conectarse sola)
+            if not self._autorizado():
+                return self._json(401, {"ok": False, "error": "token incorrecto"})
+            return self._json(200, {"ok": True, "id": lab_enlace.id_lab(TOKEN), "nombre": _nombre()})
         if ruta in ("/video/estado", "/video/archivo", "/video/capacidad", "/instalar/lista"):
             if not self._autorizado():
                 return self._json(401, {"ok": False, "error": "token incorrecto"})
@@ -189,8 +201,31 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("tamaño no válido")
         return self.rfile.read(largo)
 
+    def _emparejar(self, ruta):
+        """Sin token: enseñar el código en la ventana (/emparejar/pedir) o canjearlo por el token (/emparejar)."""
+        if EMPAREJADOR is None:
+            return self._json(403, {"ok": False, "error": "Este laboratorio no admite emparejar (arráncalo con iniciar_laboratorio.py)."})
+        try:
+            largo = int(self.headers.get("Content-Length", "0") or 0)
+            d = json.loads(self.rfile.read(largo).decode("utf-8")) if 0 < largo <= 2000 else {}
+            d = d if isinstance(d, dict) else {}
+        except Exception:
+            return self._json(400, {"ok": False, "error": "petición mal formada"})
+        quien = (str(d.get("dispositivo", "Kira"))[:40] + " desde " + self.client_address[0]).strip()
+        if ruta == "/emparejar/pedir":
+            if not EMPAREJADOR.mostrar(quien):
+                return self._json(403, {"ok": False, "error": "El emparejamiento está cerrado por demasiados intentos. "
+                                                              "Vuelve a arrancar el laboratorio en el ordenador."})
+            return self._json(200, {"ok": True, "cifras": lab_enlace.CIFRAS, "nombre": _nombre()})
+        ok, r = EMPAREJADOR.probar(d.get("codigo", ""), quien)
+        if not ok:
+            return self._json(403, {"ok": False, "error": r})
+        return self._json(200, {"ok": True, "token": r, "id": lab_enlace.id_lab(TOKEN), "nombre": _nombre()})
+
     def do_POST(self):
         ruta, _, consulta = self.path.partition("?")
+        if ruta in ("/emparejar", "/emparejar/pedir"):
+            return self._emparejar(ruta)
         if ruta not in ("/probar", "/video", "/audio", "/archivo", "/ffmpeg", "/instalar"):
             return self._json(404, {"ok": False, "error": "no encontrado"})
         if not self._autorizado():
@@ -250,17 +285,33 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global EMPAREJADOR
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--permitir-instalar", action="store_true",
                     help="deja que el móvil (con el token y tu confirmación) pida instalar paquetes de la lista blanca con pip")
+    ap.add_argument("--sin-faro", action="store_true", help="no anunciarse en la WiFi (Kira no lo encontrará sola)")
     a = ap.parse_args()
     lab_instalar.HABILITADO = a.permitir_instalar
     if len(TOKEN) < 16:
         sys.exit("Define KIRA_LAB_TOKEN con al menos 16 caracteres antes de arrancar.")
+    EMPAREJADOR = lab_enlace.Emparejador(TOKEN, avisar=lambda t: print(t, flush=True))
+    servidor = ThreadingHTTPServer((a.host, a.port), Handler)
+    if not a.sin_faro:
+        faro = lab_enlace.Faro(a.port, host=a.host)
+        faro.start()
+        faro.listo.wait(2)
+        if faro.error:
+            print(f"[lab] Aviso: {faro.error}. Kira tendrá que buscarlo recorriendo la WiFi (tarda un poco más).")
     print(f"[lab] Escuchando en {a.host}:{a.port}  (Ctrl+C para parar)")
-    ThreadingHTTPServer((a.host, a.port), Handler).serve_forever()
+    if a.host in ("0.0.0.0", ""):
+        ips = lab_enlace.ips_locales()
+        print("[lab] Kira lo encontrará sola en tu WiFi" + (f" (este equipo es {', '.join(ips)})." if ips else "."))
+    elif a.host.startswith("127."):
+        print("[lab] Solo este equipo: el móvil NO lo verá (arráncalo sin --solo-este-equipo para usarlo desde el móvil).")
+    EMPAREJADOR.mostrar()
+    servidor.serve_forever()
 
 
 if __name__ == "__main__":

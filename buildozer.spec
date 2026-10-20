@@ -34,7 +34,7 @@ source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tes
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.14
+version = 2.15
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]
@@ -107,7 +107,7 @@ fullscreen = 0
 
 # (list) Permissions
 # (See https://python-for-android.readthedocs.io/en/latest/buildoptions.html for all the supported syntaxes and properties)
-android.permissions = INTERNET,RECORD_AUDIO,READ_EXTERNAL_STORAGE,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,FOREGROUND_SERVICE_MEDIA_PROJECTION,POST_NOTIFICATIONS,PACKAGE_USAGE_STATS,CAMERA
+android.permissions = INTERNET,RECORD_AUDIO,READ_EXTERNAL_STORAGE,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,FOREGROUND_SERVICE_MEDIA_PROJECTION,POST_NOTIFICATIONS,PACKAGE_USAGE_STATS,CAMERA,SYSTEM_ALERT_WINDOW
 
 # (list) features (adds uses-feature -tags to manifest)
 #android.features = android.hardware.usb.host
@@ -375,7 +375,7 @@ p4a.branch = develop
 
 # (str) extra command line arguments to pass when invoking pythonforandroid.toolchain
 # Declara el servicio de Kira con sus tipos (micrófono y captura de pantalla)
-p4a.extra_args = --extra-manifest-application-xml '<service android:name="org.kira.servicio.ServicioKira" android:exported="false" android:foregroundServiceType="microphone|mediaProjection" />'
+p4a.extra_args = --extra-manifest-application-xml '<service android:name="org.kira.servicio.ServicioKira" android:exported="false" android:foregroundServiceType="microphone|mediaProjection" />' --extra-manifest-xml '<queries><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>'
 
 
 

@@ -28,26 +28,47 @@ class VideoError(RuntimeError):
     pass
 
 
+def _salud(url, timeout=3):
+    try:
+        with urllib.request.urlopen(url + "/salud", timeout=timeout) as r:
+            return json.loads(r.read(200).decode("utf-8")).get("ok") is True
+    except Exception:
+        return False
+
+
+SIN_LAB = "Laboratorio sin configurar: dime «Kira, conéctate al ordenador» (con el laboratorio encendido en el PC)."
+
+
 class ClienteVideo:
     def __init__(self, url=None, token=None):
-        p = pc.PasarelaCliente(url, token)
-        self.url, self.token = p.url, p.token
+        self._p = pc.PasarelaCliente(url, token)      # url y token se releen si cambia pasarela.json
+
+    @property
+    def url(self):
+        return self._p.url
+
+    @property
+    def token(self):
+        return self._p.token
 
     def _req(self, ruta, datos=None, metodo="GET", tipo="application/json", timeout=30):
         if not self.url or not self.token:
-            raise VideoError("Laboratorio sin configurar (falta url o token en pasarela.json).")
-        r = urllib.request.Request(self.url + ruta, data=datos, method=metodo,
-                                   headers={"Content-Type": tipo, "X-Kira-Token": self.token})
-        try:
-            return urllib.request.urlopen(r, timeout=timeout)
-        except urllib.error.HTTPError as e:
+            raise VideoError(SIN_LAB)
+        for intento in (1, 2):
+            r = urllib.request.Request(self.url + ruta, data=datos, method=metodo,
+                                       headers={"Content-Type": tipo, "X-Kira-Token": self.token})
             try:
-                msg = json.loads(e.read(5000).decode("utf-8")).get("error", "")
-            except Exception:
-                msg = ""
-            raise VideoError(f"El laboratorio respondió {e.code}" + (f": {msg}" if msg else "."))
-        except Exception as e:
-            raise VideoError(f"Laboratorio no alcanzable: {e}")
+                return urllib.request.urlopen(r, timeout=timeout)
+            except urllib.error.HTTPError as e:
+                try:
+                    msg = json.loads(e.read(5000).decode("utf-8")).get("error", "")
+                except Exception:
+                    msg = ""
+                raise VideoError(f"El laboratorio respondió {e.code}" + (f": {msg}" if msg else "."))
+            except Exception as e:
+                if intento == 1 and self._p.reubicar():  # ¿el PC cambió de dirección? lo busca y repite
+                    continue
+                raise VideoError(f"Laboratorio no alcanzable: {e}")
 
     def _json(self, ruta, datos=None, metodo="GET", timeout=30):
         cuerpo = json.dumps(datos).encode("utf-8") if datos is not None else None
@@ -83,7 +104,9 @@ class ClienteVideo:
         if largo > 150 * 1024 * 1024:
             raise VideoError("El archivo supera los 150 MB.")
         if not self.url or not self.token:
-            raise VideoError("Laboratorio sin configurar (falta url o token en pasarela.json).")
+            raise VideoError(SIN_LAB)
+        if not _salud(self.url):
+            self._p.reubicar()
         with open(ruta, "rb") as f:
             r = urllib.request.Request(self.url + "/archivo?nombre=" + urllib.parse.quote("a" + ext), data=f, method="POST",
                                        headers={"Content-Type": "application/octet-stream", "Content-Length": str(largo),

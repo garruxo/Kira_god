@@ -40,6 +40,7 @@ def construir_interfaz(core, consola=None):
     import portada_kira
     import inicio_kira as ik
     import menu_kira as mk
+    import navegar_kira as nk
     import panel_kira
     from sala_hacker_kira import montar_sala_hacker
     from sala_diseno_kira import montar_sala_diseno
@@ -252,6 +253,8 @@ def construir_interfaz(core, consola=None):
         if re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura", bajo) and not pedir_permiso_fotos():
             decir("Necesito permiso para ver tus capturas. Concédelo y pídemelo otra vez.")
             return
+        if moverse(texto):                              # «abre la sala hacker», «abre WhatsApp», «atrás»…
+            return
         st["ocupado"] = True
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()
@@ -282,7 +285,62 @@ def construir_interfaz(core, consola=None):
                 decir(texto_r, hablar=(via != "error"), ya_escrito=flujo["hubo"] and via == "charla")
                 if via == "escena" and cerebro.ultima_escena:
                     mostrar_escena(cerebro.ultima_escena, texto_r)
+                enl = getattr(core, "enlace", None)
+                if enl is not None and enl.esperando_codigo():   # te ha pedido el código: contéstale sin «Kira»
+                    escucha.atender(25 + len(texto_r) / 14.0)
+                    if sm.current == "pasarela":
+                        pintar_pasarela()
         en_hilo(lambda: conv.preguntar(texto, al_trozo=trozo), terminado)
+
+    # ---------- moverse por la app y fuera de ella ----------
+    def accion_de(texto):
+        return nk.interpretar(texto, juegos_extra=list(getattr(core, "juegos_modulos", {})))
+
+    def ir_a(accion):
+        """Hace una acción de dentro de Kira (pantalla, juego, atrás). Devuelve la frase que dice Kira."""
+        tipo = accion["tipo"]
+        if tipo == "atras":
+            if sm.current == "inicio":
+                return "Ya estoy en mi botón."
+            tecla(None, 27)
+            return ""
+        if tipo == "juego":
+            if accion["id"].startswith("mejora:"):
+                nombre = accion["id"][7:]
+                clase = getattr(core, "juegos_modulos", {}).get(nombre)
+                if clase is None:
+                    return "Ese juego ya no está."
+                codigo_ui["empezar_juego"]("", volver="juegos", juego=clase())
+                return f"¡A jugar a {nombre}!"
+            import juegos_kira as jk
+            j = jk.buscar(accion["id"])
+            codigo_ui["empezar_juego"](j["codigo"], volver="juegos")
+            return f"¡A jugar a {j['titulo']}!"
+        destino = accion["destino"]
+        if destino.startswith("panel:"):
+            ir("panel", destino.split(":", 1)[1])
+        else:
+            ir(destino)
+        return accion["frase"]
+
+    def moverse(texto):
+        """Si la frase es moverse, lo hace y devuelve True. Si no, False (y sigue la conversación)."""
+        acc = accion_de(texto)
+        if not acc:
+            return False
+        if acc["tipo"] in ("pantalla", "juego", "atras"):
+            frase = ir_a(acc)
+            if frase:
+                decir(frase)
+            return True
+        movil = getattr(core, "movil", None)
+        if movil is None:
+            return False
+        hecho, frase = movil.hacer(acc)
+        if hecho is None:                               # «ve a dormir» no es una app: que conteste Kira
+            return False
+        decir(("" if hecho else "[x] ") + frase)
+        return True
 
     # ---------- mejoras pedidas por voz ----------
     def mejora_por_voz(pedido):
@@ -291,8 +349,9 @@ def construir_interfaz(core, consola=None):
             decir("Para programar mejoras necesito un cerebro de IA: la clave de Claude («config clave: …») o el "
                   "modelo local. Cuando lo tenga, pídemelo otra vez.")
             return
-        if not getattr(ctl.pasarela, "url", ""):
-            decir("Para probar mejoras necesito el laboratorio conectado. Ve a Menú, Más apartados, Pasarela.")
+        if not getattr(ctl.pasarela, "url", "") or not getattr(ctl.pasarela, "token", ""):
+            decir("Para probar mejoras necesito el laboratorio conectado. Enciéndelo en el ordenador (doble clic en "
+                  "«Arrancar laboratorio») y dime «Kira, conéctate al ordenador».")
             return
         decir(f"Vale, me pongo a programar: {pedido}. El laboratorio lo probará y te enseño el resultado. "
               "Para instalarlo tendrás que tocar Aplicar dos veces.")
@@ -341,6 +400,30 @@ def construir_interfaz(core, consola=None):
         que, orden = escucha.oir(texto)
         if que == "atenta":
             voz.hablar("¿Sí? Dime.")
+        elif que == "orden" and accion_de(orden):
+            acc = accion_de(orden)
+            movil = getattr(core, "movil", None)
+            if movil is None:
+                return
+            if acc["tipo"] in ("pantalla", "juego", "atras"):     # algo de Kira: primero vuelve a primer plano
+                hecho, frase = movil.hacer({"tipo": "kira"}, en_fondo=True)
+                if hecho and acc["tipo"] != "atras":
+                    Clock.schedule_once(lambda _dt, a=acc: ir_a(a), 0.6)
+                    frase = acc.get("frase") or "Voy."
+                voz.hablar(frase)
+                return
+            hecho, frase = movil.hacer(acc, en_fondo=True)
+            if hecho is not None:
+                voz.hablar(frase)
+                return
+            try:
+                oido.pausar(True)
+                r, _via = conv.preguntar(orden)
+                voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
+            except Exception as e:
+                voz.hablar(f"No he podido: {e}")
+            finally:
+                oido.pausar(False)
         elif que == "orden":
             try:
                 oido.pausar(True)
@@ -462,6 +545,10 @@ def construir_interfaz(core, consola=None):
 
     def procesar_frase(txt):
         que, orden = escucha.oir(txt)
+        if que == "orden" and accion_de(orden) and not st["ocupado"]:
+            pintar_escucha("«" + orden[:60] + "»")
+            enviar(orden)                              # moverse: va directo, sin volver antes al botón
+            return
         if que != "nada" and sm.current != "inicio":   # te ha oído desde otra pantalla: vuelve a su botón
             ir("inicio")
         if que == "atenta":
@@ -687,20 +774,54 @@ def construir_interfaz(core, consola=None):
     # =================================================================================
     _, c_pas = pantalla("pasarela", "PASARELA")
     sv_pas, txt_pas = texto_largo("")
+    pas_st = {"extra": ""}
+    campo_codigo = entrada("Código de 6 cifras que sale en el ordenador")
+    fila_codigo = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(6))
+    fila_codigo.add_widget(campo_codigo)
 
-    def pintar_pasarela(extra=""):
-        url = getattr(ctl.pasarela, "url", "") or "sin configurar"
-        txt_pas.text = (f"Dirección del laboratorio: {url}\n\n"
-                        "La pasarela es el laboratorio donde se PRUEBAN las mejoras antes de aplicarlas. "
-                        "Corre aparte (PC o Termux): en la carpeta kira_laboratorio ejecuta  python iniciar_laboratorio.py  "
-                        "y copia aquí la dirección y el token.\n" + (f"\n{extra}" if extra else ""))
+    def pintar_pasarela(extra=None):
+        if extra is not None:
+            pas_st["extra"] = extra
+        url = getattr(ctl.pasarela, "url", "")
+        nombre = getattr(ctl.pasarela, "nombre", "") or url
+        enl = getattr(core, "enlace", None)
+        esperando = enl is not None and enl.esperando_codigo()
+        conectado = (f"Laboratorio guardado: {nombre}" + (f"  ({url})" if url and nombre != url else "")) if url \
+            else "Todavía no estoy conectada a ningún laboratorio."
+        pasos = ("La pasarela es el laboratorio de tu ordenador: ahí se PRUEBAN las mejoras antes de aplicarlas.\n\n"
+                 "Para conectarme (una sola vez):\n"
+                 "  1. En el ordenador, doble clic en «Arrancar laboratorio» (carpeta kira_laboratorio). Si Windows "
+                 "pregunta, pulsa «Permitir».\n"
+                 "  2. Aquí pulsa «Conectar con el ordenador» (o dime «Kira, conéctate al ordenador»).\n"
+                 "  3. Dime o escribe el código de 6 cifras que sale en la pantalla del ordenador.\n"
+                 "Después me conecto sola, aunque el ordenador cambie de dirección.")
+        txt_pas.text = conectado + "\n\n" + pasos + (f"\n\n{pas_st['extra']}" if pas_st["extra"] else "")
+        fila_codigo.opacity, fila_codigo.disabled = (1, False) if esperando else (0, True)
+
+    def conectar_pasarela():
+        pintar_pasarela("Buscando el laboratorio en tu WiFi…")
+        en_hilo(core.enlace.conectar, lambda r: pintar_pasarela(f"[x] {r}" if isinstance(r, Exception) else r))
+
+    def enviar_codigo():
+        texto = campo_codigo.text
+        campo_codigo.text = ""
+        pintar_pasarela("Comprobando el código…")
+        en_hilo(lambda: core.enlace.con_codigo(texto) or "[x] Escribe las 6 cifras del código.",
+                lambda r: pintar_pasarela(f"[x] {r}" if isinstance(r, Exception) else r))
+
+    def olvidar_pasarela():
+        pintar_pasarela(core.enlace.olvidar())
 
     def probar_pasarela():
         pintar_pasarela("Probando…")
-        en_hilo(ctl.probar_conexion, lambda r: pintar_pasarela(r["texto"] if isinstance(r, dict) else f"[x] {r}"))
-    for w in (sv_pas, boton("Probar conexión", probar_pasarela, VERDE),
+        en_hilo(lambda: core.enlace.estado()[1], lambda r: pintar_pasarela(f"[x] {r}" if isinstance(r, Exception) else r))
+    campo_codigo.bind(on_text_validate=lambda *_: enviar_codigo())
+    fila_codigo.add_widget(boton("Enviar código", enviar_codigo, VERDE, alto=48, size_hint_x=None, width=dp(130)))
+    for w in (sv_pas, boton("Conectar con el ordenador", conectar_pasarela, VERDE), fila_codigo,
+              boton("Comprobar la conexión", probar_pasarela),
               boton("Pedir una mejora", lambda: ir("panel", "orden")),
-              boton("Configurar dirección y token", lambda: ir("panel", "ajustes"))):
+              boton("Olvidar este laboratorio", olvidar_pasarela, ROJO),
+              boton("Configurar a mano (avanzado)", lambda: ir("panel", "ajustes"))):
         c_pas.add_widget(w)
     ganchos["pasarela"] = pintar_pasarela
 
@@ -737,9 +858,15 @@ def construir_interfaz(core, consola=None):
     def velocidad(delta):
         ajustes.cambiar_velocidad(delta)
         pintar_config(f"Velocidad del texto: {ajustes.velocidad} letras/seg.")
+    def permiso_fondo():
+        movil = getattr(core, "movil", None)
+        _h, t = movil.hacer({"tipo": "permiso_fondo"}) if movil is not None else (False, nk.Movil.SOLO_MOVIL)
+        pintar_config(t)
     for w in (btn_voz, btn_esc_cfg, btn_efe, boton("Texto más lento", lambda: velocidad(-10)),
               boton("Texto más rápido", lambda: velocidad(10)),
-              boton("Clave de la API y laboratorio", lambda: ir("panel", "ajustes"), VERDE), msg_cfg):
+              boton("Que abra apps aunque esté en segundo plano", permiso_fondo),
+              boton("Conectar con el laboratorio del ordenador", lambda: ir("pasarela"), VERDE),
+              boton("Clave de la API", lambda: ir("panel", "ajustes")), msg_cfg):
         c_cfg.add_widget(w)
     ganchos["config"] = pintar_config
 

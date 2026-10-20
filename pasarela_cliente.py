@@ -13,7 +13,10 @@ El laboratorio nunca envía código al móvil: solo devuelve un veredicto.
 Las mejoras se guardan en KIRA_DATA_DIR/modulos (carpeta escribible), nunca sobre el núcleo.
 
 Configuración (KIRA_DATA_DIR/pasarela.json), el token NO va escrito en el código:
-  {"url": "http://192.168.1.50:8765", "token": "TU_TOKEN_LARGO"}
+  {"url": "http://192.168.1.50:8765", "token": "TU_TOKEN_LARGO", "nombre": "PC-DE-CASA", "id": "…"}
+Ya no hace falta escribirla a mano: «Kira, conéctate al ordenador» la rellena sola (enlace_lab_kira.py). Si el
+ordenador cambia de dirección, Kira lo vuelve a buscar en la WiFi y la actualiza (reubicar()).
+La configuración se relee cuando cambia el archivo: todos los clientes ven al momento la conexión nueva.
 """
 import ast
 import difflib
@@ -43,31 +46,121 @@ def _sha(texto):
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
+# ---------- configuración de la pasarela (pasarela.json) ----------
+def ruta_config():
+    return os.path.join(carpeta_datos(), "pasarela.json")
+
+
+def leer_config():
+    try:
+        with open(ruta_config(), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def guardar_config(url, token, **extra):
+    """Guarda la conexión (atómico y, si se puede, solo legible por la app)."""
+    datos = {k: v for k, v in leer_config().items() if k not in ("url", "token")}
+    datos.update({k: v for k, v in extra.items() if v is not None})
+    datos.update(url=str(url or "").rstrip("/"), token=str(token or ""))
+    ruta = ruta_config()
+    tmp = ruta + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(datos, f, ensure_ascii=False)
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, ruta)
+
+
+def olvidar_config():
+    try:
+        os.remove(ruta_config())
+        return True
+    except OSError:
+        return False
+
+
 class PasarelaCliente:
+    """url y token salen de pasarela.json (se releen si el archivo cambia) salvo que se den al crearlo."""
+
     def __init__(self, url=None, token=None):
-        cfg = {}
-        ruta = os.path.join(carpeta_datos(), "pasarela.json")
-        if os.path.exists(ruta):
-            with open(ruta, encoding="utf-8") as f:
-                cfg = json.load(f)
-        self.url = (url or cfg.get("url") or "").rstrip("/")
-        self.token = token or cfg.get("token") or os.environ.get("KIRA_LAB_TOKEN", "")
+        self._url_fija = url.rstrip("/") if url else None
+        self._token_fijo = token or None
+        self._cache = (None, {})
+
+    def _cfg(self):
+        try:
+            marca = os.stat(ruta_config()).st_mtime_ns
+        except OSError:
+            marca = None
+        if marca != self._cache[0]:
+            self._cache = (marca, leer_config() if marca is not None else {})
+        return self._cache[1]
+
+    @property
+    def url(self):
+        if self._url_fija is not None:
+            return self._url_fija
+        return str(self._cfg().get("url") or "").rstrip("/")
+
+    @url.setter
+    def url(self, valor):
+        self._url_fija = str(valor or "").rstrip("/")
+
+    @property
+    def token(self):
+        return self._token_fijo or str(self._cfg().get("token") or "") or os.environ.get("KIRA_LAB_TOKEN", "")
+
+    @token.setter
+    def token(self, valor):
+        self._token_fijo = valor or None
+
+    @property
+    def nombre(self):
+        return str(self._cfg().get("nombre") or "")
+
+    def reubicar(self):
+        """Si el laboratorio no contesta en su dirección de siempre, lo busca en la WiFi con el mismo token y guarda
+        la dirección nueva. True si lo encontró. (No empareja: para eso hace falta el código.)"""
+        if self._url_fija is not None and self._url_fija != str(self._cfg().get("url") or "").rstrip("/"):
+            return False                                  # dirección puesta a mano para este cliente: no se toca
+        token = self.token
+        if not token:
+            return False
+        try:
+            import enlace_lab_kira
+            nuevo = enlace_lab_kira.reubicar(token, evitar=self.url)
+        except Exception:
+            return False
+        if not nuevo:
+            return False
+        if self._url_fija is not None:
+            self._url_fija = nuevo["url"]
+        guardar_config(nuevo["url"], token, nombre=nuevo.get("nombre"), id=nuevo.get("id"))
+        return True
 
     def probar(self, nombre, codigo, timeout=90):
         """Envía el código al laboratorio. Devuelve siempre un dict con 'ok'."""
         if not self.url or not self.token:
-            return {"ok": False, "error": "Pasarela sin configurar (falta url o token)."}
+            return {"ok": False, "error": "Pasarela sin configurar: dime «Kira, conéctate al ordenador»."}
         datos = json.dumps({"nombre": nombre, "codigo": codigo}).encode("utf-8")
-        req = urllib.request.Request(
-            self.url + "/probar", data=datos, method="POST",
-            headers={"Content-Type": "application/json", "X-Kira-Token": self.token})
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read(1_000_000).decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            return {"ok": False, "error": f"El laboratorio respondió {e.code}."}
-        except Exception as e:
-            return {"ok": False, "error": f"Laboratorio no alcanzable: {e}"}
+        for intento in (1, 2):
+            req = urllib.request.Request(
+                self.url + "/probar", data=datos, method="POST",
+                headers={"Content-Type": "application/json", "X-Kira-Token": self.token})
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read(1_000_000).decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                return {"ok": False, "error": f"El laboratorio respondió {e.code}."}
+            except Exception as e:
+                if intento == 1 and self.reubicar():      # ¿cambió de dirección? lo busca y lo intenta otra vez
+                    continue
+                return {"ok": False, "error": f"Laboratorio no alcanzable: {e}"}
 
 
 class Pendiente:

@@ -93,6 +93,11 @@ class Escucha:
         self.borrador = []
         self.atenta_hasta = 0.0
 
+    def atender(self, segundos):
+        """Kira acaba de preguntarte algo (por ejemplo el código del laboratorio): durante 'segundos' tu respuesta
+        vale sin decir «Kira» otra vez."""
+        self.atenta_hasta = max(self.atenta_hasta, self._reloj() + max(0.0, float(segundos)))
+
     def oir(self, frase):
         """Una frase que llega del micrófono. Devuelve ('nada', None) | ('atenta', None) | ('orden', texto)."""
         frase = re.sub(r"\s+", " ", str(frase or "")).strip()[:500]

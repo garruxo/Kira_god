@@ -102,7 +102,7 @@ def estado(cap, hechos):
         r["faltan"] = ["ffmpeg (aquí o en el laboratorio del PC)"]
         r["plan"] = ["Necesita ffmpeg y no hay ninguno disponible."]
         if not hechos.get("lab"):
-            r["plan"].append("1. En tu PC: arranca servidor_lab.py (y configura pasarela.json en el móvil).")
+            r["plan"].append("1. En tu PC: doble clic en «Arrancar laboratorio» (carpeta kira_laboratorio) y dile a Kira «conéctate al ordenador».")
         if hechos.get("lab_instalar"):
             r["plan"].append("2. Desde el Taller puedes pedir que el PC instale imageio-ffmpeg (te pido confirmación).")
         else:

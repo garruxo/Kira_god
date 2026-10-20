@@ -210,6 +210,33 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Kira se mueve y se conecta sola al laboratorio (nuevo, v2.15)
+- **Moverse por la app** (`navegar_kira.py`): «Kira, abre la sala hacker», «ve a los juegos», «llévame al editor»,
+  «enséñame mis notas», «juega a la serpiente», «atrás», «ve al menú». Por voz funciona desde cualquier pantalla (ya
+  no vuelve antes al botón). Antes estas frases llegaban a su IA, que contestaba que no podía moverse.
+- **Fuera de la app**: «abre WhatsApp» (cualquier app instalada, por su nombre aunque se oiga mal), «ve al inicio del
+  móvil» / «minimízate», «abre los ajustes del wifi / bluetooth / batería…», «busca en internet…», «abre youtube.com»,
+  «marca el 600 123 456» (abre el teléfono con el número; **no llama sola**), «vuelve» (desde otra app). Por nombre no
+  llama: tendría que leer tus contactos y no lo hace.
+- Desde **otra app** (con «Siempre activa»), Android solo deja abrir cosas con el permiso **«Mostrar sobre otras apps»**:
+  «Kira, permiso para abrir apps» o Configuración › «Que abra apps aunque esté en segundo plano». Sin él, lo dice.
+- Honesto: **no pulsa botones dentro de otras apps** (haría falta el permiso de accesibilidad, que lo ve todo). Abrir
+  apps desde segundo plano depende de la versión de Android: no está probado en tu móvil.
+- **Pasarela sin líos** (`enlace_lab_kira.py` + `kira_laboratorio/lab_enlace.py`): ya no hay que copiar la IP ni el token.
+  1. En el PC: doble clic en `kira_laboratorio/Arrancar laboratorio.bat` (Windows; si pregunta el cortafuegos, «Permitir»).
+     `Arrancar con Windows.bat` hace que arranque solo al encender el PC.
+  2. En el móvil: «Kira, conéctate al ordenador». Kira lo encuentra en la WiFi (el laboratorio tiene un «faro» UDP en el
+     puerto 8766; si el router lo bloquea, recorre la red).
+  3. Le dices el código de 6 cifras que sale en la ventana del PC (de palabra o escrito). Kira guarda la conexión.
+  Después se conecta sola y, si el PC cambia de dirección, lo vuelve a encontrar con el mismo token cuando lo necesita.
+  Seguridad: el faro nunca da el token; el código caduca a los 10 min, 5 intentos por código y, tras 3 códigos
+  fallados, se cierra hasta reiniciar el laboratorio. «Kira, desconéctate del laboratorio» lo olvida; borrar
+  `token_lab.txt` en el PC echa a todos los móviles.
+- Pruebas: `tests/test_navegar.py`, `tests/test_enlace.py` (laboratorio real en la máquina, faro, código, cambio de dirección).
+- El APK lleva ahora `<queries>` (para ver las apps instaladas) y el permiso `SYSTEM_ALERT_WINDOW`; la compilación lo
+  comprueba en el manifiesto. Como cambió código del laboratorio, vuelve a sellarlo (`python kira_master.py` →
+  `sellar SELLAR NUCLEO`).
+
 ## Ingeniería informática avanzada (nuevo, v2.14)
 - `recetas_ingenieria_kira.py`: **57 recetas** de algoritmos y programación avanzada, cada una un módulo completo de Kira
   que se prueba solo. Áreas: estructuras de datos (Union-Find, trie, montículo, caché LRU, Fenwick, árbol de segmentos,

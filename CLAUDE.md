@@ -46,6 +46,14 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - «estudia ingeniería» guarda las fichas en el baúl sin internet (y «aprende sola» lo hace la primera vez); Kira las responde sola;
   - nivel «Ingeniería» en la terminal y en los ejemplos del editor; «recetas de ingeniería» / «recetas de grafos»; «abre la receta X» la abre con sus pruebas;
   - la búsqueda de recetas ignora palabras vacías y, en el baúl, a igualdad de puntos gana el recuerdo cuyo tema nombra lo preguntado.
+- **Hecho en la v2.15 (moverse y pasarela sin líos):**
+  - `navegar_kira.py`: pantallas por voz/texto («abre la sala hacker», «juega a la serpiente», «atrás») y fuera de la app (abrir apps por nombre, inicio del móvil, ajustes, web, marcar sin llamar). La interfaz lo intercepta antes de la IA; el núcleo hace lo de fuera por consola;
+  - desde segundo plano solo con el permiso «Mostrar sobre otras apps» (`SYSTEM_ALERT_WINDOW`); `<queries>` del lanzador en `p4a.extra_args` (`--extra-manifest-xml`);
+  - `enlace_lab_kira.py` (móvil) + `kira_laboratorio/lab_enlace.py` (PC): faro UDP 8766, código de 6 cifras con límites, `/hola`, `/emparejar`, `/emparejar/pedir`; `PasarelaCliente` relee `pasarela.json` y `reubicar()` busca el PC si cambia de IP;
+  - `iniciar_laboratorio.py` escucha por la WiFi por defecto; `Arrancar laboratorio.bat` y `Arrancar con Windows.bat` (CRLF, `.gitattributes`);
+  - pruebas: `tests/test_navegar.py`, `tests/test_enlace.py`. Se cambió código del laboratorio: hay que volver a sellar.
 - **Pendiente:**
+  - nada de lo de moverse fuera de la app ni el faro se ha probado en el móvil real ni en la WiFi de casa;
+  - pulsar botones dentro de otras apps (necesitaría servicio de accesibilidad: pedir permiso al dueño antes);
   - motor local para generar imágenes (stable-diffusion.cpp), siendo honesto sobre lo lento que es en un móvil;
   - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real.

@@ -69,6 +69,10 @@ class KiraGodCore:
         import vista_kira                        # ver la pantalla (con tu permiso) y estar siempre activa
         self.vista = vista_kira.Vista(self.dir, vista_kira.java_android())
         self.en_segundo_plano = False
+        import navegar_kira                      # abrir otras apps, ajustes, web… (Intents; clases en este hilo)
+        self.movil = navegar_kira.Movil(navegar_kira.java_movil())
+        import enlace_lab_kira                   # conectarse sola al laboratorio del PC (faro + código, una vez)
+        self.enlace = enlace_lab_kira.Enlace()
         import camara_kira                       # mirar con la cámara (solo con Kira abierta)
         self.camara = camara_kira.Camara(self.dir, camara_kira.java_camara())
         self.camara.primer_plano = lambda: not self.en_segundo_plano
@@ -336,6 +340,9 @@ class KiraGodCore:
         system = ("Eres Kira, la asistente de esta app. Responde en español, en 1 a 3 frases cortas, sin markdown ni listas, "
                   "porque tu respuesta se lee en voz alta. No tienes acceso a internet ni a los archivos del usuario y no "
                   "puedes cambiar tu propio código: si lo pide, dile que use 'mejorar' en la Sala Hacker. "
+                  "SÍ puedes moverte por la app y abrir otras apps, pero lo hace la app al oír órdenes como «Kira, abre la "
+                  "sala hacker», «ve a los juegos», «abre WhatsApp», «ajustes del wifi» o «conéctate al ordenador»: si te "
+                  "lo pide con otras palabras, dile cómo pedirlo así, nunca que no puedes. "
                   "No afirmes haber hecho acciones que no has hecho.")
         ctx = self._contexto_recuerdos(texto)
         if ctx:
@@ -536,6 +543,41 @@ class KiraGodCore:
                 return f"[x] {e}"
         return (f"En tu pantalla pone:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}\n\n"
                 "Puedes decir «explícame lo leído», «guarda lo leído» o «abre lo leído en el editor».")
+
+    # ---------- laboratorio: conectarse sola ----------
+    @staticmethod
+    def _es_orden_laboratorio(command):
+        import enlace_lab_kira as el
+        t = command.strip()
+        return bool(el.CONECTAR.match(t) or el.DESCONECTAR.match(t) or el.ESTADO.match(t))
+
+    def _orden_laboratorio(self, command):
+        import enlace_lab_kira as el
+        t = command.strip()
+        try:
+            if el.DESCONECTAR.match(t):
+                return self.enlace.olvidar()
+            if el.ESTADO.match(t):
+                return self.enlace.estado()[1]
+            return self.enlace.conectar()
+        except Exception as e:
+            self.registrar_error("laboratorio", f"No pude conectar con el laboratorio: {e}")
+            return f"[x] No pude conectar con el laboratorio: {e}"
+
+    def _orden_fuera(self, command):
+        """Abrir cosas FUERA de Kira (otra app, ajustes del móvil, una web, el teléfono). None si no es eso.
+        Moverse por las pantallas de Kira lo hace la interfaz (interfaz_kira) antes de llegar aquí."""
+        movil = getattr(self, "movil", None)
+        if movil is None:
+            return None
+        import navegar_kira as nk
+        acc = nk.interpretar(command, juegos_extra=list(self.juegos_modulos))
+        if not acc:
+            return None
+        hecho, texto = movil.hacer(acc, en_fondo=self.en_segundo_plano)
+        if hecho is None:
+            return None
+        return ("[OK] " if hecho else "[x] ") + texto
 
     def _orden_recetas(self, cmd_lower):
         import saber_mejoras_kira as sm_
@@ -803,6 +845,13 @@ class KiraGodCore:
             logger.info("Clave de API actualizada (valor no registrado).")
             return "[OK] Clave guardada. Ya puedes usar: mejorar <lo que quieres>"
 
+        # el código del laboratorio (si Kira lo está esperando) no pasa por el búfer ni por el log
+        enlace = getattr(self, "enlace", None)
+        if enlace is not None and enlace.esperando_codigo():
+            r = enlace.con_codigo(command)
+            if r is not None:
+                return r
+
         self.registrar_buffer_volatil(command)
 
         # Bitácora: pasos que recuerda, diagnóstico de fallos, notas
@@ -915,6 +964,8 @@ class KiraGodCore:
             return self._orden_vista(cmd_lower)
         elif cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas") or cmd_lower.startswith(("receta ", "recetas ", "abre la receta ")):
             return self._orden_recetas(cmd_lower)
+        elif self._es_orden_laboratorio(command):
+            return self._orden_laboratorio(command)
         elif cmd_lower in ("avisos", "mis avisos"):
             pend = self.avisos.pendientes()
             if not pend:
@@ -937,6 +988,9 @@ class KiraGodCore:
             return f"[OK] {n} comando(s) de módulos cargados.{juegos}{fallos}"
         else:
             r = self._comando_modulo(cmd_lower, command)
+            if r is not None:
+                return r
+            r = self._orden_fuera(command)                # abrir otra app, ajustes, web, marcar…
             if r is not None:
                 return r
             logger.info(f"Orden general procesada: {command}")

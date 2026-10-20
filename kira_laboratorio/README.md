@@ -1,8 +1,10 @@
 # kira_laboratorio (PC o Termux; NO va en el APK)
 
 1. `python kira_diagnostico.py` — comprobaciones reales (código de salida 0 = todo bien).
-2. `python iniciar_laboratorio.py` — arranca la pasarela con un token aleatorio (se guarda en `token_lab.txt`);
-   copia ese token en el panel de Kira (`config pasarela`).
+2. **Windows: doble clic en `Arrancar laboratorio.bat`** (o `python iniciar_laboratorio.py`). Escucha por la WiFi y
+   enseña un código de 6 cifras. En el móvil: «Kira, conéctate al ordenador» y el código. Ya no hay que copiar el token
+   (`token_lab.txt`): Kira lo recibe al emparejarse. `Arrancar con Windows.bat` lo deja arrancando solo al encender.
+   `--solo-este-equipo` para que nadie más lo vea; `--sin-windows` quita el arranque automático.
 3. `python kira_master.py` — consola del laboratorio (`ayuda`). Atajo: `python kira_cli.py <orden>`.
 4. Tras revisar el código, sella el núcleo con la orden `sellar SELLAR NUCLEO`; `verificar` detecta cambios.
 

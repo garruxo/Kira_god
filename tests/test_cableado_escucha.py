@@ -107,7 +107,7 @@ core.cerebro_para_codigo = lambda: "claude"
 ctl = sm.control; ctl.pasarela.url = ""
 MICRO.cola.append("Kira, aprende a convertir euros a dólares")
 ok(correr(3, lambda: any("laboratorio conectado" in d for d in MICRO.dichos)), "sin laboratorio: lo dice claro")
-ctl.pasarela.url = "http://127.0.0.1:8765"
+ctl.pasarela.url = "http://127.0.0.1:8765"; ctl.pasarela.token = "token-de-prueba-largo-123"   # conectado (url y token)
 pedidos, aplicadas = [], []
 class Pend:
     nombre = "euros_dolares"; resultado = {"avisos": []}

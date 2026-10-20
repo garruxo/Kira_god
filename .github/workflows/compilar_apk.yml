@@ -133,6 +133,18 @@ jobs:
           TAM=$(du -h "$APK" | cut -f1)
           echo "::notice title=Contenido del APK::Tamaño $TAM. Librerías: $LIBS. Clases Java: $DEX"
           echo "$LIBS" | grep -q kira_cerebro || echo "::warning title=Falta el cerebro::El APK no lleva libkira_cerebro*.so"
+          # el manifiesto: servicio «siempre activa», lista de apps (para «abre WhatsApp») y permiso de segundo plano
+          AAPT=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
+          if [ -n "$AAPT" ]; then
+            MAN=$("$AAPT" dump xmltree "$APK" AndroidManifest.xml 2>/dev/null || true)
+            QUE=""
+            echo "$MAN" | grep -q "ServicioKira" && QUE="$QUE servicio" || echo "::warning title=Manifiesto::Falta el servicio ServicioKira"
+            echo "$MAN" | grep -q "E: queries" && QUE="$QUE lista-de-apps" || echo "::warning title=Manifiesto::Falta <queries>: Kira no podrá ver las apps instaladas"
+            echo "$MAN" | grep -q "SYSTEM_ALERT_WINDOW" && QUE="$QUE abrir-desde-fondo" || echo "::warning title=Manifiesto::Falta el permiso SYSTEM_ALERT_WINDOW"
+            echo "::notice title=Manifiesto del APK::Lleva:$QUE"
+          else
+            echo "::warning title=Manifiesto::No encuentro aapt para revisar el manifiesto"
+          fi
 
       - name: Guardar el APK como artefacto
         uses: actions/upload-artifact@v4
