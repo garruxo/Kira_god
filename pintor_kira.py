@@ -39,7 +39,10 @@ MODELOS = {
     "realista": {"nombre": "pincel realista (SD-Turbo, 4 pasos)", "archivo": "tiny-sd-turbo_q8_0.gguf",
                  "bytes": 1_838_924_448, "mb": 1839, "pasos": 4, "cfg": 1.0, "metodo": "euler_a", "ram_mb": 2600,
                  "url": "https://huggingface.co/akleine/tiny-sd-turbo_q8_0/resolve/main/tiny-sd-turbo_q8_0.gguf",
-                 "sha256": "e852d17c483f1ce990e928344added502e4469e8114399ca3b363e708bdd8239"},
+                 "sha256": "e852d17c483f1ce990e928344added502e4469e8114399ca3b363e708bdd8239",
+                 # este modelo trae solo el «revelador» pequeño (TAESD): el motor lo necesita aparte (10 MB)
+                 "taesd": {"nombre": "revelador TAESD", "archivo": "taesd.safetensors", "bytes": None,
+                           "url": "https://huggingface.co/madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors"}},
 }
 AMPLIADOR = {"nombre": "ampliador ×4 (Real-ESRGAN)", "archivo": "RealESRGAN_x4plus.pth", "bytes": None, "mb": 64,
              "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"}
@@ -326,10 +329,14 @@ class Pintor:
     def ruta_modelo(self, id_=None):
         return os.path.join(self.carpeta_modelos, MODELOS[id_ or self.modelo]["archivo"])
 
+    def ruta_taesd(self, id_=None):
+        m = MODELOS[id_ or self.modelo]
+        return os.path.join(self.carpeta_modelos, m["taesd"]["archivo"]) if m.get("taesd") else None
+
     def instalado(self, id_=None):
         m = MODELOS[id_ or self.modelo]
-        r = self.ruta_modelo(id_)
-        return os.path.isfile(r) and os.path.getsize(r) == m["bytes"]
+        r, t = self.ruta_modelo(id_), self.ruta_taesd(id_)
+        return os.path.isfile(r) and os.path.getsize(r) == m["bytes"] and (t is None or os.path.isfile(t))
 
     def instalados(self):
         return [k for k in MODELOS if self.instalado(k)]
@@ -362,6 +369,9 @@ class Pintor:
         try:
             ruta = dsc.bajar(m["url"], final, m["bytes"], m["nombre"], abrir=self._abrir, progreso=prog,
                              cancelado=self._cancelar.is_set)
+            if m.get("taesd"):                              # su revelador pequeño (unos MB)
+                dsc.bajar(m["taesd"]["url"], self.ruta_taesd(id_), m["taesd"]["bytes"], m["taesd"]["nombre"],
+                          abrir=self._abrir, cancelado=self._cancelar.is_set)
         except dsc.DescargaError as e:
             self.estado, self.mensaje = "listo", str(e)
             raise PintorError(str(e))
@@ -380,7 +390,8 @@ class Pintor:
 
     def borrar(self, id_):
         final = self.ruta_ampliador() if id_ == "ampliador" else self.ruta_modelo(id_)
-        for x in (final, final + ".parte"):
+        extra = [self.ruta_taesd(id_)] if id_ != "ampliador" and self.ruta_taesd(id_) else []
+        for x in [final, final + ".parte"] + extra:
             if os.path.isfile(x):
                 os.remove(x)
 
@@ -394,6 +405,8 @@ class Pintor:
         args = [binario, "-m", self.ruta_modelo(id_), "-p", prompt, "-W", str(int(ancho)), "-H", str(int(alto)),
                 "--steps", str(m["pasos"]), "--cfg-scale", str(m["cfg"]), "--sampling-method", m["metodo"],
                 "-s", str(int(semilla)), "-t", str(self.hilos), "-o", salida, "--mmap", "--vae-tiling"]
+        if self.ruta_taesd(id_):
+            args += ["--taesd", self.ruta_taesd(id_)]
         if negativo and m["cfg"] > 1.0:                    # con cfg 1 el negativo no hace nada: no se gasta
             args += ["-n", negativo]
         if vista and m["pasos"] > 1:

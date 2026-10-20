@@ -106,6 +106,8 @@ except pk.PintorError as e: ok("descárgalo" in str(e), "sin pincel lo dice: " +
 os.makedirs(pin.carpeta_modelos, exist_ok=True)
 for k, m in pk.MODELOS.items():                         # pinceles «descargados» (archivos dispersos del tamaño exacto)
     with open(pin.ruta_modelo(k), "wb") as f: f.truncate(m["bytes"])
+ok(not pin.instalado("realista"), "el realista necesita también su revelador (TAESD)")
+open(pin.ruta_taesd("realista"), "wb").write(b"t" * 1000)
 ok(pin.instalados() == ["rapido", "realista"], "pinceles listos")
 progresos = []
 r = pin.pintar("a lighthouse, realistic photo", "realista", "vertical", semilla=1234,
@@ -115,6 +117,7 @@ ok(os.path.join(BIN, "libkira_pintor_dp.so") in pin.binario_malo, "aparta el mot
 args = open(os.path.join(BIN, "ultimos_args.txt")).read().split("\n")
 ok(args[args.index("-W") + 1] == "448" and args[args.index("-H") + 1] == "640" and args[args.index("--steps") + 1] == "4",
    "formato vertical y 4 pasos (realista)")
+ok(args[args.index("--taesd") + 1].endswith("taesd.safetensors"), "el realista lleva su revelador")
 ok("--mmap" in args and "--preview" in args and args[args.index("-s") + 1] == "1234" and "-n" not in args,
    "memoria mapeada, vista previa y semilla (sin negativo con cfg 1)")
 fr = [f for f, _ in progresos]

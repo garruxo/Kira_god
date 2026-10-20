@@ -258,7 +258,7 @@ def montar_pintor(sm, p):
             descargar("ampliador")
             return
         ruta = st["ruta"]
-        st.update(ocupado=True, progreso=0.0, texto="Ampliando ×4… (en el móvil tarda)")
+        st.update(ocupado=True, progreso=0.0, texto="Ampliando ×4… es lento: en el móvil puede tardar 10 minutos o más.")
         refrescar()
 
         def fin(r):

@@ -367,6 +367,7 @@ class Internet:
         self.ultimos, self.consulta, self.tipo = [], "", "web"
         self.pagina = None                                   # la última página leída
         self.avisos = []
+        self._ultima_duck = -10.0
 
     # ---------- red ----------
     def _pedir(self, url, datos=None, cabeceras=None, maximo=MAX_BYTES, timeout=20):
@@ -412,6 +413,10 @@ class Internet:
 
     # ---------- buscadores ----------
     def duck(self, consulta, n=8):
+        espera = 1.2 - (self._reloj() - self._ultima_duck)  # sin prisas: muchas seguidas y DuckDuckGo frena
+        if espera > 0:
+            time.sleep(espera)
+        self._ultima_duck = self._reloj()
         q = urllib.parse.urlencode({"q": consulta, "kl": "es-es"})
         for url in ("https://html.duckduckgo.com/html/?" + q, "https://lite.duckduckgo.com/lite/?" + q):
             try:
@@ -480,8 +485,8 @@ class Internet:
             res += intentar(self.github, consulta, 3)
             res += intentar(self.duck, consulta + " ejemplo código", 4)
         elif tipo == "docs":
-            res += intentar(self.duck, consulta + " filetype:pdf", 5)
-            res += intentar(self.duck, consulta + " apuntes manual", 4)
+            docs = intentar(self.duck, consulta + " pdf apuntes", n)
+            res += sorted(docs, key=lambda r: not r["url"].lower().split("?")[0].endswith(".pdf"))  # PDF primero
             res += intentar(self.wikipedia, consulta, 1)
         else:
             web = intentar(self.duck, consulta, n)
@@ -526,7 +531,13 @@ class Internet:
             raise InternetError("Esa dirección no es una página web.")
         gh = self._github(url)
         destino, cab = gh if gh else (url, None)
-        crudo, tipo, final = self._pedir(destino, cabeceras=cab)
+        try:
+            crudo, tipo, final = self._pedir(destino, cabeceras=cab)
+        except InternetError:
+            if not gh:
+                raise
+            gh, destino = None, url                         # sin README: la página normal del repositorio
+            crudo, tipo, final = self._pedir(url)
         ext = os.path.splitext(urllib.parse.urlsplit(final).path)[1].lower()
         if "pdf" in tipo or crudo[:5] == b"%PDF-":
             texto = pdf_a_texto(crudo)
