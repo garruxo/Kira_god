@@ -287,6 +287,36 @@ class PanelControl:
                     "texto": est["ultimo"] + f"\n\nNo se consiguió tras {r['intentos']} intentos." +
                     (f"\n\n{hist}" if hist else "")}
 
+    def probar_codigo(self, codigo, nombre="", pedido="") -> dict:
+        """«Kira, implementa este código»: si ya es un módulo de Kira (define registrar()), se prueba TAL CUAL en el
+        laboratorio (del móvil, y del PC si está) y queda pendiente de tus dos toques. Si es un programa normal, Kira
+        lo convierte en una mejora (con su cerebro o Claude) y lo prueba como cualquier mejora."""
+        import re as _re
+        codigo = str(codigo or "").strip("\n") + "\n"
+        if len(codigo.strip()) < 10:
+            return {"ok": False, "aprobable": False, "intentos": 0,
+                    "texto": "[x] No veo ningún código: ábrelo en el editor (o léelo de una captura) y pídemelo otra vez."}
+        if "def registrar" in codigo:
+            nombre = _re.sub(r"[^a-z0-9_]+", "_", (nombre or "").lower()).strip("_")[:31] or "mejora_del_editor"
+            if not nombre[0].isalpha():
+                nombre = "m_" + nombre[:29]
+            with self._lock:
+                self.pendiente = None
+                pend, err = self.promotor.preparar(nombre, codigo)
+                if err:
+                    return {"ok": False, "aprobable": False, "intentos": 1, "texto": "[x] " + err}
+                if pend.aprobable:
+                    self.pendiente, self.pedido_actual = pend, pedido or f"el código «{nombre}»"
+                    return {"ok": True, "aprobable": True, "intentos": 1, "texto": pend.resumen(), "nombre": pend.nombre,
+                            "avisos": list(pend.resultado.get("avisos", []))}
+                motivo = self._motivo(pend)
+            if not (callable(getattr(self.core, "cerebro_para_codigo", None)) and self.core.cerebro_para_codigo()):
+                return {"ok": False, "aprobable": False, "intentos": 1,
+                        "texto": pend.resumen() + "\n\nNo pasa las pruebas y no tengo cerebro para arreglarlo."}
+            pedido = (pedido or "Haz que este módulo funcione") + f". El intento anterior falló: {motivo}"
+        return self.enviar_orden((pedido or "Convierte este código en una mejora de Kira (una orden nueva) que haga lo "
+                                  "mismo") + ":\n```python\n" + codigo[:6000] + "```")
+
     def aplicar(self, confirmado=False) -> dict:
         """Solo desde un botón, después de que la persona confirme. Sin confirmado=True no hace nada."""
         if confirmado is not True:

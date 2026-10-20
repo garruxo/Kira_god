@@ -307,7 +307,7 @@ def montar_sala_hacker(sm, ctx):
         confirmacion["reloj"] = None
         btn_aplicar.text = "Aplicar"
 
-    def enviar_mejora(al_terminar=None):
+    def enviar_mejora(al_terminar=None, codigo=None):
         pedido = ik.limpiar_entrada(campo_mej.text)
         if not pedido or btn_env.disabled:
             return
@@ -327,7 +327,10 @@ def montar_sala_hacker(sm, ctx):
             decision(bool(r.get("aprobable")))
             if al_terminar is not None:
                 al_terminar(r)
-        en_hilo(lambda: ctl.enviar_orden(completo), terminado)
+        if codigo is not None:
+            en_hilo(lambda: ctl.probar_codigo(codigo, pedido=pedido), terminado)
+        else:
+            en_hilo(lambda: ctl.enviar_orden(completo), terminado)
 
     def aplicar():
         pend = ctl.pendiente
@@ -372,14 +375,14 @@ def montar_sala_hacker(sm, ctx):
         estado["modo_siguiente"] = "mejorar"
         ir("terminal")
 
-    def pedir_mejora(texto, al_terminar=None):
+    def pedir_mejora(texto, al_terminar=None, codigo=None):
         """Por VOZ: abre la terminal en MEJORAR, escribe el pedido y lo envía al laboratorio. Aplicar sigue
-        necesitando tus dos toques: la voz puede pedir, pero no aprobar."""
+        necesitando tus dos toques: la voz puede pedir, pero no aprobar. codigo: «implementa este código»."""
         elegir("Kira")
         campo_mej.text = str(texto)
         estado["modo_siguiente"] = "mejorar"
         ir("terminal")
-        enviar_mejora(al_terminar)
+        enviar_mejora(al_terminar, codigo)
 
     # =================================================================================
     #  BIBLIOTECA

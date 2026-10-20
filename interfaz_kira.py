@@ -15,6 +15,7 @@ import datetime
 import os
 import re
 import threading
+import time
 
 
 def construir_interfaz(core, consola=None):
@@ -198,12 +199,70 @@ def construir_interfaz(core, consola=None):
     def estado_base():
         return "escuchando" if st["esc_reloj"] is not None else "reposo"
 
+    # ---------- bocadillo: Kira contesta en la pantalla en la que estés (sin llevarte a su botón) ----------
+    boc = {"w": None, "hasta": 0.0, "reloj": None, "visible": False}
+
+    def ocultar_bocadillo(*_):
+        w = boc["w"]
+        if boc["reloj"] is not None:
+            boc["reloj"].cancel()
+            boc["reloj"] = None
+        if w is not None and boc["visible"]:
+            boc["visible"] = False
+            try:
+                Window.remove_widget(w)
+            except Exception:
+                pass
+
+    def bocadillo(texto, segundos=None):
+        """Enseña lo que dice Kira flotando arriba, en cualquier pantalla que no sea la de su botón."""
+        texto = str(texto or "").strip()
+        if not texto or sm.current == "inicio":
+            return
+        w = boc["w"]
+        if w is None:
+            w = Label(text="", size_hint=(None, None), color=TXT, font_size=tam(15), halign="left", valign="top",
+                      **FUENTE)
+            est.fondo_redondeado(w, (1, 1, 1, 0.97), radio=16)
+
+            def colocar(*_):
+                ancho = max(dp(120), Window.width - dp(24))
+                w.width = ancho
+                w.text_size = (ancho - dp(28), None)
+                w.height = min((w.texture_size[1] if w.texture_size else 0) + dp(24), Window.height * 0.45)
+                w.x, w.top = dp(12), Window.height - dp(62)
+
+            def tocar(inst, toque):
+                if boc["visible"] and inst.collide_point(*toque.pos):
+                    ocultar_bocadillo()                    # tocarlo lo cierra
+                    return True
+                return False
+            w.bind(texture_size=colocar, text=colocar, on_touch_down=tocar)
+            try:
+                Window.bind(size=colocar)
+            except Exception:
+                pass
+            boc["w"], boc["colocar"] = w, colocar
+        w.text = texto[-700:]
+        if not boc["visible"]:
+            boc["visible"] = True
+            Window.add_widget(w)
+        boc["colocar"]()
+        boc["hasta"] = time.monotonic() + (segundos or max(4.0, len(texto) / 13.0))
+
+        def vigilar(_dt):                                  # se va cuando ha terminado de hablar y de pensar
+            if time.monotonic() > boc["hasta"] and not st["ocupado"] and not voz.hablando():
+                ocultar_bocadillo()
+        if boc["reloj"] is None:
+            boc["reloj"] = Clock.schedule_interval(vigilar, 0.8)
+
     def decir(texto, hablar=True, ya_escrito=False):
         """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta.
         ya_escrito=True: el texto ya fue apareciendo mientras pensaba (no se vuelve a escribir)."""
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()
             st["reloj_txt"] = None
+        bocadillo(texto)
         if ya_escrito:
             burbuja.text = texto
             modelo.poner_estado("hablando")
@@ -235,6 +294,9 @@ def construir_interfaz(core, consola=None):
         import diseno_kira as dk_
         import programar_kira as pk_
         orden = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto  # escrito «Kira, …»
+        if ik.pedido_con_codigo(orden):                 # «implementa este código (en las mejoras)»
+            mejora_con_codigo(orden)
+            return
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
             programa_por_voz(prog)
@@ -297,6 +359,7 @@ def construir_interfaz(core, consola=None):
                 return
             flujo["hubo"] = True
             burbuja.text = parcial + " …"
+            bocadillo(parcial + " …")
             if modelo.estado != "hablando":
                 modelo.poner_estado("hablando")
             en_vivo.trozo(parcial)
@@ -402,6 +465,33 @@ def construir_interfaz(core, consola=None):
             else:
                 voz.hablar("No he conseguido una mejora que pase las pruebas. Te dejo el detalle en la terminal.")
         Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](pedido, al_terminar), 2.5)
+
+    def mejora_con_codigo(orden):
+        """La mejora sale del código que tienes en el editor (o de lo último leído: captura o internet). Si ya es un
+        módulo de Kira se prueba tal cual; si es un programa, Kira lo convierte. Instalar: tus dos toques."""
+        codigo, nombre = codigo_ui["codigo_actual"]() if "codigo_actual" in codigo_ui else ("", "")
+        origen = "el editor"
+        if len(str(codigo or "").strip()) < 10:
+            lector = getattr(core, "lector", None)
+            codigo, nombre, origen = (getattr(lector, "ultimo", "") or ""), "", "lo último que leí"
+        if len(str(codigo or "").strip()) < 10:
+            decir("No veo ningún código: ábrelo en el editor (o léelo de una captura o de internet) y pídemelo otra vez.")
+            return
+        modulo = "def registrar" in codigo
+        if not modulo and getattr(core, "cerebro_para_codigo", lambda: None)() is None:
+            decir("Ese código es un programa normal: para convertirlo en mejora necesito un cerebro (el mío o la clave "
+                  "de Claude). Si ya fuera un módulo de Kira (con registrar()), lo probaría tal cual.")
+            return
+        decir(f"Vale: cojo el código de {origen} y lo pruebo en mi laboratorio"
+              + (" tal cual" if modulo else " después de convertirlo en una mejora")
+              + ". Para instalarlo tendrás que tocar Aplicar dos veces.")
+
+        def al_terminar(r):
+            voz.hablar("Ha pasado las pruebas. Revísalo y toca Aplicar dos veces si te parece bien." if r.get("aprobable")
+                       else "No ha pasado las pruebas. Te dejo el motivo en la terminal.")
+        Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](
+            ("Implementar el código de " + origen + (f" «{nombre}»" if nombre else "")), al_terminar,
+            codigo=codigo), 1.5)
 
     def programa_por_voz(pedido):
         """Kira escribe el programa (o juego), lo prueba en modo seguro, lo acuerda con Claude y lo deja en el editor.
@@ -697,8 +787,7 @@ def construir_interfaz(core, consola=None):
             pintar_escucha("«" + orden[:60] + "»")
             enviar(orden)                              # moverse: va directo, sin volver antes al botón
             return
-        if que != "nada" and sm.current != "inicio":   # te ha oído desde otra pantalla: vuelve a su botón
-            ir("inicio")
+        # te oye desde cualquier pantalla y contesta AHÍ (bocadillo flotante y voz): ya no te lleva a su botón
         if que == "atenta":
             modelo.poner_estado("atenta")
             pintar_escucha("Te escucho… dime.")
@@ -1263,6 +1352,7 @@ def construir_interfaz(core, consola=None):
             pintor_ui["al_salir"]()
         sm.current = nombre
         if nombre == "inicio":
+            ocultar_bocadillo()
             orbe.iniciar()
         else:
             orbe.detener()

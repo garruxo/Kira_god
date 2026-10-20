@@ -166,8 +166,23 @@ def ocultar_secretos(texto):
 
 _MEJORA = re.compile(
     r"^(?:por\s+favor\s+)?(?P<verbo>mej[oó]rate|mejora(?:r)?|mejora\s+tu|mejora\s+tus|aprende\s+a|ap[ré]ndete\s+a|a[ñn][aá]dete|a[ñn]ade|"
+    r"implementa(?:r|te)?|incorpora|int[eé]grate|"
     r"progr[aá]mate|programa|cr[eé]ate|crea\s+una\s+funci[oó]n|quiero\s+que\s+(?:sepas|aprendas\s+a|puedas))\b[\s,:]*(?P<pedido>.+)$",
     re.I | re.S)
+
+
+_CON_CODIGO = re.compile(
+    r"^(?:por\s+favor\s+)?(?:implementa(?:r|me)?|instala(?:r|me)?|integra(?:r)?|incorpora(?:r)?|a[ñn]ade|mete|"
+    r"convierte|haz\s+una\s+mejora\s+con)\s+(?:este|ese|el|mi)\s+(?:c[oó]digo|programa|m[oó]dulo|script)"
+    r"(?:\s+(?:del?\s+editor|que\s+(?:tengo|he\s+escrito|has\s+le[ií]do)|le[ií]do))?"
+    r"(?:\s+(?:en|a|como|entre)\s+(?:las?\s+|una\s+)?(?:mejoras?|kira|ti|tus\s+mejoras|m[oó]dulos?|orden(?:es)?))?$",
+    re.I)
+
+
+def pedido_con_codigo(texto):
+    """«implementa este código en las mejoras», «instala este programa», «convierte el código del editor en una
+    mejora» -> True (la mejora sale del código que tienes abierto en el editor o de lo último leído)."""
+    return bool(_CON_CODIGO.match(limpiar_entrada(texto).rstrip(" .!?¡¿")))
 
 
 def pedido_mejora(texto):

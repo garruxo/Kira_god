@@ -70,8 +70,8 @@ sm.ir("juegos"); correr(0.5); OIDO.pausas.clear()
 OIDO.oye("hablando de otra cosa"); correr(1)
 ok(sm.current == "juegos" and len(charlas) == 1, "sin su nombre no hace nada, aunque esté en otra pantalla")
 OIDO.oye("Kira cuéntame algo")
-ok(correr(3, lambda: sm.current == "inicio"), "te oye desde otra pantalla y vuelve a su botón")
-ok(correr(3, lambda: "cuéntame algo" in charlas), "y atiende la orden")
+ok(correr(3, lambda: "cuéntame algo" in charlas), "te oye desde otra pantalla y atiende la orden")
+ok(sm.current == "juegos", "contesta AHÍ, sin llevarte a su botón (bocadillo flotante)")
 sm.ir("jugar"); correr(0.6); ok(OIDO.pausas and OIDO.pausas[-1] is True, "jugando, el oído se pausa")
 
 # pantalla cerebro y oído

@@ -22,6 +22,8 @@ class Widget:
         self.size_hint_y = self.size_hint_x = 1; self.disabled = False; self.opacity = 1; self.text = kw.pop("text", ""); self.texture_size = (10, 10)
         for k, v in kw.items(): setattr(self, k, v)
     def add_widget(self, w, *a): self.children.append(w)
+    def remove_widget(self, w):
+        if w in self.children: self.children.remove(w)
     def clear_widgets(self): self.children = []
     def bind(self, **kw):
         for k, f in kw.items(): self._b.setdefault(k, []).append(f)

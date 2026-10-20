@@ -302,4 +302,5 @@ def montar_codigo(sm, p):
 
     ganchos["jugar"] = lambda: None
     return {"cargar_en_editor": cargar_en_editor, "empezar_juego": empezar_juego, "parar_juego": parar,
+            "codigo_actual": lambda: (codigo.text, campo_nombre.text),
             "abrir_lista": abrir_lista, "vista": vista, "programas": programas}

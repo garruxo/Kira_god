@@ -72,6 +72,7 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - `internet_kira.py` + `pantalla_internet_kira.py`: DuckDuckGo HTML (+lite), Wikipedia, Stack Overflow (gzip), GitHub; HTML→texto con el código aparte, PDF sencillo con zlib; órdenes en el núcleo (`_orden_internet`, `resumir_pagina`, `guardar_pagina`, `estudiar_en_internet`); «busca en internet» ya no abre el navegador (solo «busca en google»);
   - `descargas_kira.py` (descargas con reanudación); menú con «Pintor» e «Internet»;
   - pruebas: `tests/test_pintor.py`, `tests/test_internet.py`; prueba real en GitHub: `.github/workflows/probar_pintor.yml` (artefacto «pruebas-pintor»).
+- **v2.19–2.21 (arreglos tras probar en el móvil):** pincel realista con TAESD aparte; caja negra de cierres (`main.py`: faulthandler + `ExceptionManager` que esquiva errores de Python y los anota en `kira_errores.log`; la portada enseña el motivo del último cierre); `VozKira` se crea en el hilo principal de Android; «implementa este código» (`inicio_kira.pedido_con_codigo` → `PanelControl.probar_codigo`: un módulo con `registrar()` se prueba tal cual, un programa se convierte); al decir «Kira» en otra pantalla contesta AHÍ con un bocadillo flotante (`bocadillo()` en la interfaz), ya no lleva a la portada.
 - **Pendiente:**
   - nada de lo de moverse fuera de la app ni el faro se ha probado en el móvil real ni en la WiFi de casa;
   - pulsar botones dentro de otras apps (necesitaría servicio de accesibilidad: pedir permiso al dueño antes);

@@ -107,4 +107,33 @@ VOZ.dichos.clear()
 decir_a_kira("Kira, aprende a convertir euros a dólares")
 ok(correr(5, lambda: enviadas), "la mejora se pone en marcha sin ordenador")
 ok(any("aquí en el móvil" in t for t in textos("inicio") + VOZ.dichos), "dice que la prueba en el móvil")
+
+# «implementa este código (en las mejoras)»: el del editor, probado tal cual en el laboratorio del móvil
+ok(ik.pedido_con_codigo("implementa este código en las mejoras") and ik.pedido_con_codigo("instala este programa")
+   and not ik.pedido_con_codigo("implementa un conversor de euros"), "frases de «este código»")
+MODULO = 'def registrar():\n    def saluda(t):\n        return "¡Hola, " + (t.strip() or "amigo") + "!"\n    return {"saluda": saluda}\n'
+import pantallas_codigo_kira  # noqa
+ed = next(w for w in sm.get_screen("editor_codigo").walk() if type(w).__name__ == "TextInput" and getattr(w, "hint_text", "").startswith("Escribe aquí"))
+ed.text = MODULO
+del ctl.enviar_orden                                         # el de verdad (laboratorio del móvil)
+VOZ.dichos.clear()
+decir_a_kira("Kira, implementa este código en las mejoras")
+ok(correr(8, lambda: any("Ha pasado las pruebas" in d for d in VOZ.dichos)), "lo prueba tal cual y pasa: " + str(VOZ.dichos[-2:]))
+ok(ctl.pendiente is not None and ctl.pendiente.codigo == MODULO, "queda pendiente de tus dos toques")
+ok(not os.path.isfile(os.path.join(T, "modulos", "mejora_del_editor.py")), "nada instalado sin tu permiso")
+ed.text = ""
+core.lector.ultimo = ""
+decir_a_kira("Kira, implementa este código")
+ok(correr(3, lambda: "No veo ningún código" in burbuja()), "sin código, lo dice")
+
+# te oye desde otra pantalla y contesta AHÍ (bocadillo), sin llevarte a su botón
+from kivy_falso import Window
+sm.ir("juegos"); correr(0.3)
+core.conversar = lambda t, h=(), al_trozo=None: "Claro, aquí te contesto sin moverte."
+import interfaz_kira  # noqa
+envia = [w for w in sm.get_screen("inicio").walk() if type(w).__name__ == "TextInput"][0]
+envia.text = "cuéntame algo"
+next(w for w in sm.get_screen("inicio").walk() if type(w).__name__ == "Button" and w.text == "Enviar").press()
+ok(correr(4, lambda: any(len(getattr(w, "text", "")) > 10 for w in Window.children)), "el bocadillo flotante enseña la respuesta: " + str([getattr(w, "text", "") for w in Window.children]))
+ok(sm.current == "juegos", "y sigues en la misma pantalla")
 print("EQUIPO VOZ OK", n)
