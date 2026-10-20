@@ -28,6 +28,7 @@ MAX_RESUMEN = 1500
 POR_TEMA = 3                    # artículos por tema del plan
 INTERVALO = 10 * 60             # segundos entre temas cuando aprende sola
 FUENTE_INGENIERIA = "saber de ingeniería de Kira"   # fichas propias (recetas_ingenieria_kira), sin internet
+FUENTE_AVANZADO = "saber de programación y diseño de Kira"   # fichas propias (saber_avanzado_kira), sin internet
 
 PLAN = [
     "Programación", "Python", "Algoritmo", "Estructura de datos", "Programación orientada a objetos",
@@ -89,12 +90,13 @@ class Estudiante:
         self.aprendidos = int(d.get("aprendidos", 0)) if str(d.get("aprendidos", 0)).isdigit() else 0
         self.ultimo = str(d.get("ultimo", ""))[:120]
         self.ingenieria = int(d.get("ingenieria", 0)) if str(d.get("ingenieria", 0)).isdigit() else 0
+        self.avanzado = int(d.get("avanzado", 0)) if str(d.get("avanzado", 0)).isdigit() else 0
 
     def _guardar(self):
         tmp = self.ruta + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"sola": self.sola, "indice": self.indice, "aprendidos": self.aprendidos,
-                       "ultimo": self.ultimo, "ingenieria": self.ingenieria}, f, ensure_ascii=False)
+                       "ultimo": self.ultimo, "ingenieria": self.ingenieria, "avanzado": self.avanzado}, f, ensure_ascii=False)
         os.replace(tmp, self.ruta)
 
     # ---------- Wikipedia ----------
@@ -196,6 +198,28 @@ class Estudiante:
         except ImportError:
             return False
 
+    # ---------- programación avanzada y diseño (saber propio, sin internet) ----------
+    def estudiar_avanzado(self, tipo=None):
+        """Guarda en el baúl las fichas de saber_avanzado_kira: tipo 'diseño', 'programación' o None (todo).
+        Devuelve (fichas nuevas, fichas de ese tipo)."""
+        import saber_avanzado_kira as sa
+        fichas = sa.fichas(tipo)
+        nuevas = sum(self._ficha(tema, texto, fuente=FUENTE_AVANZADO) for tema, texto in fichas)
+        with self._lock:
+            self.aprendidos += nuevas
+            if tipo is None:
+                self.avanzado = len(fichas)
+            self.ultimo = {"diseño": "diseño", "programación": "programación avanzada"}.get(tipo, "programación avanzada y diseño")
+            self._guardar()
+        return nuevas, len(fichas)
+
+    def avanzado_pendiente(self):
+        try:
+            import saber_avanzado_kira as sa
+            return self.avanzado < len(sa.fichas())
+        except ImportError:
+            return False
+
     # ---------- plan de estudio ----------
     def paso(self):
         """Estudia el siguiente tema del plan. Devuelve (tema, títulos aprendidos)."""
@@ -223,6 +247,8 @@ class Estudiante:
             try:
                 if self.ingenieria_pendiente():          # lo propio primero: no necesita internet
                     self.estudiar_ingenieria()
+                if self.avanzado_pendiente():
+                    self.estudiar_avanzado()
             except Exception as e:
                 self.ultimo_error = str(e)[:200]
             while not parar.is_set() and self.sola:
@@ -242,9 +268,11 @@ class Estudiante:
                 f"Aprender sola: {'SÍ, un tema cada ' + str(INTERVALO // 60) + ' min mientras la app está abierta' if self.sola else 'no'}."
                 + (f"\nIngeniería informática: {self.ingenieria} fichas en el baúl." if self.ingenieria else
                    "\nIngeniería informática: aún no la he guardado («estudia ingeniería»).")
+                + (f"\nProgramación avanzada y diseño: {self.avanzado} fichas en el baúl." if self.avanzado else
+                   "\nProgramación avanzada y diseño: aún no («estudia diseño» / «estudia programación avanzada»).")
                 + (f"\nÚltimo: {self.ultimo}." if self.ultimo else "")
                 + (f"\nÚltimo problema: {self.ultimo_error}" if self.ultimo_error else "")
-                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «estudia ingeniería», "
+                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «estudia ingeniería», «estudia diseño», «estudia programación avanzada», "
                   "«aprende sola», «deja de aprender», «plan de estudio».")
 
     def texto_plan(self):

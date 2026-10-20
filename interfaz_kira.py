@@ -302,6 +302,11 @@ def construir_interfaz(core, consola=None):
                     r"(?:juego|programa)\b", orden, re.I):
             dibujos_del_juego()                         # «pinta los dibujos del juego» (el que está en el editor)
             return
+        import experimentos_kira as ex_
+        exp = ex_.pedido_experimento(orden)
+        if exp is not None:                             # «experimenta con…», «inventa un algoritmo nuevo…»
+            experimento_por_voz(exp)
+            return
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
             import juego_realista_kira as jr_
@@ -337,6 +342,19 @@ def construir_interfaz(core, consola=None):
                 codigo_ui["cargar_en_editor"](lector.ultimo, "", "Texto leído de una captura: revísalo y pulsa «Ejecutar».")
             else:
                 decir("Todavía no he leído ninguna captura.")
+            return
+        m_exp = re.match(r"^abre el experimento\s+(\d+)(?:\s+(?:hip[oó]tesis|la)\s+(\d+))?", bajo)
+        if m_exp:                                       # uno del cuaderno de experimentos, al editor
+            import experimentos_kira as ex_
+            import os as os_
+            cuad = getattr(core, "cuaderno", None) or ex_.Cuaderno(os_.path.join(core.dir, "experimentos.json"))
+            r = cuad.codigo(int(m_exp.group(1)), int(m_exp.group(2)) if m_exp.group(2) else None)
+            if r is None:
+                decir("No tengo ese experimento (o esa hipótesis no funcionó). Di «mis experimentos».")
+            else:
+                decir(f"Te abro el experimento {m_exp.group(1)} en el editor.")
+                codigo_ui["cargar_en_editor"](r[1], r[0], "Código EXPERIMENTAL de Kira (probado en modo seguro): "
+                                                          "pulsa «Ejecutar» o «Jugar».")
             return
         if re.match(r"^abre la receta ", bajo):          # una técnica probada, al editor para verla o cambiarla
             import saber_mejoras_kira as smk
@@ -596,6 +614,39 @@ def construir_interfaz(core, consola=None):
             decir(("Listo, y Claude y yo estamos de acuerdo. " if r.get("acuerdo") else "Listo. ")
                   + f"Te lo dejo en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
         en_hilo(lambda: core.programa_acordado(pedido), terminado)
+
+    def experimento_por_voz(tema):
+        """«Kira, experimenta con…»: plantea 2-3 hipótesis, escribe y prueba cada una en modo seguro, se queda con
+        la mejor (acordada con Claude si están los dos), lo apunta en su cuaderno y lo deja en el editor."""
+        if getattr(core, "cerebro_para_codigo", lambda: None)() is None:
+            decir("Para inventar código necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude.")
+            return
+        equipo = en_equipo()
+        st["ocupado"] = True
+        modelo.poner_estado("pensando")
+        decir(f"¡Me encanta! Voy a experimentar con {tema}: pruebo varias ideas en modo seguro, me quedo con la "
+              "mejor" + (" y la repaso con Claude" if equipo else "") + ". Puede tardar un rato.")
+
+        def terminado(r):
+            st["ocupado"] = False
+            if isinstance(r, Exception):
+                decir(f"[x] No pude experimentar: {r}", hablar=False)
+                return
+            if not r.get("ok"):
+                decir("Ninguna de mis ideas ha funcionado esta vez; lo he apuntado para aprender. "
+                      "Di «mis experimentos» para ver qué pasó.")
+                burbuja.text = r["texto"]
+                return
+            juego = r.get("juego")
+            aviso = (f"Código EXPERIMENTAL de Kira (experimento {r.get('n') or ''}), probado en modo seguro. "
+                     f"Pulsa «{'Jugar' if juego else 'Ejecutar'}». Si te gusta y quieres que sea parte de mí, "
+                     "dime «implementa este código».\n\n" + r["texto"])
+            codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"], aviso)
+            buenas = sum(1 for x in r["resultados"] if x["ok"])
+            decir(f"Listo: {buenas} de {len(r['resultados'])} ideas funcionan" +
+                  (" y Claude y yo estamos de acuerdo con la mejor" if r.get("acuerdo") else "") +
+                  f". Te dejo la mejor en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
+        en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t)), terminado)
 
     def diseno_por_voz(tipo, descripcion):
         nombres = {"web": "la página", "app": "la maqueta", "clip": "el videoclip"}

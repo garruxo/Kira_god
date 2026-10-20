@@ -4,6 +4,7 @@ curso_avanzado_kira.py - PROGRAMACIÓN AVANZADA sin internet (lógica PURA, sin 
 
   CURSO_AVANZADO   : lecciones de nivel alto (clases, decoradores, generadores, concurrencia, algoritmos, patrones…).
   CODIGOS          : programas completos y avanzados para estudiar, ejecutar en el editor y modificar.
+  CURSO_DISENO     : programación avanzada y diseño (saber_avanzado_kira), con sus pruebas.
   CURSO_INGENIERIA : ingeniería informática (estructuras de datos, grafos, sistemas, compiladores, IA…), sacado de
                      recetas_ingenieria_kira: cada lección es un módulo probado que se ejecuta con sus pruebas.
 
@@ -236,8 +237,20 @@ def _ingenieria():
 CURSO_INGENIERIA = _ingenieria()
 
 
+def _diseno():
+    """Lecciones de PROGRAMACIÓN AVANZADA y DISEÑO (saber_avanzado_kira), igual que las de ingeniería."""
+    try:
+        import saber_avanzado_kira as sa
+    except ImportError:
+        return []
+    return [sa.leccion(r) for r in sa.RECETAS]
+
+
+CURSO_DISENO = _diseno()
+
+
 def todas():
-    return CURSO_AVANZADO + CODIGOS + CURSO_INGENIERIA
+    return CURSO_AVANZADO + CODIGOS + CURSO_INGENIERIA + CURSO_DISENO
 
 
 def buscar(id_):

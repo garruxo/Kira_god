@@ -120,9 +120,9 @@ def montar_codigo(sm, p):
                                       size_hint_x=None, width=dp(84)))
                 lista.add_widget(fila)
         else:
-            titulo_lis.text = "Ejemplos: curso básico, avanzado, códigos, ingeniería y juegos (se abren para que los cambies)"
+            titulo_lis.text = "Ejemplos: curso básico, avanzado, códigos, ingeniería, diseño y juegos (se abren para que los cambies)"
             grupos = [("Básico", pk.CURSO), ("Avanzado", ca.CURSO_AVANZADO), ("Código", ca.CODIGOS),
-                      ("Ingeniería", ca.CURSO_INGENIERIA)]
+                      ("Ingeniería", ca.CURSO_INGENIERIA), ("Diseño", ca.CURSO_DISENO)]
             for etiqueta, items in grupos:
                 for l in items:
                     lista.add_widget(boton(f"[{etiqueta}] {l['titulo']}", lambda l_=l: cargar_en_editor(

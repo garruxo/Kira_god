@@ -3,7 +3,7 @@
 saber_mejoras_kira.py - El SABER que Kira usa al programar una mejora.
 
 Antes de pedir el código al cerebro, Kira busca:
-  1. RECETAS probadas (recetas_*_kira.py): módulos completos que ya pasan el laboratorio. La más parecida a lo que
+  1. RECETAS probadas (recetas_*_kira.py y saber_avanzado_kira.py): módulos completos que ya pasan el laboratorio. La más parecida a lo que
      pides se le da al cerebro como guía (los modelos pequeños copian bien un ejemplo que funciona).
   2. Lo que ha ESTUDIADO (su baúl de recuerdos: Wikipedia, documentación de Python, lo que le enseñas).
 Lógica pura (sin red): se prueba en el PC.
@@ -14,7 +14,7 @@ import unicodedata
 
 def _recetas():
     todas = []
-    for nombre in ("recetas_graficos_kira", "recetas_ingenieria_kira"):
+    for nombre in ("recetas_graficos_kira", "recetas_ingenieria_kira", "saber_avanzado_kira"):
         try:
             mod = __import__(nombre)
             todas.extend(getattr(mod, "RECETAS", []))
@@ -112,9 +112,15 @@ def lista(filtro=""):
     """Las recetas agrupadas por área. Con filtro («ingeniería», «grafos», «gráficos»…) solo las de esas áreas."""
     f = normalizar(filtro).strip()
     if f.startswith("ingenier"):
-        elegidas = [r for r in RECETAS if r.get("area")]
+        try:
+            import recetas_ingenieria_kira as ri
+            ids = {r["id"] for r in ri.RECETAS}
+        except ImportError:
+            ids = set()
+        elegidas = [r for r in RECETAS if r["id"] in ids]
     elif f:
-        elegidas = [r for r in RECETAS if _raices(f) & _raices(area(r))]
+        elegidas = [r for r in RECETAS if f in normalizar(area(r))]          # «programación avanzada»: esa área
+        elegidas = elegidas or [r for r in RECETAS if _raices(f) & _raices(area(r))]
     else:
         elegidas = RECETAS
     grupos = {}

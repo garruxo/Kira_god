@@ -210,6 +210,26 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Saber avanzado y código experimental (nuevo, v2.25)
+- **`saber_avanzado_kira.py`**: 18 recetas probadas (módulos completos con sus pruebas) de **programación avanzada**
+  (máquina de estados, bus de eventos, ECS, corrutinas, decoradores, combinadores de parsers, deshacer/rehacer,
+  generadores perezosos) y de **diseño por código** (paletas armónicas, contraste WCAG, escala tipográfica, rejilla,
+  curvas de animación, sistemas L, Voronoi, tramado, colapso de función de onda, disco de Poisson), y 24 fichas de
+  teoría (color, tipografía, Gestalt, composición, heurísticas de Nielsen, leyes de UX, móvil, accesibilidad,
+  sistemas de diseño, web, animación, diseño de juegos y niveles, sprites, luz y fotografía, prompts para el pintor,
+  funcional, metaprogramación, tipos, errores, bucle de juego, concurrencia).
+  Órdenes: «estudia diseño», «estudia programación avanzada», «recetas de diseño», «recetas de programación
+  avanzada»; nivel «Diseño» en la terminal y en los ejemplos del editor.
+- **`experimentos_kira.py`**: «Kira, experimenta con…», «inventa un algoritmo nuevo para…», «hazme un código
+  experimental de…». Kira se plantea 2 hipótesis (cerebro del móvil) o 3 (Claude): mezclar dos técnicas, llevar una
+  técnica a otro campo o inventar una variante y medirla. Escribe cada una, la prueba en modo seguro (si falla, la
+  corrige con el error), la puntúa (funciona, muestra resultados y conclusión, no copia la receta, no es enorme), se
+  queda con la mejor y, si están los dos, la repasa con Claude. Lo apunta en su **cuaderno** («mis experimentos»,
+  «abre el experimento N [hipótesis M]») y guarda la **lección** en el baúl para el siguiente. No instala nada.
+- Honesto: lo «nuevo» lo escribe el cerebro (el del móvil es pequeño: con Claude salen ideas mejores). Que pase el
+  modo seguro quiere decir que funciona sin romper nada, no que sea un descubrimiento.
+- Pruebas: `tests/test_saber_avanzado.py`, `tests/test_experimentos.py`.
+
 ## Juegos realistas y Kira siempre activa (nuevo, v2.22)
 - **«Kira, hazme un juego realista de…»** (`juego_realista_kira.py`, `sprites_kira.py`): Kira entiende quién es el
   protagonista, qué se esquiva, qué se recoge y dónde pasa (con su cerebro o Claude; si no, de la frase); el **pintor**

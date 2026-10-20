@@ -183,7 +183,7 @@ def montar_sala_hacker(sm, ctx):
     c_apr = BoxLayout(orientation="vertical", spacing=dp(6))
     fila_niv = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
     niveles = {"Básico": pk.CURSO, "Avanzado": ca.CURSO_AVANZADO, "Códigos": ca.CODIGOS,
-               "Ingeniería": ca.CURSO_INGENIERIA}
+               "Ingeniería": ca.CURSO_INGENIERIA, "Diseño": ca.CURSO_DISENO}
     botones_niv = {}
     for nombre_n in niveles:
         botones_niv[nombre_n] = boton(nombre_n, lambda n_=nombre_n: pintar_lecciones(n_), GRIS, alto=40)

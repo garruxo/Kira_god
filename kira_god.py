@@ -353,7 +353,9 @@ class KiraGodCore:
                   "…» (programas una mejora, la pruebas en TU laboratorio del móvil, sin ordenador, y él la aprueba con dos "
                   "toques), «implementa este código» (el que tenga en el editor), «escríbeme un "
                   "programa que…» o «hazme un juego de…» (te queda en el editor), «diséñame una web / una app / un "
-                  "videoclip de…» y «estudia …»: si lo pide con otras palabras, dile cómo pedirlo así. "
+                  "videoclip de…», «experimenta con …» / «inventa un algoritmo nuevo para …» (código experimental: pruebas "
+                  "varias ideas en modo seguro y te quedas con la mejor) y «estudia …» (también «estudia diseño» y "
+                  "«estudia programación avanzada»): si lo pide con otras palabras, dile cómo pedirlo así. "
                   "SÍ puedes moverte por la app y abrir otras apps, pero lo hace la app al oír órdenes como «Kira, abre la "
                   "sala hacker», «ve a los juegos», «abre WhatsApp», «ajustes del wifi» o «conéctate al ordenador»: si te "
                   "lo pide con otras palabras, dile cómo pedirlo así, nunca que no puedes. "
@@ -604,8 +606,10 @@ class KiraGodCore:
             return None
         return ak.interpretar_revision(texto, extraer)
 
-    def generar_programa(self, pedido, quien=None):
-        """(nombre, codigo) de un programa para el EDITOR (no se instala nada). Usa recetas y lo estudiado."""
+    def generar_programa(self, pedido, quien=None, tema_saber=None, con_recetas=True):
+        """(nombre, codigo) de un programa para el EDITOR (no se instala nada). Usa recetas y lo estudiado.
+        tema_saber: de qué buscar saber (por defecto, el pedido). con_recetas=False: solo lo estudiado (los
+        EXPERIMENTOS ya llevan las ideas de sus técnicas y no deben copiar su código)."""
         import cerebro_ia_kira
         import programar_kira as pk
         import saber_mejoras_kira as sm_
@@ -614,7 +618,16 @@ class KiraGodCore:
             raise RuntimeError(self._sin_cerebro())
         local = clave == cerebro_ia_kira.LOCAL
         partes = pedido.split("\n\n", 1)
-        saber = sm_.contexto_para(partes[0], getattr(self, "recuerdos", None), local=local, para_editor=True)
+        if con_recetas:
+            saber = sm_.contexto_para(tema_saber or partes[0], getattr(self, "recuerdos", None), local=local,
+                                      para_editor=True)
+        else:
+            rec = getattr(self, "recuerdos", None)
+            try:
+                sabe = rec.contexto(tema_saber or partes[0], n=3, maximo=500 if local else 1000) if rec else ""
+            except Exception:
+                sabe = ""
+            saber = ("Lo que sabes de este tema (de tus estudios y experimentos anteriores):\n" + sabe) if sabe else ""
         usuario = f"Programa pedido: {pedido}" + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, pk.SISTEMA_PROGRAMA_LOCAL if local else pk.SISTEMA_PROGRAMA, usuario,
                                  max_tokens=1200 if local else 3000)
@@ -658,6 +671,99 @@ class KiraGodCore:
             r["texto"] = ("[x] No he conseguido un programa que funcione. " + (r.get("error") or "")).strip() + \
                 (f"\n{hist}" if hist else "")
         return r
+
+    def experimentar(self, tema, al_progreso=None):
+        """Kira INVENTA código nuevo: 2-3 hipótesis (mezclar técnicas, llevarlas a otro campo, variantes), cada una
+        escrita y probada en modo seguro; se queda con la mejor, la acuerda con Claude si están los dos, lo apunta en
+        su cuaderno y guarda la lección en el baúl. No instala nada. Devuelve un dict con 'ok', 'codigo', 'nombre',
+        'texto' (el informe), 'n' (número en el cuaderno), 'acuerdo' y 'resultados'."""
+        import acuerdo_kira as ak
+        import experimentos_kira as ex
+        import programar_kira as pk
+        autor, revisor = self.reparto("codigo")
+        if autor is None:
+            raise RuntimeError(self._sin_cerebro())
+        local = autor == "local"
+        avisar = al_progreso or (lambda f, t: None)
+        hipotesis = ex.plan(tema, n=2 if local else 3)
+        resultados = []
+        for i, h in enumerate(hipotesis, 1):
+            avisar((i - 1) / (len(hipotesis) + 1), f"Hipótesis {i} de {len(hipotesis)}: {h['titulo'].lower()}…")
+            pedido = ex.pedido_de(tema, h, local=local)
+
+            def proponer(aviso, pedido=pedido):
+                try:
+                    return self.generar_programa(pedido + (f"\n\n{aviso}" if aviso else ""), quien=autor,
+                                                 tema_saber=tema, con_recetas=False)
+                except ValueError as e:
+                    raise ak.Reintentar(f"{e} Responde con NOMBRE: … y el programa en un bloque ```python.")
+                except RuntimeError as e:
+                    raise ak.Parar(str(e))
+            r = ak.negociar(proponer, lambda n, c: pk.probar_programa(c), None, autor=autor, intentos=2)
+            res = {"titulo": h["titulo"], "enfoque": h["enfoque"], "recetas": [x["titulo"] for x in h["recetas"]],
+                   "ok": bool(r["ok"]), "nombre": r.get("nombre"), "codigo": r.get("codigo") or "",
+                   "motivo": r.get("error") or "; ".join(x for x in r.get("historial", []) if "no pasa" in x)[-300:]}
+            if res["ok"]:
+                res["puntos"], res["notas"] = ex.puntuar(True, r["dato"], res["codigo"], h["recetas"])
+                res["hipotesis"] = ex.hipotesis_del_codigo(res["codigo"])
+                res["conclusion"] = ex.conclusion_de((r["dato"] or {}).get("salida", ""))
+                res["dato"] = r["dato"]
+            else:
+                res["puntos"], res["notas"] = 0, ["no funciona"]
+            resultados.append(res)
+            if r.get("error") and "cerebro" in str(r.get("error")).lower():
+                break                                            # sin cerebro: no tiene sentido seguir
+        buenos = [x for x in resultados if x["ok"]]
+        elegido = max(buenos, key=lambda x: x["puntos"]) if buenos else None
+        acuerdo, hist = None, ""
+        if elegido is not None and revisor:
+            avisar(len(hipotesis) / (len(hipotesis) + 1), "Lo repasamos juntos Claude y yo…")
+            primero = {"dado": False}
+
+            def proponer2(aviso):
+                if not primero["dado"]:
+                    primero["dado"] = True
+                    return elegido["nombre"] or "experimento", elegido["codigo"]
+                try:
+                    return self.generar_programa(ex.pedido_de(tema, hipotesis[resultados.index(elegido)], local)
+                                                 + f"\n\n{aviso}", quien=autor, tema_saber=tema, con_recetas=False)
+                except ValueError as e:
+                    raise ak.Reintentar(str(e))
+                except RuntimeError as e:
+                    raise ak.Parar(str(e))
+
+            def revisar(rol, nombre, codigo, dato, objecion):
+                quien = revisor if rol == "revisor" else autor
+                de = autor if rol == "revisor" else revisor
+                return self.revisar_codigo(quien, f"Experimento sobre {tema} ({elegido['titulo']}): que funcione, "
+                                                  "que sea ORIGINAL y que enseñe algo medible",
+                                           de, codigo, pk.informe(dato), tipo="programa", objecion=objecion)
+            r2 = ak.negociar(proponer2, lambda n, c: pk.probar_programa(c), revisar, autor=autor, revisor=revisor,
+                             intentos=3, rondas=1)
+            acuerdo, hist = r2.get("acuerdo"), ak.texto_historial(r2)
+            if r2["ok"] and r2["codigo"] != elegido["codigo"]:
+                elegido.update(codigo=r2["codigo"], nombre=r2["nombre"] or elegido["nombre"], dato=r2["dato"])
+                elegido["puntos"], elegido["notas"] = ex.puntuar(True, r2["dato"], r2["codigo"], [])
+                elegido["conclusion"] = ex.conclusion_de((r2["dato"] or {}).get("salida", "")) or elegido["conclusion"]
+                elegido["notas"].append("versión acordada con " + ("Claude" if autor == "local" else "Kira"))
+        n = None
+        try:
+            if not hasattr(self, "cuaderno"):
+                self.cuaderno = ex.Cuaderno(os.path.join(self.dir, "experimentos.json"))
+            n = self.cuaderno.anadir(tema, resultados, elegido, acuerdo)
+        except (OSError, AttributeError) as e:
+            self.registrar_error("experimentos", f"No pude apuntar el experimento: {e}")
+        try:
+            rec = getattr(self, "recuerdos", None)
+            if rec is not None and resultados:
+                rec.guardar(ex.leccion(tema, resultados), tema=f"Experimento: {tema}", fuente=ex.FUENTE_LECCION)
+        except Exception:
+            pass
+        avisar(1.0, "Experimento terminado.")
+        texto = ex.informe(tema, resultados, elegido) + (f"\n\n{hist}" if hist else "")
+        return {"ok": elegido is not None, "codigo": elegido["codigo"] if elegido else "",
+                "nombre": (elegido["nombre"] if elegido else "") or "experimento", "texto": texto, "n": n,
+                "acuerdo": acuerdo, "resultados": resultados, "juego": bool(elegido and (elegido.get("dato") or {}).get("juego"))}
 
     def cerebro_para_codigo(self):
         """'local' | 'claude' | None: quién programaría una mejora ahora mismo."""
@@ -732,6 +838,35 @@ class KiraGodCore:
         if hecho is None:
             return None
         return ("[OK] " if hecho else "[x] ") + texto
+
+    def _es_experimento(self, command):
+        import experimentos_kira as ex
+        return ex.pedido_experimento(command) is not None
+
+    def _orden_experimentos(self, command):
+        """«experimenta con …» (por consola), «mis experimentos» y «abre el experimento N [hipótesis M]»."""
+        import experimentos_kira as ex
+        if not hasattr(self, "cuaderno"):
+            self.cuaderno = ex.Cuaderno(os.path.join(self.dir, "experimentos.json"))
+        bajo = command.lower().strip()
+        m = re.match(r"^abre el experimento\s+(\d+)(?:\s+(?:hip[oó]tesis|la)\s+(\d+))?", bajo)
+        if m:
+            r = self.cuaderno.codigo(int(m.group(1)), int(m.group(2)) if m.group(2) else None)
+            if r is None:
+                return "[x] No tengo ese experimento (o esa hipótesis no funcionó). Di «mis experimentos»."
+            self.lector.ultimo = r[1]                       # así «abre lo leído en el editor» también vale
+            return "[OK] ABRIR_EN_EDITOR " + r[0]
+        tema = ex.pedido_experimento(command)
+        if tema is None:
+            return self.cuaderno.texto()
+        try:
+            r = self.experimentar(tema)
+        except RuntimeError as e:
+            return f"[x] {e}"
+        if r["ok"]:
+            self.lector.ultimo = r["codigo"]
+        return r["texto"] + (f"\n\nEstá en mi cuaderno: «abre el experimento {r['n']}» para llevarlo al editor."
+                             if r["ok"] and r["n"] else "")
 
     def _orden_recetas(self, cmd_lower):
         import saber_mejoras_kira as sm_
@@ -1165,6 +1300,23 @@ class KiraGodCore:
                     "algoritmos, estructuras de datos, sistemas operativos, redes, bases de datos, compiladores, "
                     "seguridad defensiva, IA…). Pregúntame, por ejemplo, «qué es el teorema CAP» o «cómo funciona "
                     "Dijkstra». Mis técnicas con código: «recetas de ingeniería».")
+        m = re.match(r"^estudia\s*:?\s*(?:el\s+|la\s+)?(dise[ñn]o(?:\s+gr[aá]fico)?|programaci[oó]n\s+avanzada|"
+                     r"programaci[oó]n\s+y\s+dise[ñn]o|todo\s+lo\s+avanzado)\s*$", cmd_lower)
+        if m:
+            tipo = "diseño" if m.group(1).startswith("dise") else (
+                "programación" if m.group(1).endswith("avanzada") else None)
+            try:
+                nuevas, total = est.estudiar_avanzado(tipo)
+            except (ImportError, OSError) as e:
+                return f"[x] No pude guardar ese saber: {e}"
+            if tipo == "diseño":
+                return (f"[OK] He estudiado diseño sin internet: {nuevas} ficha(s) nuevas (tengo {total}: color, "
+                        "tipografía, composición, interfaces y accesibilidad, animación, juegos, fotografía y cómo "
+                        "pedirle imágenes al pintor). Pregúntame «qué es la regla de los tercios» o «ley de Fitts». "
+                        "Mis técnicas con código: «recetas de diseño».")
+            return (f"[OK] He estudiado {'programación avanzada' if tipo else 'programación avanzada y diseño'} sin "
+                    f"internet: {nuevas} ficha(s) nuevas (tengo {total}). Pregúntame, por ejemplo, «qué es un ECS» o "
+                    "«qué es una función pura». Mis técnicas: «recetas de programación avanzada».")
         m = re.match(r"^estudia\s+python\s*:?\s*([a-z_.]*)\s*$", cmd_lower)
         if m:
             try:
@@ -1403,6 +1555,9 @@ class KiraGodCore:
             return self._orden_vista(cmd_lower)
         elif cmd_lower in ("recetas", "mis recetas", "técnicas", "tecnicas") or cmd_lower.startswith(("receta ", "recetas ", "abre la receta ")):
             return self._orden_recetas(cmd_lower)
+        elif re.match(r"^(?:mis\s+)?experimentos$|^cuaderno de experimentos$|^abre el experimento\s+\d+", cmd_lower) \
+                or self._es_experimento(command):
+            return self._orden_experimentos(command)
         elif self._es_orden_laboratorio(command):
             return self._orden_laboratorio(command)
         elif cmd_lower in ("avisos", "mis avisos"):
