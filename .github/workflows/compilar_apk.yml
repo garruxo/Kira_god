@@ -71,6 +71,23 @@ jobs:
             exit $rc
           fi
 
+      - name: Recuperar el pintor ya compilado (si no ha cambiado)
+        id: cache_pintor
+        uses: actions/cache@v4
+        with:
+          path: libs_android/arm64-v8a/libkira_pintor*.so
+          key: pintor-${{ hashFiles('herramientas_pc/compilar_pintor_android.sh') }}
+
+      - name: Compilar el pintor de Kira (stable-diffusion.cpp para Android)
+        if: steps.cache_pintor.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
+          bash herramientas_pc/compilar_pintor_android.sh 2>&1 | tee pintor.log; rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            python3 -c "import re;t=open('pintor.log',errors='replace').read().splitlines();m=[l for l in t if re.search(r'error|Error|ERROR|No encuentro',l)][-25:];x='\n'.join(m+['---']+t[-30:])[-3800:];print('::error title=Fallo al compilar el pintor::'+x.replace('%','%25').replace('\n','%0A'))"
+            exit $rc
+          fi
+
       - name: Compilar el APK (debug)
         run: |
           # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)
@@ -128,11 +145,12 @@ jobs:
       - name: Comprobar qué lleva el APK (cerebro, oído, lector)
         run: |
           APK=$(ls bin/*.apk | head -1)
-          LIBS=$(unzip -l "$APK" | grep -oE "lib/arm64-v8a/lib(kira_cerebro[a-z_]*|vosk|tesseract|leptonica|jnidispatch|pngx|jpeg)[a-z0-9_]*\.so" | sort -u | tr '\n' ' ')
+          LIBS=$(unzip -l "$APK" | grep -oE "lib/arm64-v8a/lib(kira_cerebro[a-z_]*|kira_pintor[a-z_]*|vosk|tesseract|leptonica|jnidispatch|pngx|jpeg)[a-z0-9_]*\.so" | sort -u | tr '\n' ' ')
           DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;|Lorg/kira/servicio/ServicioKira;|Lorg/kira/servicio/CamaraKira;|Lorg/kira/servicio/VozKira;" | sort -u | tr '\n' ' ')
           TAM=$(du -h "$APK" | cut -f1)
           echo "::notice title=Contenido del APK::Tamaño $TAM. Librerías: $LIBS. Clases Java: $DEX"
           echo "$LIBS" | grep -q kira_cerebro || echo "::warning title=Falta el cerebro::El APK no lleva libkira_cerebro*.so"
+          echo "$LIBS" | grep -q kira_pintor || echo "::warning title=Falta el pintor::El APK no lleva libkira_pintor*.so"
           echo "$DEX" | grep -q VozKira || echo "::warning title=Falta la voz::El APK no lleva VozKira: hablará con la voz antigua (lenta)"
           # el manifiesto: servicio «siempre activa», lista de apps (para «abre WhatsApp») y permiso de segundo plano
           AAPT=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)

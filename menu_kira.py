@@ -15,7 +15,8 @@ import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
 # El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
-PRINCIPALES = ("hablar", "cerebro_kira", "mejoras", "lector", "juegos", "editor_codigo", "sala", "diseno", "ciber", "config")
+PRINCIPALES = ("hablar", "cerebro_kira", "pintor", "internet", "mejoras", "lector", "juegos", "editor_codigo", "sala",
+               "diseno", "ciber", "config")
 APARTADOS = [
     {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
@@ -25,6 +26,8 @@ APARTADOS = [
     {"id": "mezcla",    "titulo": "Mesa de mezcla",  "desc": "Mezcla pistas de audio",       "color": (0.90, 0.45, 0.70), "destino": ("pantalla", "mezcla")},
     {"id": "editor",    "titulo": "Editor de vídeo", "desc": "Cortar, unir, música…",        "color": (0.55, 0.45, 0.95), "destino": ("pantalla", "editor_video")},
     {"id": "cerebro_kira", "titulo": "Cerebro y oído", "desc": "Su IA y su oído, sin internet", "color": (0.55, 0.40, 0.95), "destino": ("pantalla", "cerebro_kira")},
+    {"id": "pintor",    "titulo": "Pintor",          "desc": "Imágenes con su propia IA",   "color": (0.95, 0.40, 0.55), "destino": ("pantalla", "pintor")},
+    {"id": "internet",  "titulo": "Internet",        "desc": "Busca, lee y aprende",        "color": (0.25, 0.60, 0.95), "destino": ("pantalla", "internet")},
     {"id": "lector",    "titulo": "Lector",          "desc": "Lee capturas: texto y código", "color": (0.20, 0.65, 0.75), "destino": ("pantalla", "lector")},
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
@@ -82,6 +85,16 @@ AYUDA = (
     "EN EQUIPO CON CLAUDE: si tiene su cerebro encendido y la clave de Claude, uno propone y el otro revisa hasta "
     "ponerse de acuerdo (mejoras, programas y diseños); al estudiar, Claude repasa sus fichas. «acuerdo con claude» "
     "para verlo; «desactiva el acuerdo con claude» para que no gaste a Claude (o en Configuración).\n"
+    "PINTOR: «Kira, pinta un faro al atardecer», «hazme una foto de…», «una acuarela de…»: crea IMÁGENES con su propia "
+    "IA, dentro del móvil y sin internet (stable-diffusion.cpp). Descarga una vez un pincel: el rápido (683 MB, segundos) "
+    "o el realista (1,8 GB, más detalle, puede tardar un par de minutos). Formatos cuadrado, vertical u horizontal; "
+    "«A la galería» la guarda en Imágenes › Kira; «Ampliar ×4» la pasa a 2048 píxeles (64 MB más, lento). Es un móvil: "
+    "no tiene la calidad de los generadores de pago con tarjeta gráfica.\n"
+    "INTERNET: «Kira, busca en internet…», «busca código de…», «busca documentos sobre…»: Kira busca (DuckDuckGo, "
+    "Wikipedia, Stack Overflow, GitHub), te enseña los resultados y lee la página que elijas (solo el texto y el código, "
+    "también PDF sencillos). «lee el 2», «resume el 2», «guarda el 2» (lo aprende), «abre el 2 en el editor» (el código, "
+    "que nunca se ejecuta solo), «abre el 2 en el navegador». «Kira, estudia en internet…» lee las mejores páginas y lo "
+    "guarda en su baúl. «busca en google…» abre el navegador.\n"
     "PROGRAMAS Y JUEGOS POR VOZ: «Kira, escríbeme un programa que…» o «Kira, hazme un juego de…»: lo escribe con lo que "
     "ha estudiado, lo prueba en modo seguro y te lo deja en el editor (no se instala nada: tú pulsas «Ejecutar»).\n"
     "DISEÑO POR VOZ: «Kira, diséñame una web para…», «hazme una maqueta de app de…», «crea un videoclip de…»: va al "

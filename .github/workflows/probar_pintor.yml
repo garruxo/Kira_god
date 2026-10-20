@@ -1,0 +1,60 @@
+# Prueba DE VERDAD el pintor (stable-diffusion.cpp con los modelos reales) y el buscador de internet, en un PC de
+# GitHub. No hace el APK: deja las imágenes pintadas, los tiempos y lo que encontró en internet en el artefacto
+# «pruebas-pintor» para revisarlo. Se lanza al cambiar el pintor o el buscador, o a mano (Actions > Run workflow).
+name: Probar el pintor y el buscador
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - pintor_kira.py
+      - internet_kira.py
+      - descargas_kira.py
+      - herramientas_pc/compilar_pintor_android.sh
+      - herramientas_pc/probar_pintor_real.py
+      - .github/workflows/probar_pintor.yml
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Recuperar el motor de PC ya compilado
+        id: cache_motor
+        uses: actions/cache@v4
+        with:
+          path: libs_pc
+          key: pintor-pc-${{ hashFiles('herramientas_pc/compilar_pintor_android.sh') }}
+
+      - name: Compilar el motor para PC
+        if: steps.cache_motor.outputs.cache-hit != 'true'
+        run: PARA_PC=1 bash herramientas_pc/compilar_pintor_android.sh 2>&1 | tail -40
+
+      - name: Recuperar los modelos ya descargados
+        uses: actions/cache@v4
+        with:
+          path: modelos_pintor
+          key: modelos-pintor-${{ hashFiles('pintor_kira.py') }}
+          restore-keys: modelos-pintor-
+
+      - name: Pintar y buscar de verdad
+        run: |
+          mkdir -p modelos_pintor
+          python herramientas_pc/probar_pintor_real.py "$PWD/libs_pc" "$PWD/modelos_pintor"
+
+      - name: Guardar lo pintado y el resumen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pruebas-pintor
+          path: salida_pruebas
+          retention-days: 7

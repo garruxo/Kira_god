@@ -5,7 +5,7 @@ navegar_kira.py - Kira se MUEVE por la app y FUERA de ella cuando se lo pides (V
 Dentro de Kira:  «Kira, abre la sala hacker», «ve a los juegos», «llévame al editor», «enséñame mis notas»,
                  «juega a la serpiente», «atrás», «ve al menú».
 Fuera de Kira:   «abre WhatsApp» (cualquier app instalada, por su nombre), «ve al inicio del móvil» / «minimízate»,
-                 «abre los ajustes del wifi», «busca en internet recetas de paella», «abre youtube.com»,
+                 «abre los ajustes del wifi», «busca en google recetas de paella», «abre youtube.com»,
                  «marca el 600 123 456» (abre el teclado del teléfono con el número: NO llama sola),
                  «vuelve» (desde otra app, Kira vuelve a primer plano).
 Desde otra app (Kira en segundo plano con «Siempre activa»), Android solo deja abrir cosas si le das el permiso
@@ -48,6 +48,10 @@ DESTINOS = {
     "panel:modulos": (("modulos", "mis modulos"), "Te abro los módulos."),
     "busqueda": (("busqueda", "buscador"), "Te abro la búsqueda."),
     "lienzo": (("lienzo", "dibujos"), "Te abro el lienzo."),
+    "pintor": (("pintor", "estudio de pintura", "pinceles", "mis imagenes", "imagenes de kira", "tus imagenes"),
+               "Te abro el pintor."),
+    "internet": (("buscador de internet", "pantalla de internet", "internet de kira", "busquedas en internet",
+                  "resultados de internet"), "Te abro internet."),
     "conocimiento": (("conocimiento", "lo que has aprendido"), "Te enseño lo que he aprendido."),
     "notas": (("notas", "apuntes"), "Te abro tus notas."),
     "memoria": (("memoria", "conversacion"), "Te abro la memoria."),
@@ -153,7 +157,8 @@ def interpretar(texto, juegos_extra=()):
         if j:
             return {"tipo": "juego", "id": j}
     # ---- web ----
-    m = re.match(r"^(?:busca(?:me)?|buscar)\s+en\s+(?:internet|google|la web|el navegador|la red)\s+(.+)$", t)
+    # «busca en internet…» lo hace Kira sola (internet_kira); en el navegador solo si dices «en google / el navegador»
+    m = re.match(r"^(?:busca(?:me)?|buscar)\s+en\s+(?:google|el navegador)\s+(.+)$", t)
     if m:
         import urllib.parse
         return {"tipo": "web", "url": "https://www.google.com/search?q=" + urllib.parse.quote(m.group(1)[:200])}

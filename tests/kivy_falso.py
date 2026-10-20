@@ -95,7 +95,7 @@ def instalar():
     k = _mod("kivy", kivy_data_dir="/nonexistent")
     for nombre in ("kivy.graphics", "kivy.uix.boxlayout", "kivy.uix.button", "kivy.uix.floatlayout", "kivy.uix.label",
                    "kivy.uix.popup", "kivy.uix.scrollview", "kivy.uix.textinput", "kivy.uix.gridlayout",
-                   "kivy.uix.widget", "kivy.uix.slider", "kivy.app", "kivy.core.text", "kivy.graphics.texture", "kivy.uix.togglebutton"):
+                   "kivy.uix.widget", "kivy.uix.slider", "kivy.app", "kivy.core.text", "kivy.graphics.texture", "kivy.uix.togglebutton", "kivy.uix.image"):
         m = _mod(nombre); m.__getattr__ = _gen(nombre)
     _mod("kivy.uix"); _mod("kivy.core")
     sys.modules["kivy.uix.screenmanager"] = _mod("kivy.uix.screenmanager", ScreenManager=ScreenManager, Screen=Screen,

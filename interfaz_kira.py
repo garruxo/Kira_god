@@ -50,6 +50,8 @@ def construir_interfaz(core, consola=None):
     from pantallas_codigo_kira import montar_codigo
     from pantalla_cerebro_kira import montar_cerebro
     from pantalla_lector_kira import montar_lector, pedir_permiso_fotos
+    from pantalla_pintor_kira import montar_pintor
+    from pantalla_internet_kira import montar_internet
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -236,6 +238,16 @@ def construir_interfaz(core, consola=None):
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
             programa_por_voz(prog)
+            return
+        import pintor_kira as pin_
+        import internet_kira as net_
+        img = pin_.pedido_imagen(orden, siempre_dibuja=bool(core.pintor.instalados()))
+        if img is not None:                             # «pinta…», «hazme una foto de…»: al pintor
+            imagen_por_voz(img)
+            return
+        red = net_.interpretar(orden)
+        if red is not None:                             # «busca en internet…», «lee el 2», «estudia en internet…»
+            internet_por_voz(red, orden)
             return
         dis = dk_.pedido_diseno(orden)
         if dis is not None:                             # «diséñame una web para…»: al ordenador de diseño
@@ -434,6 +446,70 @@ def construir_interfaz(core, consola=None):
                         "ia": "Hecho. Revísalo y guárdalo si te gusta."}.get(
                 origen, "Lo he hecho con mis plantillas. Revísalo y guárdalo si te gusta."))
         Clock.schedule_once(lambda _dt: diseno["disenar"](tipo, descripcion, hecho), 1.2)
+
+    def imagen_por_voz(descripcion):
+        """«Kira, pinta un faro al atardecer»: va al pintor y lo pinta (con barra de progreso)."""
+        if not core.pintor.instalados():
+            ir("pintor")
+            decir("Para pintar necesito un pincel: descarga uno aquí una vez (el rápido pesa 683 MB). Luego pinto sin "
+                  "internet.")
+            return
+        ir("pintor")
+        decir(f"Vale, pinto: {descripcion}. Te enseño cómo se va formando.")
+
+        def hecho(r):
+            if r is None:
+                voz.hablar("No he podido pintarla. Te dejo el motivo en la pantalla.")
+            else:
+                voz.hablar(f"Ya está, en {r['segundos']:.0f} segundos. Si te gusta, toca «A la galería».")
+        Clock.schedule_once(lambda _dt: pintor_ui["pintar"](descripcion, al_terminar=hecho), 0.3)
+
+    def internet_por_voz(p_red, orden):
+        """«Kira, busca en internet…», «lee el 2», «resume el 2», «guarda el 2», «estudia en internet…»."""
+        acc = p_red["accion"]
+        if acc == "buscar":
+            ir("internet")
+            decir(f"Busco «{p_red['consulta']}» en internet.")
+
+            def hecho(r):
+                if isinstance(r, Exception):
+                    voz.hablar(f"No he podido buscar: {r}")
+                elif r:
+                    voz.hablar(f"He encontrado {len(r)} resultados. El primero es {r[0]['titulo']}, de "
+                               f"{r[0]['fuente']}. Toca uno o dime «lee el uno».")
+            internet_ui["buscar"](p_red["consulta"], p_red["tipo"], al_terminar=hecho)
+            return
+        if acc == "estudiar":
+            ir("internet")
+            decir(f"Me pongo a estudiar «{p_red['consulta']}» en internet: leo las mejores páginas y lo guardo en mi baúl.")
+            internet_ui["estudiar"](p_red["consulta"], al_terminar=lambda r: voz.hablar(
+                str(r).replace("[OK] ", "").replace("[x] ", "") if not isinstance(r, Exception) else f"No he podido: {r}"))
+            return
+        if acc == "leer" and p_red.get("n"):
+            ir("internet")
+            if internet_ui["leer"](p_red["n"], al_terminar=lambda pag: voz.hablar(
+                    f"Te lo enseño: {pag['titulo']}." if isinstance(pag, dict) else f"No he podido leerlo: {pag}")):
+                return
+        if acc == "editor":
+            def abrir(pag):
+                cod = core.internet.codigo_de(pag) if isinstance(pag, dict) else ""
+                if cod:
+                    codigo_ui["cargar_en_editor"](cod, "", f"Código de {pag['url']}: revísalo y pulsa «Ejecutar» "
+                                                           "(modo seguro). Lo de internet nunca se ejecuta solo.")
+                    decir("Te dejo el código en el editor.")
+                else:
+                    decir("[x] " + (str(pag) if isinstance(pag, Exception) else "Esa página no tiene código."))
+            en_hilo(lambda: core.leer_resultado(p_red["n"]), abrir)
+            return
+        # resumir / guardar / navegador / leer una dirección: lo hace el núcleo y Kira lo dice
+        st["ocupado"] = True
+        modelo.poner_estado("pensando")
+        burbuja.text = "…"
+
+        def fin(r):
+            st["ocupado"] = False
+            decir(f"[x] {r}" if isinstance(r, Exception) else str(r))
+        en_hilo(lambda: core.procesar_orden(orden), fin)
 
     # ---------- escucha permanente con «Kira» ----------
     def pintar_escucha(texto=None):
@@ -1106,6 +1182,19 @@ def construir_interfaz(core, consola=None):
                        "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
     # =================================================================================
+    #  PINTOR (imágenes con su propia IA) e INTERNET (buscar, leer y aprender)
+    # =================================================================================
+    pintor_ui = montar_pintor(sm, {"boton": boton, "entrada": entrada, "pantalla": pantalla, "en_hilo": en_hilo,
+                                   "ganchos": ganchos, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE,
+                                   "ROJO": ROJO, "NEON": NEON, "FUENTE": FUENTE, "core": core, "voz": voz,
+                                   "ajustes": ajustes})
+    internet_ui = montar_internet(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
+                                       "pantalla": pantalla, "en_hilo": en_hilo, "ganchos": ganchos, "TXT": TXT,
+                                       "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "NEON": NEON, "FUENTE": FUENTE,
+                                       "core": core,
+                                       "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
+
+    # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)
     # =================================================================================
     hacker = montar_sala_hacker(sm, {
@@ -1164,6 +1253,8 @@ def construir_interfaz(core, consola=None):
         if nombre != "jugar":
             codigo_ui["parar_juego"]()
         diseno["detener_si_sale"](nombre)
+        if nombre != "pintor":
+            pintor_ui["al_salir"]()
         sm.current = nombre
         if nombre == "inicio":
             orbe.iniciar()

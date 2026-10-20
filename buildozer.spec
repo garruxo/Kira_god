@@ -27,14 +27,14 @@ source.include_exts = py,png,jpg,kv,atlas
 #source.exclude_exts = spec
 
 # (list) List of directory to exclude (leave empty to not exclude anything)
-source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tests, .github, herramientas_pc, kira_laboratorio, libs_android, .cerebro_build
+source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tests, .github, herramientas_pc, kira_laboratorio, libs_android, .cerebro_build, libs_pc
 
 # (list) List of exclusions using pattern matching
 # Do not prefix with './'
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.17
+version = 2.18
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]

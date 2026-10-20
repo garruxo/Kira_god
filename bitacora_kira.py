@@ -205,6 +205,14 @@ MAPA = {
     "laboratorio_movil_kira.py": "el laboratorio DEL MÓVIL: prueba las mejoras sin ordenador (y en el PC también si está)",
     "acuerdo_kira.py": "Kira y Claude en equipo: uno propone, el otro revisa, hasta ponerse de acuerdo",
     "programar_kira.py": "programas y juegos por voz para el editor, probados en modo seguro (no se instalan)",
+    "pintor_kira.py": "el PINTOR: imágenes con su propia IA (stable-diffusion.cpp), pinceles, progreso, ampliar",
+    "pantalla_pintor_kira.py": "pantalla «Pintor»: pintar con vista previa, galería, otra versión, ampliar ×4",
+    "internet_kira.py": "buscar y leer en internet: DuckDuckGo, Wikipedia, Stack Overflow, GitHub, páginas y PDF",
+    "pantalla_internet_kira.py": "pantalla «Internet»: resultados, leer, resumir, aprender, código al editor",
+    "descargas_kira.py": "descargas grandes con reanudación (los pinceles del pintor)",
+    "android_src/org/kira/servicio/GaleriaKira.java": "guarda las imágenes en la galería (Imágenes/Kira) con MediaStore",
+    "herramientas_pc/compilar_pintor_android.sh": "compila el motor del pintor (stable-diffusion.cpp) para Android",
+    ".github/workflows/probar_pintor.yml": "prueba el pintor y el buscador de verdad (modelos reales, web real)",
     "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
     "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
@@ -225,6 +233,8 @@ HISTORIA = [
     "que siempre caben y pantalla de carga limpia con barra y tiempo.",
     "Sin ordenador (v2.17): laboratorio en el móvil, Kira y Claude se ponen de acuerdo en mejoras, programas, diseños y "
     "estudio; programas y diseños por voz.",
+    "Pintor e internet (v2.18): imágenes con su propia IA dentro del móvil (stable-diffusion.cpp) y buscar, leer y "
+    "aprender en internet cuando se lo pides.",
 ]
 
 DIAGNOSTICOS = [

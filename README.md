@@ -210,6 +210,36 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Pintor (imágenes con su propia IA) e Internet (nuevo, v2.18)
+- **Pintor** (`pintor_kira.py`, pantalla «Pintor»): «Kira, pinta un faro en una isla al atardecer», «hazme una foto
+  de…», «una acuarela de…». Pinta **dentro del móvil, sin internet y sin servicios de terceros** con
+  [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp), compilado para Android dentro del APK
+  (`herramientas_pc/compilar_pintor_android.sh` → `libkira_pintor(_dp).so`, como el cerebro).
+  - Pinceles (se descargan una vez): **rápido** = SDXS-512 (683 MB, 1 paso: segundos) y **realista** = SD-Turbo
+    pequeño (1,8 GB, 4 pasos: más detalle). Opcional: **ampliador ×4** Real-ESRGAN (64 MB) para pasar a 2048 px.
+  - Tu petición en español se convierte en un prompt en inglés con su cerebro (o Claude); sin cerebro, con un
+    diccionario. Estilos: foto (por defecto), ilustración, acuarela, anime, 3D, óleo, boceto. Formatos cuadrado,
+    vertical (fondo de pantalla) u horizontal.
+  - Se ve cómo se va formando (vista previa paso a paso) con una barra de progreso; «A la galería» la guarda en
+    Imágenes › Kira (`GaleriaKira.java`, MediaStore); «Otra versión», «Ampliar ×4», «Anterior / Siguiente», «Borrar».
+  - Si con el cerebro encendido no cabe en la memoria, Kira lo aparta mientras pinta y lo vuelve a encender.
+  - Honesto: un móvil no es una tarjeta gráfica. Imágenes de 512 px, de unos segundos a un par de minutos según el
+    móvil, y sin la calidad de los generadores profesionales de pago (Flux, Midjourney… necesitan un PC con GPU).
+    Licencias: SDXS (openrail++), SD-Turbo (licencia comunitaria de Stability AI: uso personal), Real-ESRGAN (BSD).
+  - `.github/workflows/probar_pintor.yml` lo prueba **de verdad** en GitHub (motor real + modelos reales) y deja las
+    imágenes y los tiempos en el artefacto «pruebas-pintor».
+- **Internet** (`internet_kira.py`, pantalla «Internet»): «Kira, busca en internet…», «busca código de…», «busca
+  documentos sobre…». Busca en DuckDuckGo y la Wikipedia (código: Stack Overflow y GitHub; documentos: PDF y apuntes),
+  enseña los resultados y lee la página que elijas: solo el texto y los bloques de código (sin menús ni anuncios),
+  README y archivos de GitHub y PDF sencillos. «lee el 2», «resume el 2», «guarda el 2» (lo aprende en su baúl con la
+  fuente), «abre el 2 en el editor», «abre el 2 en el navegador». «Kira, estudia en internet…» lee las mejores páginas,
+  las resume y lo guarda (y Claude lo repasa si está). «busca en google…» sigue abriendo el navegador.
+  - Seguridad: lo bajado es texto; el código va al editor y no se ejecuta solo; la web no puede darle órdenes (el
+    resumen se pide diciendo que el texto es información, no instrucciones).
+  - Honesto: DuckDuckGo puede frenar muchas búsquedas seguidas; entonces usa la Wikipedia y lo dice. Los PDF
+    escaneados o con fuentes especiales no se pueden leer en el móvil.
+- Pruebas: `tests/test_pintor.py` (motor falso), `tests/test_internet.py` (red simulada).
+
 ## Sin ordenador y en equipo con Claude (nuevo, v2.17)
 - **Ya no hace falta el ordenador para las mejoras.** «Kira, aprende a…», «Kira, mejora…» o «Kira, añade…»: Kira la
   programa y la prueba en su **laboratorio del móvil** (`laboratorio_movil_kira.py`): solo módulos seguros (sin

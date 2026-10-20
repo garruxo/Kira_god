@@ -6,3 +6,7 @@ bin/
 *.zip
 libs_android/
 .cerebro_build/
+libs_pc/
+salida_pruebas/
+.pruebas_datos/
+modelos_pintor/

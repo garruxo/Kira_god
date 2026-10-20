@@ -67,10 +67,15 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - «estudia X»: Claude repasa las fichas de Wikipedia y deja una ficha corregida en el baúl;
   - el tope de tiempo (editor y laboratorio del móvil) ya no afecta a otros hilos de Kira;
   - pruebas: `tests/test_acuerdo.py`, `tests/test_laboratorio_movil.py`, `tests/test_equipo_voz.py`.
+- **Hecho en la v2.18 (pintor e internet):**
+  - `pintor_kira.py` + `pantalla_pintor_kira.py`: stable-diffusion.cpp (`sd-cli`, versión `master-929-3f8527a`) como `libkira_pintor(_dp).so` (`herramientas_pc/compilar_pintor_android.sh`, caché propia en el workflow); pinceles SDXS-512 Q8 (rápido) y tiny-sd-turbo Q8 (realista) de Hugging Face, ampliador Real-ESRGAN ×4; prompt en inglés con el cerebro; progreso leyendo la salida; vista previa `--preview proj`; aparta el cerebro si falta RAM; `GaleriaKira.java` (MediaStore);
+  - `internet_kira.py` + `pantalla_internet_kira.py`: DuckDuckGo HTML (+lite), Wikipedia, Stack Overflow (gzip), GitHub; HTML→texto con el código aparte, PDF sencillo con zlib; órdenes en el núcleo (`_orden_internet`, `resumir_pagina`, `guardar_pagina`, `estudiar_en_internet`); «busca en internet» ya no abre el navegador (solo «busca en google»);
+  - `descargas_kira.py` (descargas con reanudación); menú con «Pintor» e «Internet»;
+  - pruebas: `tests/test_pintor.py`, `tests/test_internet.py`; prueba real en GitHub: `.github/workflows/probar_pintor.yml` (artefacto «pruebas-pintor»).
 - **Pendiente:**
   - nada de lo de moverse fuera de la app ni el faro se ha probado en el móvil real ni en la WiFi de casa;
   - pulsar botones dentro de otras apps (necesitaría servicio de accesibilidad: pedir permiso al dueño antes);
-  - motor local para generar imágenes (stable-diffusion.cpp), siendo honesto sobre lo lento que es en un móvil;
+  - el pintor y el buscador no se han probado en el móvil real (el pintor sí con modelos reales en el PC de GitHub); pintar en el ordenador del laboratorio con modelos grandes (SDXL/Flux) si tiene GPU;
   - nada de lo de cámara, ojos, pantalla y siempre activa se ha confirmado todavía en el móvil real;
   - la voz nueva y la rapidez (v2.16) no se han medido en el móvil real;
   - el laboratorio del móvil y el acuerdo con Claude (v2.17) no se han probado en el móvil real; el laboratorio del móvil corre dentro de la app: protege contra errores y accidentes, no es una caja fuerte.
