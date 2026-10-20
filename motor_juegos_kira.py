@@ -20,6 +20,10 @@ La pantalla de juegos lo escala para que quepa en cualquier móvil.
 Piezas: rect(), circulo(), texto(), linea(), poligono(); cada una tiene x, y, w, h (o r), vx, vy, color y viva.
   linea(x1, y1, x2, y2, color, grosor): un segmento. poligono([(x, y), ...], color): figura rellena (mejor convexa);
   sus puntos se guardan respecto a su centro, así se mueve con vx/vy y gira con girar(p, grados).
+IMÁGENES (gráficos realistas pintados por Kira): imagen(x, y, w, h, "nombre") dibuja el dibujo «nombre» de la
+  carpeta del juego (atributo sprites = "mi_juego"). Qué hay que pintar se dice en el atributo dibujos:
+      dibujos = {"jugador": "a knight in shiny armor", "fondo": "a medieval castle courtyard"}
+  y «Kira, pinta los dibujos del juego» los pinta (los personajes, sin fondo). Si aún no están, sale un recuadro.
 Física: con vx/vy se mueven solas; self.gravedad tira hacia abajo de las que tengan cae=True.
 Ayudas: chocan(a, b), rebotar_en_bordes(e), dentro(e), azar(a, b), fin("mensaje"), ganar("mensaje").
 """
@@ -102,9 +106,14 @@ def chocan(a, b):
     return a1 < c2 and c1 < a2 and b1 < d2 and d1 < b2
 
 
+FORMAS = ("rect", "circulo", "texto", "linea", "poligono", "imagen")
+
+
 class Juego:
     titulo = "Juego"
     instrucciones = ""
+    sprites = ""                  # carpeta de sus dibujos pintados (gráficos realistas)
+    dibujos = {}                  # {"nombre": "descripción en inglés para pintarlo"} ("fondo": el escenario)
     ancho, alto = 360, 640
     fondo = (0.97, 0.98, 1.0)
 
@@ -199,6 +208,10 @@ class Juego:
 
     def texto(self, x, y, texto, tam=24, col="negro"):
         return self._nueva(Pieza("texto", x, y, 0, 0, col, texto=texto, tam=tam))
+
+    def imagen(self, x, y, w, h, nombre, col="blanco"):
+        """Un dibujo pintado (ver «dibujos»). (x, y) es la esquina de abajo a la izquierda, como en rect()."""
+        return self._nueva(Pieza("imagen", x, y, w, h, col, texto=str(nombre)))
 
     def linea(self, x1, y1, x2, y2, col="negro", grosor=2):
         p = Pieza("linea", x1, y1, 0, 0, col)

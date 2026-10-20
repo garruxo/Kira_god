@@ -87,6 +87,22 @@ try:
 except OSError:
     pass
 
+# ---------- 2b. dibujos de un juego realista (personajes recortados) ----------
+import juego_realista_kira as jr   # noqa: E402
+import sprites_kira as spk         # noqa: E402
+plan = jr.plan_simple("un caballero que esquiva dragones y recoge monedas en un castillo", pk.traducir_simple)
+for nombre, desc in jr.dibujos(plan).items():
+    try:
+        t0 = time.time()
+        r = pin.pintar(desc, "realista", "vertical" if nombre == "fondo" else "cuadrada", semilla=7)
+        destino = os.path.join(SAL, f"juego_{nombre}.png")
+        nota = spk.preparar_sprite(r["ruta"], destino, fondo=nombre == "fondo")
+        resumen["pintor"][f"juego_{nombre}"] = {"ok": True, "segundos": round(time.time() - t0, 1), "nota": nota,
+                                               "prompt": desc}
+    except Exception as e:
+        resumen["pintor"][f"juego_{nombre}"] = {"ok": False, "error": str(e)}
+    guardar()
+
 # ---------- 3. ampliar ----------
 try:
     base = next(os.path.join(SAL, x) for x in sorted(os.listdir(SAL)) if x.startswith("0_") and x.endswith(".png"))

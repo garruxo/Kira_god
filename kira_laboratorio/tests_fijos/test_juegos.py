@@ -52,5 +52,5 @@ for nombre, crear in juegos.items():
     assert time.time() - inicio < 10, f"'{nombre}' va demasiado lento"
     for d in j.dibujo():
         forma, col = d[0], d[5]
-        assert forma in ("rect", "circulo", "texto", "linea", "poligono") and len(col) == 4
+        assert forma in ("rect", "circulo", "texto", "linea", "poligono", "imagen") and len(col) == 4
 print("JUEGOS_OK", ", ".join(juegos))

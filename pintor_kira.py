@@ -89,6 +89,13 @@ _DICC = {
     "brillante": "bright", "feliz": "happy", "triste": "sad", "tranquilo": "calm", "sonriendo": "smiling",
     "corriendo": "running", "volando": "flying", "durmiendo": "sleeping", "sentado": "sitting", "sentada": "sitting",
     "jugando": "playing", "leyendo": "reading", "comiendo": "eating", "bailando": "dancing", "nadando": "swimming",
+    "caballero": "knight", "caballeros": "knights", "dragones": "dragons", "monedas": "coins", "moneda": "coin",
+    "oro": "gold", "nave": "spaceship", "naves": "spaceships", "asteroides": "asteroids", "meteoritos": "meteors",
+    "surfista": "surfer", "ola": "wave", "olas": "waves", "tiburon": "shark", "tiburones": "sharks", "ninja": "ninja",
+    "guerrero": "warrior", "princesa": "princess", "mago": "wizard", "zombi": "zombie", "zombis": "zombies",
+    "piratas": "pirates", "pirata": "pirate", "tesoro": "treasure", "diamantes": "diamonds", "estrella": "star",
+    "rocas": "rocks", "roca": "rock", "fuego": "fire", "bolas": "balls", "jungla": "jungle", "selva": "jungle",
+    "cueva": "cave", "volcan": "volcano", "submarino": "submarine", "astronauta": "astronaut", "corredor": "runner",
     "con": "with", "en": "in", "sobre": "on", "bajo": "under", "junto": "next to", "y": "and", "de": "of",
     "al": "at the", "del": "of the", "entre": "between", "frente": "in front of", "detras": "behind",
 }

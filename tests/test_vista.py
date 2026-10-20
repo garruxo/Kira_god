@@ -42,7 +42,16 @@ for i in lk.IDIOMAS:
 # ---------- lógica ----------
 J = JavaFalso()
 v = vk.Vista(T, J)
-ok("com.whatsapp" in v.privadas and not v.siempre_activa, "por defecto: WhatsApp privada, no siempre activa")
+ok("com.whatsapp" in v.privadas and v.siempre_activa, "por defecto: WhatsApp privada y SIEMPRE ACTIVA (no se duerme)")
+class JavaAhorro(JavaFalso):
+    def __init__(s): super().__init__(); s.exento, s.pedidos = False, 0
+    def sin_ahorro(s): return s.exento
+    def pedir_sin_ahorro(s): s.pedidos += 1; return False
+JA = JavaAhorro(); va = vk.Vista(tempfile.mkdtemp(), JA)
+ok(va.pedir_sin_ahorro() is False and JA.pedidos == 1, "pide a Android que no la duerma (ahorro de batería)")
+ok(va.pedir_sin_ahorro() is False and JA.pedidos == 1, "solo una vez (no molesta cada vez que abres)")
+ok(vk.Vista(va.carpeta.rsplit(os.sep, 1)[0], JA).ahorro_pedido, "se recuerda que ya se pidió")
+JA.exento = True; ok(va.pedir_sin_ahorro() is True, "si ya está fuera del ahorro, no pide nada")
 try:
     v.mirar(L); ok(False, "sin permiso")
 except vk.VistaError as e:

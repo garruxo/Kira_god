@@ -80,7 +80,8 @@ class KiraGodCore:
         self.camara.primer_plano = lambda: not self.en_segundo_plano
         if self.vista.siempre_activa and self.vista.disponible():
             try:
-                self.vista.poner_siempre_activa(True)
+                self.vista.poner_siempre_activa(True)     # servicio en primer plano: Android no la cierra
+                self.vista.pedir_sin_ahorro()             # y que el ahorro de batería no la duerma (se pide una vez)
             except Exception as e:
                 logger.error(f"No se pudo activar el servicio: {e}")
         import cerebro_propio_kira               # el cerebro DENTRO de la app (sin Termux ni API)
@@ -1006,6 +1007,74 @@ class KiraGodCore:
                         "Sin cerebro encendido traduzco palabra a palabra: con él (o con Claude) entiendo mejor lo que "
                         "pides.") + (" He apartado mi cerebro un momento para que cupiera en la memoria." if apartado else ""))
         return r
+
+    # ---------- JUEGOS REALISTAS: el pintor dibuja los personajes y Kira programa el juego ----------
+    def pintar_dibujos(self, carpeta, dibujos, al_progreso=None, rehacer=False):
+        """Pinta los dibujos de un juego ({nombre: descripción en inglés}); los personajes, sin fondo. Devuelve
+        [(nombre, nota)]. Lanza PintorError si no hay pincel."""
+        import pintor_kira as pk
+        import sprites_kira as spk
+        pin = self.pintor
+        modelo = "realista" if pin.instalado("realista") else next((k for k in pk.MODELOS if pin.instalado(k)), None)
+        if modelo is None:
+            raise pk.PintorError("Para dibujar los personajes necesito un pincel: descárgalo una vez en Menú › «Pintor».")
+        cer, apartado = getattr(self, "cerebro_propio", None), False
+        if not pin.memoria_suficiente(modelo) and cer is not None and cer.encendido():
+            cer.apagar()
+            apartado = True
+        hechos, lista = [], list(dibujos.items())
+        try:
+            for i, (nombre, desc) in enumerate(lista):
+                destino = spk.ruta(carpeta, nombre)
+                if os.path.isfile(destino) and not rehacer:
+                    hechos.append((nombre, "ya estaba"))
+                    continue
+                fondo = nombre == "fondo"
+
+                def prog(f, t, i_=i, n_=nombre):
+                    if al_progreso:
+                        al_progreso((i_ + f) / len(lista), f"Pintando «{n_}» ({i_ + 1} de {len(lista)})… {t}")
+                r = pin.pintar(desc, modelo, "vertical" if fondo else "cuadrada", None,
+                               "text, watermark, frame, border, cropped", prog)
+                try:
+                    nota = spk.preparar_sprite(r["ruta"], destino, fondo=fondo)
+                finally:
+                    try:
+                        os.remove(r["ruta"])               # el dibujo va al juego, no a «Mis imágenes»
+                    except OSError:
+                        pass
+                hechos.append((nombre, nota))
+        finally:
+            if apartado:
+                cer.encender_en_segundo_plano(lambda ok: self.cerebro_ia.local_disponible(forzar=True))
+        return hechos
+
+    def crear_juego_realista(self, pedido, al_progreso=None):
+        """«juego realista de un caballero que esquiva dragones»: plan (con el cerebro o de la frase), dibujos
+        realistas con el pintor y el programa del juego. Devuelve {'codigo', 'nombre', 'plan', 'aviso', 'pintados'}."""
+        import juego_realista_kira as jr
+        import pintor_kira as pk
+        if al_progreso:
+            al_progreso(0.0, "Pensando el juego…")
+        plan = None
+        clave = self._clave_para("general")
+        if clave:
+            try:
+                plan = jr.plan_desde_ia(self._llamar_api(clave, jr.SISTEMA_PLAN, f"Pedido: {pedido}", max_tokens=350))
+            except Exception:
+                plan = None
+        if plan is None:
+            plan = jr.plan_simple(pedido, pk.traducir_simple)
+        programa = jr.codigo(plan)
+        aviso, pintados = "", []
+        if not self.pintor.tiene_motor():
+            aviso = "Esta versión no trae el pintor: el juego sale con recuadros en vez de dibujos."
+        elif not self.pintor.instalados():
+            aviso = ("Aún no tengo pincel: el juego sale con recuadros. Descarga uno en «Pintor» y di «Kira, pinta los "
+                     "dibujos del juego».")
+        else:
+            pintados = self.pintar_dibujos(plan["carpeta"], jr.dibujos(plan), al_progreso, rehacer=True)
+        return {"codigo": programa, "nombre": plan["carpeta"], "plan": plan, "aviso": aviso, "pintados": pintados}
 
     def _orden_pintor(self, cmd_lower):
         import pintor_kira as pk

@@ -22,6 +22,9 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.net.Uri;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
 
@@ -67,6 +70,37 @@ public class ServicioKira extends Service {
     public static void detener(Context ctx) {
         soltarPantalla();
         ctx.stopService(new Intent(ctx, ServicioKira.class));
+    }
+
+    /** ¿Android deja a Kira fuera del «ahorro de batería»? (si no, al apagar la pantalla puede cerrarla) */
+    public static boolean sinAhorro(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return true;
+            PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+            return pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Pide a Android (una ventana suya) que no duerma a Kira. true si ya lo estaba. */
+    public static boolean pedirSinAhorro(Context ctx) {
+        if (sinAhorro(ctx)) return true;
+        try {
+            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:" + ctx.getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+        } catch (Throwable t) {
+            try {
+                Intent j = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                j.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(j);
+            } catch (Throwable t2) {
+                // nada: el usuario puede hacerlo a mano en Ajustes › Batería
+            }
+        }
+        return false;
     }
 
     public static boolean activo() {

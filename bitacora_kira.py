@@ -213,6 +213,8 @@ MAPA = {
     "android_src/org/kira/servicio/GaleriaKira.java": "guarda las imágenes en la galería (Imágenes/Kira) con MediaStore",
     "herramientas_pc/compilar_pintor_android.sh": "compila el motor del pintor (stable-diffusion.cpp) para Android",
     ".github/workflows/probar_pintor.yml": "prueba el pintor y el buscador de verdad (modelos reales, web real)",
+    "sprites_kira.py": "dibujos de los juegos: PNG en Python puro, quitar el fondo a los personajes, «dibujos» del programa",
+    "juego_realista_kira.py": "«hazme un juego realista de…»: plan, dibujos realistas con el pintor y el programa",
     "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
     "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",

@@ -173,6 +173,7 @@ def montar_codigo(sm, p):
             super().__init__(**kw)
             self.juego = None
             self._textos = {}
+            self._imagenes = {}
             self._previo = None
 
         def escala(self):
@@ -193,6 +194,25 @@ def montar_codigo(sm, p):
                 lb.refresh()
                 self._textos[clave] = lb.texture
             return self._textos[clave]
+
+        def imagen(self, carpeta, nombre):
+            """La textura de un dibujo del juego (pintado por el pintor), o None si aún no está."""
+            import sprites_kira as spk
+            ruta = spk.ruta(carpeta, nombre)
+            try:
+                marca = os.path.getmtime(ruta)
+            except OSError:
+                return None
+            clave = (ruta, marca)
+            if clave not in self._imagenes:
+                if len(self._imagenes) > 40:
+                    self._imagenes.clear()
+                try:
+                    from kivy.core.image import Image as CoreImage
+                    self._imagenes[clave] = CoreImage(ruta).texture
+                except Exception:
+                    self._imagenes[clave] = None
+            return self._imagenes[clave]
 
         def dibujar(self):
             g = self.juego
@@ -217,6 +237,14 @@ def montar_codigo(sm, p):
                         for px, py in puntos + puntos[:1]:
                             vs += [ox + px * s, oy + py * s, 0, 0]
                         Mesh(vertices=vs, indices=list(range(len(vs) // 4)), mode="triangle_fan")
+                    elif forma == "imagen":
+                        tex = self.imagen(getattr(g, "sprites", ""), texto)
+                        if tex is not None:
+                            Color(1, 1, 1, col[3])
+                            Rectangle(texture=tex, pos=(ox + x * s, oy + y * s), size=(w * s, h * s))
+                        else:                                       # aún sin pintar: un recuadro suave
+                            Color(col[0] * 0.6, col[1] * 0.7, col[2] * 0.8, 0.5)
+                            Rectangle(pos=(ox + x * s, oy + y * s), size=(w * s, h * s))
                     elif forma == "texto" and texto:
                         tx = self.textura(texto, max(8, int(tam * s)))
                         Rectangle(texture=tx, pos=(ox + x * s, oy + y * s), size=tx.size)

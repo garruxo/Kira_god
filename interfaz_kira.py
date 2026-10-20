@@ -297,9 +297,19 @@ def construir_interfaz(core, consola=None):
         if ik.pedido_con_codigo(orden):                 # «implementa este código (en las mejoras)»
             mejora_con_codigo(orden)
             return
+        if re.match(r"^(?:p[ií]nta(?:me)?|dib[uú]ja(?:me)?|haz(?:me)?|cr[eé]a(?:me)?|rehaz)\s+(?:los\s+|las\s+)?"
+                    r"(?:dibujos|gr[aá]ficos|personajes|sprites|im[aá]genes)\s+(?:del|de\s+este|de\s+mi|para\s+el)\s+"
+                    r"(?:juego|programa)\b", orden, re.I):
+            dibujos_del_juego()                         # «pinta los dibujos del juego» (el que está en el editor)
+            return
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
-            programa_por_voz(prog)
+            import juego_realista_kira as jr_
+            resto = jr_.es_realista(prog)
+            if resto is not None:                       # «hazme un juego realista de…»: pintor + programa
+                juego_realista_por_voz(resto or "un explorador")
+            else:
+                programa_por_voz(prog)
             return
         import pintor_kira as pin_
         import internet_kira as net_
@@ -492,6 +502,66 @@ def construir_interfaz(core, consola=None):
         Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](
             ("Implementar el código de " + origen + (f" «{nombre}»" if nombre else "")), al_terminar,
             codigo=codigo), 1.5)
+
+    def avance(texto):                                  # progreso largo (llega desde un hilo): sin hablar
+        def poner(_dt):
+            burbuja.text = texto
+            bocadillo(texto)
+        Clock.schedule_once(poner, 0)
+
+    def juego_realista_por_voz(pedido):
+        """«Kira, hazme un juego realista de un caballero que esquiva dragones»: piensa el juego, el pintor dibuja el
+        escenario y los personajes (estilo real, recortados) y lo deja en el editor ya jugando."""
+        st["ocupado"] = True
+        modelo.poner_estado("pensando")
+        decir(f"¡Vamos allá! Diseño el juego, pinto los personajes en estilo realista y lo programo: {pedido}. "
+              "Pintar cuatro dibujos puede tardar unos minutos.")
+        ultimo = {"t": 0.0}
+
+        def prog(f, texto):
+            if time.monotonic() - ultimo["t"] > 0.7:
+                ultimo["t"] = time.monotonic()
+                avance(f"{texto}\n({f * 100:.0f} % del juego)")
+
+        def fin(r):
+            st["ocupado"] = False
+            if isinstance(r, Exception):
+                decir(f"[x] No pude crear el juego: {r}")
+                return
+            aviso = ("Juego realista hecho por Kira. Los dibujos están en la carpeta «" + r["nombre"] + "». "
+                     + (r["aviso"] + " " if r["aviso"] else "") + "Pulsa «Jugar» para jugarlo otra vez.")
+            codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"], aviso)
+            codigo_ui["empezar_juego"](r["codigo"], volver="editor_codigo")
+            decir("¡Listo! " + ("" if not r["aviso"] else r["aviso"] + " ")
+                  + f"Mueve a {r['plan']['protagonista']} con el dedo. El programa está en el editor por si quieres cambiarlo.")
+        en_hilo(lambda: core.crear_juego_realista(pedido, al_progreso=prog), fin)
+
+    def dibujos_del_juego():
+        """Pinta (o repinta) los dibujos que pide el juego del editor (atributos «sprites» y «dibujos»)."""
+        import sprites_kira as spk_
+        cod, _nombre = codigo_ui["codigo_actual"]() if "codigo_actual" in codigo_ui else ("", "")
+        carpeta, dibujos = spk_.dibujos_de(cod or "")
+        if not dibujos:
+            decir("El juego del editor no dice qué dibujos necesita: ponle «sprites = \"nombre\"» y un diccionario "
+                  "«dibujos» con lo que hay que pintar (o pídeme «hazme un juego realista de…»).")
+            return
+        carpeta = carpeta or "juego"
+        st["ocupado"] = True
+        decir(f"Pinto {len(dibujos)} dibujo(s) del juego en estilo realista. Tardo un poco.")
+        ultimo = {"t": 0.0}
+
+        def prog(f, texto):
+            if time.monotonic() - ultimo["t"] > 0.7:
+                ultimo["t"] = time.monotonic()
+                avance(texto)
+
+        def fin(r):
+            st["ocupado"] = False
+            if isinstance(r, Exception):
+                decir(f"[x] {r}")
+            else:
+                decir(f"Hecho: {len(r)} dibujo(s) listos. Pulsa «Jugar» en el editor para verlos.")
+        en_hilo(lambda: core.pintar_dibujos(carpeta, dibujos, prog, rehacer=True), fin)
 
     def programa_por_voz(pedido):
         """Kira escribe el programa (o juego), lo prueba en modo seguro, lo acuerda con Claude y lo deja en el editor.

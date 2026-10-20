@@ -72,6 +72,12 @@ class JavaAndroid:
     def acceso_uso(self):
         return bool(self.Servicio.tieneAccesoUso(self.actividad))
 
+    def sin_ahorro(self):
+        return bool(self.Servicio.sinAhorro(self.actividad))
+
+    def pedir_sin_ahorro(self):
+        return bool(self.Servicio.pedirSinAhorro(self.actividad))
+
     def abrir_ajustes_uso(self):
         from jnius import autoclass
         Intent, Settings = autoclass("android.content.Intent"), autoclass("android.provider.Settings")
@@ -99,14 +105,15 @@ class Vista:
         cfg = cfg if isinstance(cfg, dict) else {}
         lista = cfg.get("privadas")
         self.privadas = [str(x) for x in lista if isinstance(x, str)] if isinstance(lista, list) else list(PRIVADAS_DEFECTO)
-        self.siempre_activa = cfg.get("siempre_activa", False) is True
+        self.siempre_activa = cfg.get("siempre_activa", True) is not False     # por defecto SÍ: Kira no se duerme
+        self.ahorro_pedido = cfg.get("ahorro_pedido", False) is True
         self.quiere_ver = cfg.get("quiere_ver", False) is True      # al abrir Kira, pedir ya el permiso de pantalla
 
     def _guardar(self):
         tmp = self.ruta_cfg + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"privadas": self.privadas, "siempre_activa": self.siempre_activa,
-                       "quiere_ver": self.quiere_ver}, f, ensure_ascii=False)
+                       "quiere_ver": self.quiere_ver, "ahorro_pedido": self.ahorro_pedido}, f, ensure_ascii=False)
         os.replace(tmp, self.ruta_cfg)
 
     def disponible(self):
@@ -123,6 +130,22 @@ class Vista:
         elif not self.java.puede_ver():
             self.java.detener()
         return True
+
+    def pedir_sin_ahorro(self, forzar=False):
+        """Que Android no cierre a Kira al apagar la pantalla («optimización de batería»). Lo pide UNA vez (o si
+        forzar). Devuelve True si ya está fuera del ahorro, False si se ha pedido (o no se puede saber)."""
+        if self.java is None or not hasattr(self.java, "sin_ahorro"):
+            return False
+        try:
+            if self.java.sin_ahorro():
+                return True
+            if self.ahorro_pedido and not forzar:
+                return False
+            self.ahorro_pedido = True
+            self._guardar()
+            return bool(self.java.pedir_sin_ahorro())
+        except Exception:
+            return False
 
     def pedir_ver(self, al_resultado=None):
         """Pide a Android el permiso de ver la pantalla; si lo das, al abrir Kira se pedirá solo."""

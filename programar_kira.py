@@ -26,7 +26,9 @@ REGLAS_PROGRAMA = (
     "instrucciones, preparar(), actualizar(dt) y al_tocar(x, y); piezas con self.rect(x, y, w, h, color), "
     "self.circulo(x, y, r, color), self.texto(x, y, texto, tam, color), self.linea(...), self.poligono([...], color); "
     "self.azar(a, b), self.dedo, self.chocan(a, b), self.con_etiqueta(t), self.puntos, self.vidas, self.fin(msg); "
-    "pantalla 360x640 con la y hacia arriba. Código corto, claro y comentado en español.")
+    "pantalla 360x640 con la y hacia arriba. Para gráficos REALISTAS: atributos sprites = \"nombre_corto\" y "
+    "dibujos = {\"jugador\": \"descripción visual en inglés\", ...} (\"fondo\" es el escenario) y la pieza "
+    "self.imagen(x, y, w, h, \"jugador\"); el pintor de Kira los dibuja. Código corto, claro y comentado en español.")
 
 SISTEMA_PROGRAMA = ("Escribes programas para el editor de Kira. Responde SOLO con:\nNOMBRE: <nombre_corto_en_minusculas>\n"
                     "```python\n<programa completo>\n```\nReglas: " + REGLAS_PROGRAMA)

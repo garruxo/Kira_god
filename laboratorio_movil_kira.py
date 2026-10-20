@@ -360,7 +360,7 @@ class LaboratorioMovil:
                     if len(j.piezas) > motor.MAX_PIEZAS:
                         return f"'{nombre}': demasiadas piezas"
                 for d in j.dibujo():
-                    if d[0] not in ("rect", "circulo", "texto", "linea", "poligono") or len(d[5]) != 4:
+                    if d[0] not in motor.FORMAS or len(d[5]) != 4:
                         return f"'{nombre}': dibuja algo que el motor no entiende"
                 return None
             try:

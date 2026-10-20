@@ -210,6 +210,23 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Juegos realistas y Kira siempre activa (nuevo, v2.22)
+- **«Kira, hazme un juego realista de…»** (`juego_realista_kira.py`, `sprites_kira.py`): Kira entiende quién es el
+  protagonista, qué se esquiva, qué se recoge y dónde pasa (con su cerebro o Claude; si no, de la frase); el **pintor**
+  dibuja el escenario y los personajes en estilo realista, los personajes **recortados sin fondo** (el fondo liso se
+  vuelve transparente, en Python puro); y programa un juego de «esquivar y recoger» que los usa. Se pone a jugar y el
+  programa queda en el editor para cambiarlo.
+- El motor de juegos tiene una pieza nueva, **`imagen(x, y, w, h, "nombre")`**, y los juegos pueden declarar
+  `sprites = "carpeta"` y `dibujos = {"jugador": "descripción en inglés", "fondo": …}`. «Kira, pinta los dibujos del
+  juego» pinta (o repinta) los que pida el juego del editor. Los dibujos van en `sprites/` y no llenan «Mis imágenes».
+- **Siempre activa por defecto**: el servicio en primer plano arranca al abrir Kira (aviso fijo) y la primera vez pide
+  a Android quedar fuera del **ahorro de batería**, para que al apagar la pantalla no se cierre ni tenga que volver a
+  cargar el cerebro. Honesto: algunos fabricantes tienen su propio ahorro; allí hay que poner «Sin restricciones» a
+  mano. Gasta algo más de batería (sigue oyendo «Kira»).
+- Cambia el test fijo del laboratorio del PC (`tests_fijos/test_juegos.py` admite la pieza «imagen»): **hay que volver
+  a sellar** (`python kira_master.py` → `sellar SELLAR NUCLEO`).
+- Pruebas: `tests/test_juego_realista.py`, `tests/test_vista.py`.
+
 ## Pintor (imágenes con su propia IA) e Internet (nuevo, v2.18)
 - **Pintor** (`pintor_kira.py`, pantalla «Pintor»): «Kira, pinta un faro en una isla al atardecer», «hazme una foto
   de…», «una acuarela de…». Pinta **dentro del móvil, sin internet y sin servicios de terceros** con

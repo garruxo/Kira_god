@@ -11,6 +11,8 @@ on:
       - pintor_kira.py
       - internet_kira.py
       - descargas_kira.py
+      - sprites_kira.py
+      - juego_realista_kira.py
       - herramientas_pc/compilar_pintor_android.sh
       - herramientas_pc/probar_pintor_real.py
       - .github/workflows/probar_pintor.yml
@@ -73,7 +75,7 @@ jobs:
               print(f"::warning title=Sin resumen::{e}"); raise SystemExit
           for k, v in d.get("pintor", {}).items():
               if isinstance(v, dict):
-                  print(f"::notice title=Pintor {k}::ok={v.get('ok')} s={v.get('segundos')} {str(v.get('error') or '')[:300]}")
+                  print(f"::notice title=Pintor {k}::ok={v.get('ok')} s={v.get('segundos')} {v.get('nota') or ''} {str(v.get('error') or '')[:300]}")
           for k, v in d.get("internet", {}).items():
               lee = "; ".join(f"{l.get('tipo') or 'x'}:{l.get('letras') or l.get('error','')[:60]}" for l in v.get("lecturas", []))
               fuentes = ", ".join(r["fuente"] for r in v.get("resultados", []))
