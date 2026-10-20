@@ -97,6 +97,9 @@ def main():
                       "(la compilación en GitHub ya lo hace)")
     if not os.path.isfile(os.path.join(RAIZ, "main.py")):
         errores.append("Falta main.py (buildozer arranca la app desde ahí)")
+    if not os.path.isfile(os.path.join(RAIZ, "herramientas_pc", "firma", "kira_debug.keystore")):
+        errores.append("Falta herramientas_pc/firma/kira_debug.keystore: sin la firma fija, el APK nuevo no se "
+                       "instalaría encima del anterior (habría que desinstalar Kira)")
     if sys.platform.startswith("linux") and any(x.startswith("/mnt/") for x in os.environ.get("PATH", "").split(":")):
         avisos.append("El PATH de Ubuntu incluye carpetas de Windows (/mnt/c/...). Con espacios como «Program Files» suelen "
                       "romper la compilación. Antes de buildozer ejecuta:  "

@@ -88,6 +88,22 @@ jobs:
             exit $rc
           fi
 
+      - name: Firma FIJA de Kira (para que cada APK nuevo se instale encima del anterior, sin desinstalar)
+        env:
+          KIRA_KEYSTORE_B64: ${{ secrets.KIRA_KEYSTORE_B64 }}
+        run: |
+          # Android solo deja ACTUALIZAR una app si el APK nuevo lleva la MISMA firma. Sin esto, cada compilación
+          # en GitHub inventaba una firma nueva y había que desinstalar Kira (y perder lo aprendido) cada vez.
+          mkdir -p ~/.android
+          if [ -n "$KIRA_KEYSTORE_B64" ]; then
+            echo "$KIRA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore   # la del secreto, si la pusiste
+          else
+            cp herramientas_pc/firma/kira_debug.keystore ~/.android/debug.keystore
+          fi
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
+            | grep -m1 "SHA256:" | sed 's/.*SHA256: //' | tr -d ':' | tr 'A-F' 'a-f' > /tmp/firma_esperada
+          echo "Firma de Kira: $(cat /tmp/firma_esperada)"
+
       - name: Compilar el APK (debug)
         run: |
           # lo que quedó a medias de libffi en un intento anterior (si falló al prepararse)
@@ -163,6 +179,19 @@ jobs:
             echo "::notice title=Manifiesto del APK::Lleva:$QUE"
           else
             echo "::warning title=Manifiesto::No encuentro aapt para revisar el manifiesto"
+          fi
+
+      - name: Comprobar que el APK lleva la firma fija de Kira
+        run: |
+          APK=$(ls bin/*.apk | head -1)
+          SIGNER=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SIGNER" ]; then echo "::warning title=Firma::No encuentro apksigner para comprobar la firma"; exit 0; fi
+          TIENE=$("$SIGNER" verify --print-certs "$APK" | grep -m1 "SHA-256 digest" | sed 's/.*: //' | tr -d ' :' | tr 'A-F' 'a-f')
+          if [ "$TIENE" = "$(cat /tmp/firma_esperada)" ]; then
+            echo "::notice title=Firma::El APK lleva la firma fija de Kira: se instala encima del anterior sin desinstalar."
+          else
+            echo "::error title=Firma::El APK NO lleva la firma fija (tiene $TIENE). No se podría actualizar sin desinstalar."
+            exit 1
           fi
 
       - name: Guardar el APK como artefacto
