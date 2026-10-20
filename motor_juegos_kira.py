@@ -17,7 +17,9 @@ Para programar un juego:
 
 Coordenadas: el juego mide self.ancho x self.alto (360 x 640 por defecto), con (0, 0) ABAJO a la izquierda.
 La pantalla de juegos lo escala para que quepa en cualquier móvil.
-Piezas: rect(), circulo(), texto(); cada una tiene x, y, w, h (o r), vx, vy, color y viva.
+Piezas: rect(), circulo(), texto(), linea(), poligono(); cada una tiene x, y, w, h (o r), vx, vy, color y viva.
+  linea(x1, y1, x2, y2, color, grosor): un segmento. poligono([(x, y), ...], color): figura rellena (mejor convexa);
+  sus puntos se guardan respecto a su centro, así se mueve con vx/vy y gira con girar(p, grados).
 Física: con vx/vy se mueven solas; self.gravedad tira hacia abajo de las que tengan cae=True.
 Ayudas: chocan(a, b), rebotar_en_bordes(e), dentro(e), azar(a, b), fin("mensaje"), ganar("mensaje").
 """
@@ -47,7 +49,7 @@ def color(c):
 
 class Pieza:
     def __init__(self, forma, x, y, w=0.0, h=0.0, col="blanco", texto="", tam=24):
-        self.forma = forma                  # 'rect' | 'circulo' | 'texto'
+        self.forma = forma                  # 'rect' | 'circulo' | 'texto' | 'linea' | 'poligono'
         self.x, self.y, self.w, self.h = float(x), float(y), float(w), float(h)
         self.vx = self.vy = 0.0
         self.color = color(col)
@@ -55,6 +57,8 @@ class Pieza:
         self.viva = True
         self.cae = False                    # ¿le afecta la gravedad?
         self.datos = {}                     # para lo que quieras guardar en ella
+        self.puntos = []                    # línea y polígono: [(dx, dy)] respecto a (x, y)
+        self.grosor = 2.0
 
     # para círculos: (x, y) es el CENTRO y r el radio
     @property
@@ -67,13 +71,17 @@ class Pieza:
 
     def caja(self):
         """(izquierda, abajo, derecha, arriba)"""
+        if self.forma in ("linea", "poligono") and self.puntos:
+            xs = [self.x + dx for dx, _ in self.puntos]
+            ys = [self.y + dy for _, dy in self.puntos]
+            return (min(xs), min(ys), max(xs), max(ys))
         if self.forma == "circulo":
             return (self.x - self.r, self.y - self.r, self.x + self.r, self.y + self.r)
         return (self.x, self.y, self.x + self.w, self.y + self.h)
 
     @property
     def centro(self):
-        if self.forma == "circulo":
+        if self.forma in ("circulo", "poligono"):
             return (self.x, self.y)
         return (self.x + self.w / 2.0, self.y + self.h / 2.0)
 
@@ -192,6 +200,43 @@ class Juego:
     def texto(self, x, y, texto, tam=24, col="negro"):
         return self._nueva(Pieza("texto", x, y, 0, 0, col, texto=texto, tam=tam))
 
+    def linea(self, x1, y1, x2, y2, col="negro", grosor=2):
+        p = Pieza("linea", x1, y1, 0, 0, col)
+        p.puntos, p.grosor = [(0.0, 0.0), (float(x2) - x1, float(y2) - y1)], max(0.5, float(grosor))
+        return self._nueva(p)
+
+    def poligono(self, puntos, col="azul"):
+        pts = [(float(x), float(y)) for x, y in puntos]
+        if len(pts) < 3:
+            raise ValueError("poligono: hacen falta al menos 3 puntos")
+        if len(pts) > 64:
+            raise ValueError("poligono: máximo 64 puntos")
+        cx, cy = sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts)
+        p = Pieza("poligono", cx, cy, 0, 0, col)
+        p.puntos = [(x - cx, y - cy) for x, y in pts]
+        return self._nueva(p)
+
+    @staticmethod
+    def mover_linea(l, x1, y1, x2, y2):
+        """Cambia los extremos de una línea ya creada (para animar sin crear piezas nuevas)."""
+        l.x, l.y = float(x1), float(y1)
+        l.puntos = [(0.0, 0.0), (float(x2) - l.x, float(y2) - l.y)]
+
+    @staticmethod
+    def poner_puntos(p, puntos):
+        """Cambia la forma de un polígono ya creado (puntos en la pantalla)."""
+        pts = [(float(x), float(y)) for x, y in puntos][:64]
+        if len(pts) >= 3:
+            p.x, p.y = sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts)
+            p.puntos = [(x - p.x, y - p.y) for x, y in pts]
+
+    @staticmethod
+    def girar(p, grados):
+        """Gira una línea o un polígono sobre su centro (o sobre su primer punto, la línea)."""
+        a = math.radians(grados)
+        c, s_ = math.cos(a), math.sin(a)
+        p.puntos = [(dx * c - dy * s_, dx * s_ + dy * c) for dx, dy in p.puntos]
+
     def borrar(self, p):
         p.viva = False
 
@@ -247,8 +292,11 @@ class Juego:
 
     # ---------- lo que dibuja la pantalla ----------
     def dibujo(self):
-        """[(forma, x, y, w, h, (r,g,b,a), texto, tam)] en coordenadas del juego."""
-        return [(p.forma, p.x, p.y, p.w, p.h, p.color, p.texto, p.tam) for p in self.piezas if p.viva]
+        """[(forma, x, y, w, h, (r,g,b,a), texto, tam, puntos)] en coordenadas del juego.
+        puntos: línea/polígono, [(x, y)] ya colocados en la pantalla (y en la línea, tam = grosor)."""
+        return [(p.forma, p.x, p.y, p.w, p.h, p.color, p.texto,
+                 p.grosor if p.forma == "linea" else p.tam,
+                 [(p.x + dx, p.y + dy) for dx, dy in p.puntos]) for p in self.piezas if p.viva]
 
     def marcador(self):
         base = f"Puntos: {self.puntos}   Vidas: {self.vidas}"

@@ -22,10 +22,16 @@ PUERTO = 8080
 MODELOS = {
     "ligero": {"nombre": "Qwen3.5 2B (rápido)", "archivo": "Qwen_Qwen3.5-2B-Q4_K_M.gguf", "bytes": 1_396_198_496,
                "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen_Qwen3.5-2B-Q4_K_M.gguf",
-               "ram_gb": 3},
+               "ram_gb": 3,
+               "ojos": {"nombre": "ojos del modelo ligero", "archivo": "mmproj-Qwen_Qwen3.5-2B-f16.gguf",
+                        "bytes": 668_227_136,
+                        "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-2B-f16.gguf"}},
     "listo": {"nombre": "Qwen3.5 4B (más listo)", "archivo": "Qwen_Qwen3.5-4B-Q4_K_M.gguf", "bytes": 3_013_027_808,
               "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf",
-              "ram_gb": 6},
+              "ram_gb": 6,
+              "ojos": {"nombre": "ojos del modelo listo", "archivo": "mmproj-Qwen_Qwen3.5-4B-f16.gguf",
+                       "bytes": 672_423_488,
+                       "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-4B-f16.gguf"}},
 }
 BINARIOS = ("libkira_cerebro_dp.so", "libkira_cerebro.so")    # primero el rápido; si el móvil no puede, el genérico
 MARGEN_DISCO = 300 * 1024 * 1024
@@ -68,6 +74,7 @@ class CerebroPropio:
         self.ruta_log = os.path.join(dir_datos, "cerebro_propio.log")
         self.ruta_pid = os.path.join(dir_datos, "cerebro_propio.pid")   # para reutilizar el cerebro ya cargado
         self.pid_externo = None
+        self.ojos_cargados = False
         self._binarios_dir = carpeta_binarios
         self._abrir, self._lanzar, self._reloj = abrir, lanzar, reloj
         self._salud = salud or self._salud_http
@@ -123,14 +130,38 @@ class CerebroPropio:
         self.modelo = id_
         self._guardar()
 
+    # ---------- ojos (visión: entender fotos y la pantalla) ----------
+    def ruta_ojos(self, id_=None):
+        o = MODELOS[id_ or self.modelo].get("ojos")
+        return os.path.join(self.carpeta_modelos, o["archivo"]) if o else ""
+
+    def ojos_instalados(self, id_=None):
+        o = MODELOS[id_ or self.modelo].get("ojos")
+        if not o:
+            return False
+        r = self.ruta_ojos(id_)
+        return os.path.isfile(r) and os.path.getsize(r) == o["bytes"]
+
+    def con_ojos(self):
+        """¿El cerebro encendido puede ver imágenes?"""
+        return self.encendido() and self.ojos_cargados
+
+    def descargar_ojos(self, id_=None, progreso=None):
+        """Descarga los ojos del modelo (~670 MB, una vez). Si el cerebro estaba encendido, hay que reiniciarlo."""
+        id_ = id_ or self.modelo
+        if self.ojos_instalados(id_):
+            return self.ruta_ojos(id_)
+        return self._bajar(MODELOS[id_]["ojos"], self.ruta_ojos(id_), progreso)
+
     def descargar(self, id_=None, progreso=None):
         """Descarga el modelo (reanuda si estaba a medias). progreso(fraccion, bajados, total). Bloquea: úsalo en un hilo."""
         id_ = id_ or self.modelo
-        m = MODELOS[id_]
-        os.makedirs(self.carpeta_modelos, exist_ok=True)
-        final = self.ruta_modelo(id_)
         if self.modelo_instalado(id_):
-            return final
+            return self.ruta_modelo(id_)
+        return self._bajar(MODELOS[id_], self.ruta_modelo(id_), progreso)
+
+    def _bajar(self, m, final, progreso=None):
+        os.makedirs(self.carpeta_modelos, exist_ok=True)
         parcial = final + ".parte"
         ya = os.path.getsize(parcial) if os.path.isfile(parcial) else 0
         libre = shutil.disk_usage(self.carpeta_modelos).free
@@ -178,7 +209,7 @@ class CerebroPropio:
 
     def borrar_modelo(self, id_):
         r = self.ruta_modelo(id_)
-        for x in (r, r + ".parte"):
+        for x in [r, r + ".parte"] + ([self.ruta_ojos(id_), self.ruta_ojos(id_) + ".parte"] if self.ruta_ojos(id_) else []):
             if os.path.isfile(x):
                 os.remove(x)
 
@@ -190,9 +221,11 @@ class CerebroPropio:
         except Exception:
             return False
 
-    def _argumentos(self, binario, extra=True):
+    def _argumentos(self, binario, extra=True, ojos=None):
         args = [binario, "-m", self.ruta_modelo(), "-c", "2048", "-t", str(self.hilos),
                 "--host", "127.0.0.1", "--port", str(PUERTO)]
+        if self.ojos_instalados() if ojos is None else ojos:
+            args += ["--mmproj", self.ruta_ojos()]       # con ojos: entiende fotos y capturas
         if extra:
             args += ["--reasoning-budget", "0"]     # sin «pensar en voz alta»: responde mucho antes
         return args
@@ -207,21 +240,23 @@ class CerebroPropio:
     def _reutilizar(self):
         """Si el cerebro sigue cargado de antes (Kira se cerró pero el motor siguió vivo), se usa al momento."""
         try:
-            pid, modelo = open(self.ruta_pid, encoding="utf-8").read().split()[:2]
-            pid = int(pid)
-        except (OSError, ValueError):
+            partes = open(self.ruta_pid, encoding="utf-8").read().split()
+            pid, modelo = int(partes[0]), partes[1]
+            ojos = len(partes) > 2 and partes[2] == "ojos"
+        except (OSError, ValueError, IndexError):
             return False
-        if modelo != self.modelo or not _vivo(pid) or not self._salud():
+        if modelo != self.modelo or (self.ojos_instalados() and not ojos) or not _vivo(pid) or not self._salud():
             self._borrar_pid()
             return False
         self.pid_externo = pid
+        self.ojos_cargados = ojos
         return True
 
     def _guardar_pid(self, pid):
         if isinstance(pid, int):
             try:
                 with open(self.ruta_pid, "w", encoding="utf-8") as f:
-                    f.write(f"{pid} {self.modelo}")
+                    f.write(f"{pid} {self.modelo} {'ojos' if self.ojos_cargados else 'sin_ojos'}")
             except OSError:
                 pass
 
@@ -248,10 +283,12 @@ class CerebroPropio:
                 self.estado, self.mensaje = "error", "Esta versión de Kira no trae el motor del cerebro."
                 return False
             self.estado, self.mensaje = "arrancando", "Kira se está despertando (cargando su cerebro)…"
-            for binario in binarios:
+            for ojos in ((True, False) if self.ojos_instalados() else (False,)):   # si con ojos no cabe, sin ellos
+              for binario in binarios:
                 for extra in (True, False):
-                    if self._probar(binario, extra, espera):
+                    if self._probar(binario, extra, espera, ojos):
                         self.binario_usado = binario
+                        self.ojos_cargados = ojos
                         self._guardar_pid(getattr(self.proceso, "pid", None))
                         self.estado, self.mensaje = "encendido", "Cerebro propio encendido."
                         return True
@@ -259,11 +296,11 @@ class CerebroPropio:
             self.mensaje = "El cerebro no arrancó. Mira el registro (cerebro_propio.log) o prueba el modelo ligero."
             return False
 
-    def _probar(self, binario, extra, espera):
+    def _probar(self, binario, extra, espera, ojos=False):
         log = open(self.ruta_log, "ab")
         try:
             extra_kw = {"start_new_session": True} if self._lanzar is subprocess.Popen else {}
-            self.proceso = self._lanzar(self._argumentos(binario, extra), stdout=log, stderr=subprocess.STDOUT,
+            self.proceso = self._lanzar(self._argumentos(binario, extra, ojos), stdout=log, stderr=subprocess.STDOUT,
                                         stdin=subprocess.DEVNULL, cwd=self.dir, **extra_kw)
         except OSError as e:
             log.close()

@@ -28,7 +28,7 @@ for malo, trozo in (("def registrar(:\n", "sintaxis"), ("def otra():\n    return
                     ("def registrar():\n    eval('1')\n    return {}\n", "eval"), ("def registrar():\n    open('x')\n    return {}\n", "open"),
                     ("", "vacío"), ("class A:\n    def registrar(self):\n        return {}\n", "registrar")):
     r = mi.precomprobar(malo); ok(r is not None and trozo in r, f"rechaza ({trozo}): {r}")
-ok("Ejemplo 1" in mi.SISTEMA_MEJORA_LOCAL and len(mi.SISTEMA_MEJORA_LOCAL) < 2600, "instrucciones cortas con ejemplos para el modelo pequeño")
+ok("Ejemplo 1" in mi.SISTEMA_MEJORA_LOCAL and len(mi.SISTEMA_MEJORA_LOCAL) < 3000, "instrucciones cortas con ejemplos para el modelo pequeño")
 for e in mi.EJEMPLOS.split("```python\n")[1:]:
     ok(mi.precomprobar(e.split("```")[0]) is None, "los ejemplos que se le dan pasan la revisión")
 

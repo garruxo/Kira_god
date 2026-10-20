@@ -174,7 +174,8 @@ class Cerebro:
     def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None):
         """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra."""
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
-            {"role": m["role"], "content": str(m["content"])} for m in mensajes]
+            {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
+            for m in mensajes]
         cuerpo = json.dumps({"messages": msgs, "max_tokens": int(min(max_tokens, MAX_TOKENS_LOCAL)),
                              "temperature": 0.6, "stream": bool(al_trozo)}).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
@@ -200,6 +201,21 @@ class Cerebro:
         if not texto:
             raise CerebroError("El modelo local no llegó a responder (respuesta vacía).")
         return texto
+
+    def ver_imagen(self, ruta, pregunta, max_tokens=400, timeout=300, al_trozo=None):
+        """Los OJOS: el modelo local mira una imagen (necesita el cerebro encendido con sus ojos, --mmproj)."""
+        import base64
+        try:
+            with open(ruta, "rb") as f:
+                datos = f.read(12_000_000)
+        except OSError as e:
+            raise CerebroError(f"No encuentro la imagen: {e}")
+        tipo = "image/png" if datos[:4] == b"\x89PNG" else "image/jpeg"
+        url = f"data:{tipo};base64," + base64.b64encode(datos).decode("ascii")
+        contenido = [{"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": str(pregunta)}]
+        return self.chat_local("Eres Kira. Responde en español, claro y breve.",
+                               [{"role": "user", "content": contenido}], max_tokens=max_tokens, timeout=timeout,
+                               al_trozo=al_trozo)
 
     def estado_texto(self, clave_api):
         local = self.local_disponible(forzar=True)

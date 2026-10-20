@@ -16,7 +16,7 @@ def montar_codigo(sm, p):
     """p: piezas de la interfaz (boton, entrada, texto_largo, en_hilo, pantalla, ir, colores, dir_datos, ganchos)."""
     from kivy.clock import Clock
     from kivy.core.text import Label as CoreLabel
-    from kivy.graphics import Color, Ellipse, Rectangle
+    from kivy.graphics import Color, Ellipse, Line, Mesh, Rectangle
     from kivy.metrics import dp, sp
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.gridlayout import GridLayout
@@ -200,12 +200,20 @@ def montar_codigo(sm, p):
             with self.canvas:
                 Color(*mj.color(g.fondo))
                 Rectangle(pos=(ox, oy), size=(g.ancho * s, g.alto * s))
-                for forma, x, y, w, h, col, texto, tam in g.dibujo():
+                for forma, x, y, w, h, col, texto, tam, puntos in g.dibujo():
                     Color(*col)
                     if forma == "rect":
                         Rectangle(pos=(ox + x * s, oy + y * s), size=(w * s, h * s))
                     elif forma == "circulo":
                         Ellipse(pos=(ox + (x - w / 2) * s, oy + (y - h / 2) * s), size=(w * s, h * s))
+                    elif forma == "linea" and len(puntos) >= 2:
+                        Line(points=[v for px, py in puntos for v in (ox + px * s, oy + py * s)], width=max(1.0, tam * s / 2))
+                    elif forma == "poligono" and len(puntos) >= 3:
+                        cx, cy = ox + x * s, oy + y * s                  # abanico desde el centro
+                        vs = [cx, cy, 0, 0]
+                        for px, py in puntos + puntos[:1]:
+                            vs += [ox + px * s, oy + py * s, 0, 0]
+                        Mesh(vertices=vs, indices=list(range(len(vs) // 4)), mode="triangle_fan")
                     elif forma == "texto" and texto:
                         tx = self.textura(texto, max(8, int(tam * s)))
                         Rectangle(texture=tx, pos=(ox + x * s, oy + y * s), size=tx.size)

@@ -18,6 +18,7 @@ def montar_cerebro(sm, p):
     TXT, TENUE, GRIS, VERDE, ROJO, NEON, FUENTE = (p[k] for k in ("TXT", "TENUE", "GRIS", "VERDE", "ROJO", "NEON", "FUENTE"))
     core, oido, ajustes = p["core"], p["oido"], p["ajustes"]
     vista = core.vista
+    camara = core.camara
     cerebro = core.cerebro_propio
     est = {"reloj": None, "aviso": ""}
 
@@ -75,6 +76,15 @@ def montar_cerebro(sm, p):
                                                              + "\n\nPara añadir otra: ábrela y di «Kira, no mires esta app»."),
                            GRIS, alto=44))
     c.add_widget(fila5)
+    c.add_widget(titulo("OJOS Y CÁMARA (ver fotos y la pantalla)"))
+    lb_ojo = etiqueta(56)
+    c.add_widget(lb_ojo)
+    fila6 = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+    btn_ojos = boton("Descargar los ojos (0,7 GB)", lambda: descargar_ojos(), VERDE, alto=44)
+    btn_cam = boton("Permiso de cámara", lambda: camara.java and camara.java.pedir_permiso(), GRIS, alto=44)
+    fila6.add_widget(btn_ojos)
+    fila6.add_widget(btn_cam)
+    c.add_widget(fila6)
     sv, ayuda = texto_largo(
         "Con el cerebro propio Kira charla y programa SIN internet, sin clave y sin Termux. Se descarga UNA vez "
         "(mejor con WiFi y el móvil enchufado) y se enciende sola cada vez que abres Kira. El ligero responde antes; "
@@ -113,6 +123,17 @@ def montar_cerebro(sm, p):
             lb_oid.text = "Sin oído propio todavía: pulsa «Descargar el oído»."
         btn_oid.disabled = oido.modelo_instalado() or oido.estado == "descargando"
         btn_uso.text = "Usar oído propio: " + ("SÍ" if ajustes.oido_propio else "NO")
+        if cerebro.estado == "descargando" and est.get("bajando_ojos"):
+            lb_ojo.text = f"Descargando los ojos… {cerebro.progreso * 100:.0f} %"
+        elif cerebro.ojos_instalados():
+            lb_ojo.text = "Tiene ojos: " + ("cargados, puede ver fotos y la pantalla." if cerebro.con_ojos()
+                                            else "se cargan al encender el cerebro.")
+        else:
+            lb_ojo.text = ("Sin ojos: con la cámara solo lee letras. Con ojos (0,7 GB, sin internet) te dice qué tienes "
+                           "delante y entiende la pantalla.")
+        btn_ojos.disabled = cerebro.ojos_instalados() or cerebro.estado == "descargando" or not cerebro.modelo_instalado()
+        btn_cam.disabled = not camara.disponible() or camara.tiene_permiso()
+        btn_cam.text = "Cámara: permiso dado" if camara.tiene_permiso() else "Permiso de cámara"
         btn_siempre.text = "Siempre activa: " + ("SÍ" if vista.siempre_activa else "NO")
         if not vista.disponible():
             lb_vis.text = "Esto solo funciona en el móvil."
@@ -194,6 +215,24 @@ def montar_cerebro(sm, p):
         vista.pedir_ver(lambda ok: Clock.schedule_once(lambda _dt: (est.update(
             aviso="Ya puedo ver la pantalla cuando me lo pidas." if ok else "No me diste permiso para ver la pantalla."),
             pintar()), 0.5))
+
+    def descargar_ojos():
+        est["bajando_ojos"] = True
+
+        def trabajo():
+            try:
+                cerebro.descargar_ojos()
+                est["aviso"] = "Ojos descargados. Reiniciando el cerebro para cargarlos…"
+                if cerebro.encendido():
+                    cerebro.apagar()
+                cerebro.encender()
+                core.cerebro_ia.local_disponible(forzar=True)
+                est["aviso"] = ""
+            except cp.CerebroPropioError as e:
+                est["aviso"] = str(e)
+            est["bajando_ojos"] = False
+        threading.Thread(target=trabajo, daemon=True).start()
+        pintar()
 
     def alternar_oido():
         ajustes.alternar_oido()

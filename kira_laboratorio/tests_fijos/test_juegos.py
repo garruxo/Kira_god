@@ -50,6 +50,7 @@ for nombre, crear in juegos.items():
             j.tocar(10, 10)                         # reinicia y sigue probando
         assert len(j.piezas) <= motor.MAX_PIEZAS
     assert time.time() - inicio < 10, f"'{nombre}' va demasiado lento"
-    for forma, x, y, w, h, col, texto, tam in j.dibujo():
-        assert forma in ("rect", "circulo", "texto") and len(col) == 4
+    for d in j.dibujo():
+        forma, col = d[0], d[5]
+        assert forma in ("rect", "circulo", "texto", "linea", "poligono") and len(col) == 4
 print("JUEGOS_OK", ", ".join(juegos))

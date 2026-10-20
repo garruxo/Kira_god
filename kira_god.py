@@ -69,6 +69,9 @@ class KiraGodCore:
         import vista_kira                        # ver la pantalla (con tu permiso) y estar siempre activa
         self.vista = vista_kira.Vista(self.dir, vista_kira.java_android())
         self.en_segundo_plano = False
+        import camara_kira                       # mirar con la cámara (solo con Kira abierta)
+        self.camara = camara_kira.Camara(self.dir, camara_kira.java_camara())
+        self.camara.primer_plano = lambda: not self.en_segundo_plano
         if self.vista.siempre_activa and self.vista.disponible():
             try:
                 self.vista.poner_siempre_activa(True)
@@ -521,11 +524,88 @@ class KiraGodCore:
             return f"[x] {e}"
         if cmd_lower.startswith(("explícame", "explicame", "explica")):
             try:
+                if self.cerebro_propio.con_ojos():           # con ojos: la MIRA como imagen, no solo sus letras
+                    r, _app = v.mirar_con(lambda ruta: self.cerebro_ia.ver_imagen(
+                        ruta, "Esta es una captura de la pantalla de mi móvil. Explícame de forma clara y corta qué se "
+                              "ve y qué puedo hacer ahí."))
+                    return r
                 return self.conversar("Explícame, de forma clara y corta, lo que hay en mi pantalla:\n" + texto[:1500])
             except RuntimeError as e:
                 return f"[x] {e}"
         return (f"En tu pantalla pone:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}\n\n"
                 "Puedes decir «explícame lo leído», «guarda lo leído» o «abre lo leído en el editor».")
+
+    def ver_imagen(self, ruta, pregunta):
+        """Los ojos de Kira (visión dentro del móvil). Lanza RuntimeError si aún no los tiene."""
+        c = self.cerebro_propio
+        if not c.con_ojos():
+            if not c.modelo_instalado():
+                raise RuntimeError("Para ver, primero necesito mi cerebro: Menú › Cerebro y oído.")
+            if not c.ojos_instalados():
+                raise RuntimeError("Aún no tengo ojos: di «descarga tus ojos» (unos 670 MB, con WiFi) o ve a "
+                                   "Menú › Cerebro y oído.")
+            raise RuntimeError("Mis ojos se están cargando: espera a que el cerebro esté encendido.")
+        return self.cerebro_ia.ver_imagen(ruta, pregunta)
+
+    def _orden_camara(self, cmd_lower):
+        import camara_kira as ck
+        import cerebro_propio_kira as cp
+        import lector_kira as lk
+        c = self.cerebro_propio
+        if cmd_lower == "ojos":
+            if c.ojos_instalados():
+                return "[OK] Tengo ojos." + (" Están cargados." if c.con_ojos() else " Se cargan al encender el cerebro.")
+            return "[i] Aún no tengo ojos. Di «descarga tus ojos» (unos 670 MB, mejor con WiFi)."
+        if cmd_lower.startswith(("descarga", "baja")):
+            if c.ojos_instalados():
+                return "[OK] Ya tengo ojos."
+            if not c.modelo_instalado():
+                return "[x] Primero descarga mi cerebro (Menú › Cerebro y oído); los ojos van con él."
+
+            def bajar():
+                try:
+                    c.descargar_ojos()
+                    if c.encendido():                    # se reinicia para cargar los ojos
+                        c.apagar()
+                    c.encender()
+                    self.cerebro_ia.local_disponible(forzar=True)
+                    self.avisos_voz(" Ya tengo ojos: pregúntame «¿qué tengo delante?».")
+                except cp.CerebroPropioError as e:
+                    self.avisos_voz(f" No pude descargar mis ojos: {e}")
+            threading.Thread(target=bajar, daemon=True, name="kira-ojos").start()
+            return "[OK] Descargando mis ojos (unos 670 MB). Te aviso cuando estén."
+        cam = self.camara
+        if self.en_segundo_plano:
+            return "[x] Para usar la cámara, abre Kira en la pantalla (Android no la deja en segundo plano)."
+        if cam.disponible() and not cam.tiene_permiso():
+            try:
+                cam.java.pedir_permiso()
+            except Exception:
+                pass
+            return "[i] Te he pedido permiso para la cámara. Acéptalo y vuelve a pedírmelo."
+        delantera = ck.quiere_delantera(cmd_lower)
+        describir = bool(re.match(r"^qu[eé] (?:tengo|hay)|^qu[eé] ves|^describe|^(?:usa|abre|mira)", cmd_lower))
+        try:
+            if describir and c.con_ojos():
+                return cam.describir(lambda ruta, p: self.cerebro_ia.ver_imagen(ruta, p), trasera=not delantera)
+            texto = cam.leer(self.lector, trasera=not delantera)
+        except ck.CamaraError as e:
+            return f"[x] {e}"
+        except lk.LectorError as e:
+            if describir and not c.ojos_instalados():
+                return (f"[x] {e} Para que te diga qué hay (no solo letras) necesito ojos: di «descarga tus ojos».")
+            return f"[x] {e}"
+        except Exception as e:
+            return f"[x] No pude mirar: {e}"
+        extra = "" if not describir else "\n\n(Para que te describa lo que ve, no solo las letras: «descarga tus ojos».)"
+        return f"Con la cámara leo:\n\n{texto[:1500]}{'…' if len(texto) > 1500 else ''}{extra}"
+
+    def avisos_voz(self, texto):
+        """Un aviso que Kira dirá en cuanto pueda (en la burbuja y en voz alta)."""
+        try:
+            self.avisos.programar("kira", 0, texto.strip())
+        except Exception:
+            logger.info(texto)
 
     def _orden_lector(self, cmd_lower):
         import lector_kira as lk
@@ -791,6 +871,12 @@ class KiraGodCore:
             return self._orden_cerebro_propio(cmd_lower)
         elif re.match(r"^(?:lee|léeme|leer)(?: la)? (?:última |ultima )?captura\b|^(?:abre|guarda|explícame|explicame|explica) lo le[ií]do\b|^lector$", cmd_lower):
             return self._orden_lector(cmd_lower)
+        elif re.match(r"^(?:lee|léeme|leeme)(?: este| esta| el| la| lo que pone en (?:este|esta|el|la))? "
+                      r"(?:papel|documento|cartel|hoja|libro|carta|etiqueta|nota|ticket)\b|^(?:lee|mira) con la c[aá]mara"
+                      r"|^qu[eé] (?:tengo|hay) (?:delante|enfrente)\b|^qu[eé] ves con la c[aá]mara"
+                      r"|^describe (?:lo que ves|la foto|lo que hay|esto)\b|^(?:descarga|baja) (?:los |tus )?ojos\b|^ojos$"
+                      r"|^(?:usa|abre) la c[aá]mara\b", cmd_lower):
+            return self._orden_camara(cmd_lower)
         elif re.match(r"^(?:mira|lee|léeme|explícame|explicame|explica)(?: la| mi)? pantalla\b|^qu[eé] (?:ves|hay en (?:la|mi) pantalla)\b"
                       r"|^(?:no mires|puedes mirar) (?:esta app|aqu[ií])\b|^apps? privadas?$", cmd_lower):
             return self._orden_vista(cmd_lower)

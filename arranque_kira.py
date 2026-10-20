@@ -103,8 +103,40 @@ class Preparacion:
         self._una_vez("pantalla", pedir)
         return "Pantalla", "Android te pide permiso…", False
 
+    def _ojos(self):
+        """Los ojos (visión, ~670 MB): con WiFi se descargan de fondo; no hacen esperar."""
+        c = getattr(self.core, "cerebro_propio", None)
+        if c is None or not c.tiene_motor() or not c.modelo_instalado() or not hasattr(c, "ojos_instalados"):
+            return None
+        if c.ojos_instalados():
+            return ("Ojos", "listos", True) if c.con_ojos() or c.estado != "arrancando" else ("Ojos", "cargándolos…", True)
+        if c.estado == "descargando":
+            return "Ojos", f"descargándolos de fondo… {c.progreso * 100:.0f} %", True
+        if self._red() is True and c.encendido():
+            def bajar():
+                try:
+                    c.descargar_ojos()
+                    c.apagar()
+                    c.encender()
+                    self.core.cerebro_ia.local_disponible(forzar=True)
+                except Exception:
+                    pass
+            self._una_vez("ojos", lambda: self._en_hilo(bajar))
+            return "Ojos", "los descargo de fondo (0,7 GB, con WiFi)", True
+        return "Ojos", "sin descargar (hace falta WiFi)", True
+
+    def _camara(self):
+        cam = getattr(self.core, "camara", None)
+        if cam is None or not cam.disponible():
+            return None
+        if cam.tiene_permiso():
+            return "Cámara", "lista (solo mira cuando se lo pides)", True
+        self._una_vez("camara", lambda: _sin_error(cam.java.pedir_permiso))
+        return "Cámara", "te pido permiso", True
+
     def piezas(self):
-        return [p for p in (self._oido(), self._cerebro(), self._lector(), self._pantalla()) if p]
+        return [p for p in (self._oido(), self._cerebro(), self._ojos(), self._lector(), self._pantalla(),
+                            self._camara()) if p]
 
     def hace_falta(self):
         """¿Merece la pena enseñar «Preparando a Kira»? (algo que preparar en este dispositivo)"""

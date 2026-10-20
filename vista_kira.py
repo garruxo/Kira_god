@@ -177,6 +177,11 @@ class Vista:
 
     def mirar(self, lector):
         """Captura la pantalla, la lee y BORRA la captura. Devuelve (texto, app). Bloquea: úsalo en un hilo."""
+        return self.mirar_con(lector.leer)
+
+    def mirar_con(self, usar):
+        """Captura la pantalla, llama a usar(ruta) (leerla, o mirarla con los ojos) y BORRA la captura.
+        Devuelve (resultado, app)."""
         if self.java is None:
             raise VistaError("Ver la pantalla solo funciona en el móvil.")
         if not self.puede_ver():
@@ -191,7 +196,7 @@ class Vista:
         try:
             if not self.java.capturar(ruta):
                 raise VistaError("No he podido capturar la pantalla (¿quitaste el permiso?).")
-            texto = lector.leer(ruta)
+            texto = usar(ruta)
         finally:
             if os.path.exists(ruta):
                 os.remove(ruta)                                  # la captura no se guarda nunca

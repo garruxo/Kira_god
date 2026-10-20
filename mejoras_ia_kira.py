@@ -27,6 +27,9 @@ API_KIRA = (
     "Avisos: kira.avisar_en(segundos, texto) (Kira lo dirá en voz alta) y kira.decir(texto); kira.ahora(). "
     "JUEGOS: registrar() puede devolver {\"juego nombre\": crear} con def crear(motor): class J(motor.Juego): ... ; return J. "
     "En el juego: preparar(), actualizar(dt), al_tocar(x, y); self.rect(x, y, w, h, color), self.circulo(x, y, r, color), "
+    "self.linea(x1, y1, x2, y2, color, grosor), self.poligono([(x, y), ...], color), self.girar(p, grados), "
+    "self.mover_linea(l, x1, y1, x2, y2), self.poner_puntos(p, puntos) (anima sin crear piezas nuevas; máximo 2000), "
+    "self.texto(x, y, texto, tam, color), color como nombre o (r, g, b) de 0 a 1; "
     "self.dedo, self.chocan(a, b), self.puntos, self.fin(msg); pantalla 360x640 con y hacia arriba. NO importes el motor: llega como parámetro.")
 
 SISTEMA_MEJORA = (
