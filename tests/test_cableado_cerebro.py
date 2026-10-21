@@ -64,7 +64,7 @@ ok(correr(3, lambda: any(l.endswith("…") and "Claro" in l for l in burbuja()))
 ok(correr(3, lambda: "Claro, son las ocho." in burbuja()), "y al final queda entera")
 ok(charlas == ["cuéntame un cuento"], "la orden llega al cerebro")
 ok(correr(2, lambda: any("las ocho" in d for d in VOZ.dichos)), "y la dice en voz alta")
-ok(True in OIDO.pausas, "mientras pensaba, el oído estaba en pausa (no se oye a sí misma)")
+ok(True not in OIDO.pausas, "v2.27: mientras piensa y habla el oído SIGUE (para oír «para» y «cancela»)")
 # en cualquier pantalla
 sm.ir("juegos"); correr(0.5); OIDO.pausas.clear()
 OIDO.oye("hablando de otra cosa"); correr(1)

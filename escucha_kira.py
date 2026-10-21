@@ -71,6 +71,36 @@ def contiene_nombre(texto):
     return True, resto
 
 
+# =====================================================================================
+#  ÓRDENES DE CONTROL: «para», «cállate», «cancela» (valen aunque Kira esté hablando o trabajando)
+# =====================================================================================
+# Tienen que ser la frase ENTERA (como mucho con «Kira» y «por favor»): así, si el micrófono oye a la propia Kira
+# hablando, un «para» suelto en medio de sus frases no la corta.
+_CALLAR = re.compile(r"^(?:para(?:\s+ya)?|para\s+de\s+hablar|deja\s+de\s+hablar|calla(?:te)?(?:\s+ya)?|"
+                     r"silencio|basta(?:\s+ya)?|stop|shh+|chiton|no\s+hables\s+mas|para\s+la\s+voz|"
+                     r"callate\s+un\s+momento)$")
+_CANCELAR = re.compile(r"^(?:cancela(?:lo|r|r\s+eso)?(?:\s+(?:eso|esto|todo|ya|lo\s+que\s+(?:estas|estabas)\s+haciendo|"
+                       r"la\s+mejora|el\s+programa|el\s+experimento|el\s+dibujo|la\s+imagen|el\s+juego))?|"
+                       r"para\s+(?:eso|todo|lo\s+que\s+(?:estas|estabas)\s+haciendo)|detente|det[eé]n\s+todo|"
+                       r"aborta(?:lo|r)?|olvidalo|dejalo(?:\s+ya)?|deja\s+(?:eso|lo\s+que\s+(?:estas|estabas)\s+haciendo)|"
+                       r"no\s+sigas)$")
+
+
+def orden_control(frase):
+    """'callar' | 'cancelar' | None. Solo si TODA la frase es esa orden (con «Kira» y «por favor» opcionales)."""
+    t = _norm(frase)
+    t = re.sub(r"[^a-zñ ]+", " ", t)
+    t = " ".join(t.split())
+    t = re.sub(r"^(?:oye\s+|eh\s+)?(?:" + "|".join(NOMBRES) + r")\s+", "", t)
+    t = re.sub(r"\s+(?:" + "|".join(NOMBRES) + r")$", "", t)
+    t = re.sub(r"^por\s+favor\s+|\s+por\s+favor$", "", t).strip()
+    if _CANCELAR.match(t):
+        return "cancelar"
+    if _CALLAR.match(t):
+        return "callar"
+    return None
+
+
 class Escucha:
     def __init__(self, reloj=time.monotonic, ventana=VENTANA, atenta=ATENTA):
         self._reloj = reloj

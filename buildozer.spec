@@ -34,7 +34,7 @@ source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tes
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.26
+version = 2.27
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]
@@ -46,7 +46,7 @@ version = 2.26
 #   requirements = python3,kivy,plyer,ffpyplayer
 # plyer (la voz) va DENTRO del proyecto (herramientas_pc/incluir_plyer.py): así python-for-android no necesita su pip
 # interno, que en algunos PCs se rompe (ImportError BuildDependencyInstallError). pyjnius tiene receta propia.
-requirements = python3,kivy,pyjnius
+requirements = python3,kivy,pyjnius,pypdf==5.9.0
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
@@ -251,7 +251,8 @@ android.add_gradle_repositories = maven { url 'https://jitpack.io' }
 #android.ouya.icon.filename = %(source.dir)s/data/ouya_icon.png
 
 # (str) XML file to include as an intent filters in <activity> tag
-#android.manifest.intent_filters =
+# Compartir con Kira desde otras apps (un PDF o un enlace) y «Abrir con Kira» los PDF
+android.manifest.intent_filters = herramientas_pc/filtros_compartir.xml
 
 # (list) Copy these files to src/main/res/xml/ (used for example with intent-filters)
 #android.res_xml = PATH_TO_FILE,

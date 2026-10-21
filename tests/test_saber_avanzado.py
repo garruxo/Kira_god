@@ -48,8 +48,10 @@ cids = [c["id"] for c in sa.CONCEPTOS]
 ok(len(cids) == len(set(cids)) and not set(cids) & {c["id"] for c in ri.CONCEPTOS}, "conceptos sin repetir")
 for c in sa.CONCEPTOS:
     ok(all(c.get(k) for k in ("id", "area", "titulo", "temas", "texto")) and len(c["texto"]) > 250, f"concepto {c['id']}")
-ok(len(sa.fichas("diseño")) + len(sa.fichas("programación")) == len(sa.fichas()) == len(sa.RECETAS) + len(sa.CONCEPTOS),
-   "las fichas se reparten entre diseño y programación")
+ok(len(sa.fichas("diseño")) + len(sa.fichas("programación")) + len(sa.fichas("redes")) == len(sa.fichas())
+   == len(sa.RECETAS) + len(sa.CONCEPTOS), "las fichas se reparten entre diseño, programación y redes neuronales")
+ok(sum(1 for r in sa.RECETAS if r["area"] == "Redes neuronales") >= 7 and len(sa.fichas("redes")) >= 18,
+   "v2.27: redes neuronales (7 recetas que entrenan de verdad y sus fichas)")
 B = rk.Recuerdos(os.path.join(T, "baul"))
 def sin_red(url):
     raise AssertionError("no debe usar internet")
@@ -59,7 +61,7 @@ nd, td = E.estudiar_avanzado("diseño")
 ok(nd == td == len(sa.fichas("diseño")), "estudia diseño")
 ok(E.avanzado_pendiente(), "aún falta la programación avanzada")
 nt, tt = E.estudiar_avanzado()
-ok(nt == len(sa.fichas("programación")) and tt == len(sa.fichas()) and not E.avanzado_pendiente(), "y luego todo, sin duplicar")
+ok(nt == len(sa.fichas("programación")) + len(sa.fichas("redes")) and tt == len(sa.fichas()) and not E.avanzado_pendiente(), "y luego todo, sin duplicar")
 preguntas = {"qué es la regla de los tercios": "tercios", "qué es la ley de fitts": "Fitts", "qué es un ecs": "ECS",
              "qué es una función pura": "funcional", "cómo pedirle una imagen al pintor": "pintor",
              "qué es el contraste wcag": "WCAG", "qué es el colapso de función de onda": "WFC",
@@ -85,5 +87,14 @@ ok("ficha(s) nuevas" in core.procesar_orden("estudia diseño"), "«estudia dise�
 ok("programación avanzada" in core.procesar_orden("estudia programación avanzada"), "«estudia programación avanzada»")
 ok("0 ficha(s) nuevas" in core.procesar_orden("estudia diseño gráfico"), "«estudia diseño gráfico» no duplica")
 ok("rejilla" in core.procesar_orden("recetas de diseño"), "«recetas de diseño»")
+ok("ficha(s) nuevas" in core.procesar_orden("estudia redes neuronales") and "autograd" in
+   core.procesar_orden("recetas de redes neuronales"), "«estudia redes neuronales» y «recetas de redes neuronales»")
+for q, esperado in (("qué es la retropropagación", "Retropropagación"), ("cómo funciona un transformer", "Transformers"),
+                    ("cómo pinta el pintor", "difusión"), ("qué es una lstm", "LSTM")):
+    r = core.recuerdos.respuesta_directa(q)
+    ok(r is not None and esperado.lower() in r["tema"].lower(), f"responde sola «{q}» ({r and r['tema']})")
+for pedido, receta in (("una red neuronal que reconozca imágenes", "convolucional"), ("una red que escriba texto", "recurrente"),
+                       ("un agente que aprenda a jugar solo", "q_learning"), ("un sistema experto con reglas lógicas", "mini_prolog")):
+    ok(sm_.buscar(pedido, 1)[0][1]["id"] == receta, f"al programar «{pedido}», usa la receta {receta}")
 ok(core.procesar_orden("abre la receta wfc").startswith("[OK] ABRIR_EN_EDITOR"), "«abre la receta wfc»")
 print("SABER AVANZADO OK", n)

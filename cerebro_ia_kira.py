@@ -39,10 +39,17 @@ def visible_parcial(texto):
     return (t[:i] if i >= 0 else t).lstrip()
 
 
-def leer_sse(respuesta, extraer, al_trozo, tope=2_000_000):
-    """Lee un flujo «data: …» línea a línea. extraer(dict) -> trocito de texto. Llama al_trozo(texto_visible)."""
+class Cancelada(RuntimeError):
+    """Le dijiste a Kira «cancela»: se corta lo que estaba escribiendo el cerebro."""
+
+
+def leer_sse(respuesta, extraer, al_trozo, tope=2_000_000, parar=None, crudo=None):
+    """Lee un flujo «data: …» línea a línea. extraer(dict) -> trocito de texto. Llama al_trozo(texto_visible).
+    parar() -> True corta la lectura (y el cerebro deja de escribir al cerrarse la conexión): lanza Cancelada."""
     total, visto, leidos = "", "", 0
     while True:
+        if parar is not None and parar():
+            raise Cancelada("Cancelado.")
         linea = respuesta.readline()
         if not linea:
             break
@@ -51,6 +58,8 @@ def leer_sse(respuesta, extraer, al_trozo, tope=2_000_000):
             break
         linea = linea.decode("utf-8", "replace").strip()
         if not linea.startswith("data:"):
+            if crudo is not None and linea:
+                crudo.append(linea)                   # no era un flujo (servidor sin «stream»): se guarda
             continue
         dato = linea[5:].strip()
         if dato == "[DONE]":
@@ -172,8 +181,13 @@ class Cerebro:
                 "Menú › «Cerebro y oído», o pon la clave con «config clave: …».")
 
     # ---- hablar con el modelo local (formato OpenAI de llama-server) ----
-    def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None):
-        """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra."""
+    def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None, parar=None):
+        """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra.
+        parar() -> True la corta a mitad («cancela»): lanza Cancelada."""
+        if parar is not None and al_trozo is None:
+            al_trozo = lambda _t: None                                  # a trozos, para poder cortarla
+        if parar is not None and parar():
+            raise Cancelada("Cancelado.")
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
             {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
             for m in mensajes]
@@ -187,10 +201,19 @@ class Cerebro:
         try:
             with self._abrir(req, timeout=timeout) as r:
                 if al_trozo:
-                    texto = leer_sse(r, lambda d: (d["choices"][0].get("delta") or {}).get("content") or "", al_trozo)
+                    crudo = []
+                    texto = leer_sse(r, lambda d: (d["choices"][0].get("delta") or {}).get("content") or "", al_trozo,
+                                     parar=parar, crudo=crudo)
                     datos = None
+                    if not texto and crudo:               # respondió entero (sin «stream»): se lee igual
+                        try:
+                            datos = json.loads("\n".join(crudo))
+                        except ValueError:
+                            datos = None
                 else:
                     datos = json.loads(r.read(2_000_000).decode("utf-8"))
+        except Cancelada:
+            raise
         except urllib.error.HTTPError as e:
             raise CerebroError(f"El modelo local respondió {e.code}.")
         except Exception as e:

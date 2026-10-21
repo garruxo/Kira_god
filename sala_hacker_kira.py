@@ -332,6 +332,12 @@ def montar_sala_hacker(sm, ctx):
         else:
             en_hilo(lambda: ctl.enviar_orden(completo), terminado)
 
+    if getattr(ctl, "pendiente", None) is not None and getattr(ctl, "recuperada", False):
+        # Kira se cerró con una mejora ya probada esperando tus dos toques: sigue aquí
+        res.text = ("Tenías esta mejora esperando tu decisión (de antes de que se cerrara Kira):\n\n"
+                    + ctl.pendiente.resumen())
+        Clock.schedule_once(lambda _dt: decision(True), 0)
+
     def aplicar():
         pend = ctl.pendiente
         if pend is None:

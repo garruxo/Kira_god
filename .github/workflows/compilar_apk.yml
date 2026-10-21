@@ -162,12 +162,15 @@ jobs:
         run: |
           APK=$(ls bin/*.apk | head -1)
           LIBS=$(unzip -l "$APK" | grep -oE "lib/arm64-v8a/lib(kira_cerebro[a-z_]*|kira_pintor[a-z_]*|vosk|tesseract|leptonica|jnidispatch|pngx|jpeg)[a-z0-9_]*\.so" | sort -u | tr '\n' ' ')
-          DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;|Lorg/kira/servicio/ServicioKira;|Lorg/kira/servicio/CamaraKira;|Lorg/kira/servicio/VozKira;" | sort -u | tr '\n' ' ')
+          DEX=$(unzip -p "$APK" 'classes*.dex' | grep -a -oE "Lorg/vosk/android/SpeechService;|Lcom/googlecode/tesseract/android/TessBaseAPI;|Lorg/kira/servicio/ServicioKira;|Lorg/kira/servicio/CamaraKira;|Lorg/kira/servicio/VozKira;|Lorg/kira/servicio/ArchivosKira;" | sort -u | tr '\n' ' ')
           TAM=$(du -h "$APK" | cut -f1)
           echo "::notice title=Contenido del APK::Tamaño $TAM. Librerías: $LIBS. Clases Java: $DEX"
           echo "$LIBS" | grep -q kira_cerebro || echo "::warning title=Falta el cerebro::El APK no lleva libkira_cerebro*.so"
           echo "$LIBS" | grep -q kira_pintor || echo "::warning title=Falta el pintor::El APK no lleva libkira_pintor*.so"
           echo "$DEX" | grep -q VozKira || echo "::warning title=Falta la voz::El APK no lleva VozKira: hablará con la voz antigua (lenta)"
+          echo "$DEX" | grep -q ArchivosKira || echo "::warning title=Faltan los archivos::El APK no lleva ArchivosKira (PDF a Descargas y compartir)"
+          if unzip -l "$APK" | grep -q "pypdf"; then echo "::notice title=PDF::Lleva pypdf (lector de PDF completo)";
+          else echo "::warning title=PDF::No encuentro pypdf dentro del APK: los PDF se leerán con el lector sencillo"; fi
           # el manifiesto: servicio «siempre activa», lista de apps (para «abre WhatsApp») y permiso de segundo plano
           AAPT=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
           if [ -n "$AAPT" ]; then

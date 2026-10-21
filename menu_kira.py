@@ -15,8 +15,8 @@ import unicodedata
 
 # destino: ("panel", pantalla_del_panel) | ("pantalla", nombre)
 # El menú enseña primero los PRINCIPALES (más sencillo); el resto aparece al tocar «Más apartados».
-PRINCIPALES = ("hablar", "cerebro_kira", "pintor", "internet", "mejoras", "lector", "juegos", "editor_codigo", "sala",
-               "diseno", "ciber", "config")
+PRINCIPALES = ("hablar", "cerebro_kira", "pintor", "internet", "pdf", "mejoras", "lector", "juegos", "editor_codigo",
+               "sala", "diseno", "ciber", "config")
 APARTADOS = [
     {"id": "hablar",    "titulo": "Hablar con Kira", "desc": "Volver al botón de Kira",              "color": (0.10, 0.80, 0.50), "destino": ("pantalla", "inicio")},
     {"id": "sala",      "titulo": "Sala Hacker",     "desc": "Habitación 3D: programa y mejora", "color": (0.10, 0.90, 0.40), "destino": ("pantalla", "sala_hacker")},
@@ -28,6 +28,7 @@ APARTADOS = [
     {"id": "cerebro_kira", "titulo": "Cerebro y oído", "desc": "Su IA y su oído, sin internet", "color": (0.55, 0.40, 0.95), "destino": ("pantalla", "cerebro_kira")},
     {"id": "pintor",    "titulo": "Pintor",          "desc": "Imágenes con su propia IA",   "color": (0.95, 0.40, 0.55), "destino": ("pantalla", "pintor")},
     {"id": "internet",  "titulo": "Internet",        "desc": "Busca, lee y aprende",        "color": (0.25, 0.60, 0.95), "destino": ("pantalla", "internet")},
+    {"id": "pdf",       "titulo": "Mis PDF",         "desc": "Descarga, lee y pregunta",    "color": (0.95, 0.30, 0.30), "destino": ("pantalla", "pdf")},
     {"id": "lector",    "titulo": "Lector",          "desc": "Lee capturas: texto y código", "color": (0.20, 0.65, 0.75), "destino": ("pantalla", "lector")},
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
@@ -107,6 +108,17 @@ AYUDA = (
     "SABER AVANZADO: «estudia diseño» (color, tipografía, composición, interfaces, accesibilidad, animación, juegos, "
     "fotografía y cómo pedir imágenes) y «estudia programación avanzada» (patrones, funcional, decoradores, tipos, "
     "concurrencia…), sin internet. Técnicas con código: «recetas de diseño», «recetas de programación avanzada».\n"
+    "MIS PDF: «Kira, descarga este PDF: » y el enlace (vale de Google Drive, Dropbox, GitHub, arXiv o una página que "
+    "lleve a un PDF), o compártele un PDF o un enlace desde otra app. Luego: «mis pdf», «lee el pdf 2», «lee la página 3 "
+    "del pdf 2», «resume el pdf 2», «busca clorofila en el pdf 2», «qué dice el pdf 2 sobre …», «estudia el pdf 2» (al "
+    "baúl), «renombra el pdf 2 a …», «guarda el pdf 2 en descargas» y «borra el pdf 2». Los PDF escaneados no tienen "
+    "texto: hazle una captura a la página y «lee la captura».\n"
+    "REDES NEURONALES: «estudia redes neuronales» (sin internet) y «recetas de redes neuronales»: autograd, red "
+    "multicapa, convolucional, recurrente, atención, optimizadores y Q-learning, que entrenan de verdad en el móvil. "
+    "«abre la receta convolucional» la lleva al editor; «implementa este código» la convierte en una mejora.\n"
+    "PARA Y CANCELA: «para» o «cállate» la callan aunque esté hablando; «cancela» corta lo que esté haciendo (programar, "
+    "una mejora, un experimento, pintar, descargar). Si Android la cierra a mitad de algo, al volver te lo dice: «sigue "
+    "con lo que hacías». Una mejora que esperaba tus dos toques sigue esperando.\n"
     "SIEMPRE ACTIVA: Kira sigue encendida aunque salgas de la app o se apague la pantalla (aviso fijo «Kira está "
     "activa»), así no tiene que volver a cargar el cerebro. La primera vez Android pregunta si la dejas fuera del "
     "ahorro de batería: di que sí. Algunos móviles (Samsung, Xiaomi…) tienen además su propio ahorro: en Ajustes › "

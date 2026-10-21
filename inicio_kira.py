@@ -365,8 +365,15 @@ class HablaEnVivo:
             self.empezo = True
             self.dicho.append(frase)
 
+    def callar(self):
+        """«Para» / «cállate»: lo que falte de esta respuesta ya no se dice."""
+        self.activa = False
+        self.callada = True
+
     def final(self, texto):
         """Dice lo que faltaba de la respuesta final. True si la voz ya está resuelta (no hay que leerla entera)."""
+        if getattr(self, "callada", False):
+            return True
         if not self.empezo:
             return False
         fin = " ".join(str(texto or "").split())

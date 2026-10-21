@@ -234,7 +234,7 @@ def html_a_texto(contenido):
 # =====================================================================================
 #  PDF sencillo -> texto (sin librerías: solo los textos de los flujos comprimidos con zlib)
 # =====================================================================================
-_PDF_STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
+_PDF_STREAM = re.compile(rb"stream\r?\n(.*?)(?:\r?\n)?endstream", re.S)
 _PDF_TEXTO = re.compile(rb"\((?:\\.|[^\\)])*\)\s*(?:Tj|'|\")|\[(?:[^\]]*)\]\s*TJ|T\*|Td|TD|ET", re.S)
 _PDF_CADENA = re.compile(rb"\((?:\\.|[^\\)])*\)", re.S)
 
@@ -273,6 +273,20 @@ def pdf_a_texto(datos):
             contenido = zlib.decompress(crudo)
         except zlib.error:
             contenido = crudo
+            if crudo.rstrip().endswith(b"~>"):            # ASCII85 (y casi siempre zlib debajo)
+                try:
+                    import base64
+                    contenido = base64.a85decode(crudo.strip(), adobe=crudo.lstrip().startswith(b"<~"))
+                except ValueError:
+                    try:
+                        contenido = base64.a85decode(b"<~" + crudo.strip() if not crudo.lstrip().startswith(b"<~")
+                                                     else crudo.strip(), adobe=True)
+                    except ValueError:
+                        contenido = crudo
+                try:
+                    contenido = zlib.decompress(contenido)
+                except zlib.error:
+                    pass
         if b"Tj" not in contenido and b"TJ" not in contenido:
             continue
         for op in _PDF_TEXTO.finditer(contenido):

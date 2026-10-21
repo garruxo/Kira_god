@@ -153,7 +153,7 @@ core.en_segundo_plano = True
 VOZ.dichos.clear(); antes = sm.current
 OIDO.oye("Kira cuéntame algo")
 ok(correr(3, lambda: any("ocho" in d for d in VOZ.dichos)), "en otra app: te oye y contesta en voz alta " + repr(VOZ.dichos))
-ok(True in OIDO.pausas and OIDO.pausas[-1] is False, "pausa el oído mientras habla y luego lo reanuda")
+ok(True not in OIDO.pausas, "v2.27: no pausa el oído mientras habla (así oye «para»)")
 VOZ.dichos.clear(); OIDO.oye("Kira qué ves")
 ok(correr(3, lambda: any("Reunión" in d for d in VOZ.dichos)), "en otra app: «Kira, qué ves» te lee la pantalla")
 VOZ.dichos.clear(); OIDO.oye("hablando de otra cosa"); correr(1)

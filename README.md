@@ -210,6 +210,28 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Redes neuronales, PDF y «para» / «cancela» (nuevo, v2.27)
+- **`saber_redes_kira.py`** (se suma a `saber_avanzado_kira.py`): 7 recetas de **redes neuronales** en Python puro
+  que entrenan de verdad en el móvil (autograd, red multicapa con softmax, convolucional, recurrente que escribe,
+  atención con máscara causal, SGD/momento/RMSprop/Adam, Q-learning) + mini-Prolog y pruebas de propiedades, y 13 fichas
+  (neurona, retropropagación, pérdidas, sobreajuste, inicialización, CNN, RNN/LSTM, transformers, embeddings, refuerzo,
+  difusión, entrenar en el móvil, evaluar). «estudia redes neuronales», «recetas de redes neuronales».
+- **`pdf_kira.py`** + **`pantalla_pdf_kira.py`** («Mis PDF» en el menú): «descarga este PDF: enlace» (convierte enlaces de
+  Drive, Dropbox, GitHub y arXiv; si el enlace es una página que lleva a un PDF, lo busca dentro; máximo 150 MB),
+  «mis pdf», «lee (la página N d)el pdf N», «resume el pdf N», «busca X en el pdf N», «qué dice el pdf N sobre …»
+  (responde con las páginas que vienen al caso), «estudia el pdf N» (al baúl), renombrar, borrar y «guarda el pdf N en
+  descargas» (`ArchivosKira.java`, MediaStore). Compartir un PDF o un enlace con Kira desde otra app
+  (`herramientas_pc/filtros_compartir.xml`). El texto lo saca **pypdf** (nuevo en `requirements`); si faltara, el lector
+  sencillo propio (ahora también con ASCII85).
+- **«para» / «cállate» y «cancela»** (`escucha_kira.orden_control`): el oído ya NO se pausa mientras Kira habla o piensa;
+  mientras habla solo atiende esas órdenes (frase entera, para que su propia voz no la corte). «cancela» corta al
+  cerebro a mitad (`cerebro_ia_kira.Cancelada`, lectura a trozos), los experimentos, los dibujos y las descargas.
+- **Que Android no le haga perder el trabajo** (`cierres_kira.py`): lo que está haciendo se apunta en disco y, si la
+  cierran a mitad, al volver lo dice («sigue con lo que hacías»); la mejora que esperaba tus dos toques se guarda (con el
+  resultado del laboratorio para ESE código); Android 11+ dice POR QUÉ la cerró (memoria, ahorro del fabricante…) y Kira
+  lo explica con qué hacer; el servicio mantiene el procesador despierto (WakeLock) con la pantalla apagada.
+- Pruebas: `tests/test_control_voz.py`, `tests/test_pdf.py` (con `tests/pdf_de_prueba.py`), `tests/test_saber_avanzado.py`.
+
 ## Saber avanzado y código experimental (nuevo, v2.25)
 - **`saber_avanzado_kira.py`**: 18 recetas probadas (módulos completos con sus pruebas) de **programación avanzada**
   (máquina de estados, bus de eventos, ECS, corrutinas, decoradores, combinadores de parsers, deshacer/rehacer,

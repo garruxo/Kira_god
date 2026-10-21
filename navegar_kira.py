@@ -52,6 +52,8 @@ DESTINOS = {
                "Te abro el pintor."),
     "internet": (("buscador de internet", "pantalla de internet", "internet de kira", "busquedas en internet",
                   "resultados de internet"), "Te abro internet."),
+    "pdf": (("mis pdf", "mis pdfs", "biblioteca de pdf", "pantalla de pdf", "los pdf", "lector de pdf"),
+            "Te abro tus PDF."),
     "conocimiento": (("conocimiento", "lo que has aprendido"), "Te enseño lo que he aprendido."),
     "notas": (("notas", "apuntes"), "Te abro tus notas."),
     "memoria": (("memoria", "conversacion"), "Te abro la memoria."),
@@ -137,6 +139,12 @@ def interpretar(texto, juegos_extra=()):
     t = _CORTESIA.sub("", normalizar(texto)).strip()
     if not t or len(t) > 120:
         return None
+    try:                                            # «abre el pdf 2», «mis pdf»: son de la biblioteca de PDF
+        import pdf_kira
+        if pdf_kira.interpretar(texto) is not None:
+            return None
+    except ImportError:
+        pass
     # ---- atrás / volver ----
     if re.fullmatch(r"(?:atras|ve atras|vuelve atras|volver|regresa|vuelve|sal de aqui|salir de aqui|anterior)", t):
         return {"tipo": "atras"}

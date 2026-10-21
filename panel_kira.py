@@ -63,9 +63,12 @@ class PanelControl:
             import laboratorio_movil_kira as lm
             self.pasarela = pasarela or pc.PasarelaCliente()
             self.promotor = pc.Promotor(lm.LaboratorioDoble(self.pasarela))   # en el móvil siempre; y en el PC si está
-        self.pendiente = None
         self.pedido_actual = ""
         self._lock = threading.Lock()
+        self.ruta_pendiente = os.path.join(pc.carpeta_datos(), "mejora_pendiente.json")
+        self._pendiente = None
+        self.recuperada = False
+        self._recuperar_pendiente()                # si Kira se cerró con una mejora esperando tus dos toques
         self.ruta_lecciones = os.path.join(pc.carpeta_datos(), "lecciones_panel.json")
         self.ruta_ajustes = os.path.join(pc.carpeta_datos(), "panel_ajustes.json")
 
@@ -197,7 +200,59 @@ class PanelControl:
             return "el veredicto del laboratorio no corresponde a este código"
         return str(r.get("error") or "el laboratorio rechazó la mejora")
 
+    # ---------- la mejora pendiente sobrevive a un cierre de la app ----------
+    @property
+    def pendiente(self):
+        return self._pendiente
+
+    @pendiente.setter
+    def pendiente(self, valor):
+        self._pendiente = valor
+        if valor is None:
+            try:
+                os.remove(self.ruta_pendiente)
+            except OSError:
+                pass
+
+    def _poner_pendiente(self, pend, pedido):
+        """Deja la mejora esperando tus dos toques y la guarda en disco (con el resultado del laboratorio para ESE
+        código exacto), por si Android cierra a Kira antes de que decidas."""
+        self._pendiente, self.pedido_actual = pend, pedido
+        try:
+            tmp = self.ruta_pendiente + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"nombre": pend.nombre, "codigo": pend.codigo, "resultado": pend.resultado,
+                           "diff": getattr(pend, "diff", ""), "pedido": pedido}, f, ensure_ascii=False)
+            os.replace(tmp, self.ruta_pendiente)
+        except (OSError, TypeError, ValueError, AttributeError):
+            pass
+
+    def _recuperar_pendiente(self):
+        try:
+            with open(self.ruta_pendiente, encoding="utf-8") as f:
+                d = json.load(f)
+            p = self.pc.Pendiente(str(d["nombre"]), str(d["codigo"]), dict(d["resultado"]), str(d.get("diff") or ""))
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if p.aprobable:                           # solo si el laboratorio aprobó ESTE código exacto
+            self._pendiente, self.pedido_actual = p, str(d.get("pedido") or "")
+            self.recuperada = True
+
     def enviar_orden(self, pedido, max_intentos=MAX_INTENTOS) -> dict:
+        """Igual que _enviar_orden, apuntando el trabajo en curso (si Android cierra a Kira a mitad, al volver lo
+        sabe y lo puede retomar)."""
+        t = getattr(self.core, "trabajo", None)
+        if callable(getattr(self.core, "nueva_tarea", None)):
+            self.core.nueva_tarea()
+        if t is not None and str(pedido or "").strip():
+            t.empezar("mejora", pedido)
+        try:
+            return self._enviar_orden(pedido, max_intentos)
+        finally:
+            if t is not None:
+                t.terminar()
+
+    def _enviar_orden(self, pedido, max_intentos=MAX_INTENTOS) -> dict:
         """Genera, prueba y deja una mejora PENDIENTE de tu decisión. Reintenta con el motivo del fallo.
         Si están Kira (cerebro del móvil) y Claude, la escribe uno, la revisa el otro y se ponen de acuerdo
         (acuerdo_kira). Se prueba en el móvil (y en el ordenador si está conectado). Instalar: solo con tus dos toques."""
@@ -238,6 +293,9 @@ class PanelControl:
                     est["ultimo"] = f"[x] {e}"
                     raise ak.Reintentar(_limpia(str(e) + " Responde con NOMBRE: … y el código en un bloque ```python.", 300))
                 except Exception as e:
+                    if type(e).__name__ == "Cancelada":         # le dijiste «cancela»
+                        est["error_gen"] = "[x] Cancelado: he dejado la mejora a medias como me pediste."
+                        raise ak.Parar(str(e))
                     if callable(registrar):
                         registrar("mejoras", f"Kira no pudo generar la mejora: {e}")
                     est["error_gen"] = f"[x] Kira no pudo generar la mejora: {e}"
@@ -272,7 +330,7 @@ class PanelControl:
             hist = ak.texto_historial(r)
             if r["ok"]:
                 pend = r["dato"]
-                self.pendiente, self.pedido_actual = pend, pedido
+                self._poner_pendiente(pend, pedido)
                 return {"ok": True, "aprobable": True, "intentos": r["intentos"],
                         "texto": pend.resumen() + (f"\n\n{hist}" if hist else ""), "acuerdo": r["acuerdo"],
                         "avisos": list(pend.resultado.get("avisos", [])), "nombre": pend.nombre}
@@ -306,7 +364,7 @@ class PanelControl:
                 if err:
                     return {"ok": False, "aprobable": False, "intentos": 1, "texto": "[x] " + err}
                 if pend.aprobable:
-                    self.pendiente, self.pedido_actual = pend, pedido or f"el código «{nombre}»"
+                    self._poner_pendiente(pend, pedido or f"el código «{nombre}»")
                     return {"ok": True, "aprobable": True, "intentos": 1, "texto": pend.resumen(), "nombre": pend.nombre,
                             "avisos": list(pend.resultado.get("avisos", []))}
                 motivo = self._motivo(pend)
@@ -545,6 +603,11 @@ def construir_panel(core, consola=None, pantalla=None):
             botones_decision(bool(r.get("aprobable")))
             refrescar_estado()
         en_hilo(lambda: ctl.enviar_orden(pedido), terminado)
+
+    if getattr(ctl, "pendiente", None) is not None and getattr(ctl, "recuperada", False):
+        poner_resultado("Tenías esta mejora esperando tu decisión (de antes de que se cerrara Kira):\n\n"
+                        + ctl.pendiente.resumen())
+        Clock.schedule_once(lambda _dt: botones_decision(True), 0)
 
     def aplicar():
         pend = ctl.pendiente

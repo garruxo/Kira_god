@@ -209,7 +209,8 @@ class Estudiante:
             self.aprendidos += nuevas
             if tipo is None:
                 self.avanzado = len(fichas)
-            self.ultimo = {"diseño": "diseño", "programación": "programación avanzada"}.get(tipo, "programación avanzada y diseño")
+            self.ultimo = {"diseño": "diseño", "programación": "programación avanzada", "redes": "redes neuronales"}.get(
+                tipo, "programación avanzada, redes neuronales y diseño")
             self._guardar()
         return nuevas, len(fichas)
 
@@ -272,7 +273,7 @@ class Estudiante:
                    "\nProgramación avanzada y diseño: aún no («estudia diseño» / «estudia programación avanzada»).")
                 + (f"\nÚltimo: {self.ultimo}." if self.ultimo else "")
                 + (f"\nÚltimo problema: {self.ultimo_error}" if self.ultimo_error else "")
-                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «estudia ingeniería», «estudia diseño», «estudia programación avanzada», "
+                + "\nÓrdenes: «estudia: tema», «estudia python: json», «estudia python», «estudia ingeniería», «estudia diseño», «estudia programación avanzada», «estudia redes neuronales», "
                   "«aprende sola», «deja de aprender», «plan de estudio».")
 
     def texto_plan(self):

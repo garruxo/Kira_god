@@ -320,6 +320,20 @@ if KIVY_AVAILABLE:
                 consola = KiraMainView(nucleo=None)
                 consola.output_label.text += "\n[x] El núcleo de Kira no arrancó:\n" + traceback.format_exc()[-1500:]
                 return consola
+            try:                                        # por qué la cerró ANDROID la última vez (Android 11+)
+                import cierres_kira
+                from jnius import autoclass
+                act = autoclass("org.kivy.android.PythonActivity").mActivity
+                visto = cierres_kira.Visto(os.path.join(self.user_data_dir, "ultimo_cierre_android.txt"))
+                texto, ms = cierres_kira.motivo_android(
+                    autoclass("org.kira.servicio.ServicioKira").ultimoCierre(act), visto.ms)
+                if ms != visto.ms:
+                    visto.guardar(ms)
+                if texto:
+                    self.kira_god.aviso_android = texto
+                    self.kira_god.registrar_error("android", texto[:300])
+            except Exception:
+                pass                                    # en el PC, o Android sin ese dato
             if aviso:
                 self.kira_god.aviso_cierre = aviso         # la portada lo enseña (y la bitácora lo apunta)
                 try:

@@ -4,6 +4,8 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.app.Service;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
@@ -51,6 +53,7 @@ public class ServicioKira extends Service {
     private static ImageReader lector;
     private static HandlerThread hilo;
     private static int ancho, alto;
+    private static PowerManager.WakeLock despierta;
 
     // ---------------- control desde Python ----------------
     public static void iniciar(Context ctx, boolean conPantalla) {
@@ -103,6 +106,21 @@ public class ServicioKira extends Service {
         return false;
     }
 
+    /** Por qué cerró Android a Kira la ÚLTIMA vez (Android 11+): "motivo|detalle|instante_ms|memoria_kb", o "". */
+    public static String ultimoCierre(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 30) return "";
+            ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            java.util.List<ApplicationExitInfo> l = am.getHistoricalProcessExitReasons(ctx.getPackageName(), 0, 1);
+            if (l == null || l.isEmpty()) return "";
+            ApplicationExitInfo e = l.get(0);
+            String d = e.getDescription() == null ? "" : e.getDescription().replace('|', ' ');
+            return e.getReason() + "|" + d + "|" + e.getTimestamp() + "|" + e.getPss() + "|" + e.getImportance();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     public static boolean activo() {
         return instancia != null;
     }
@@ -134,11 +152,22 @@ public class ServicioKira extends Service {
         if (ver) {
             prepararPantalla(intent.getIntExtra("codigo", 0), datos);   // después de startForeground (Android 14)
         }
+        try {                    // con la pantalla apagada, el procesador sigue trabajando (programar, pintar…)
+            if (despierta == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                despierta = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "kira:activa");
+                despierta.setReferenceCounted(false);
+            }
+            if (!despierta.isHeld()) despierta.acquire();
+        } catch (Throwable t) {
+            // sin el permiso WAKE_LOCK: sigue igual, solo que con la pantalla apagada puede ir más lenta
+        }
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        try { if (despierta != null && despierta.isHeld()) despierta.release(); } catch (Throwable t) { }
         soltarPantalla();
         instancia = null;
         super.onDestroy();

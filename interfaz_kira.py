@@ -53,6 +53,7 @@ def construir_interfaz(core, consola=None):
     from pantalla_lector_kira import montar_lector, pedir_permiso_fotos
     from pantalla_pintor_kira import montar_pintor
     from pantalla_internet_kira import montar_internet
+    from pantalla_pdf_kira import montar_pdf
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -288,9 +289,15 @@ def construir_interfaz(core, consola=None):
     def enviar(texto=None):
         texto = campo.text if texto is None else texto
         texto = ik.limpiar_entrada(texto)
+        if texto and esk.orden_control(texto):         # «para», «cancela» (escrito): vale aunque esté ocupada
+            campo.text = ""
+            control_por_voz(esk.orden_control(texto))
+            return
         if not texto or st["ocupado"]:
             return
         campo.text = ""
+        if callable(getattr(core, "nueva_tarea", None)):
+            core.nueva_tarea()                          # algo nuevo: un «cancela» de antes ya no cuenta
         import diseno_kira as dk_
         import programar_kira as pk_
         orden = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto  # escrito «Kira, …»
@@ -301,6 +308,26 @@ def construir_interfaz(core, consola=None):
                     r"(?:dibujos|gr[aá]ficos|personajes|sprites|im[aá]genes)\s+(?:del|de\s+este|de\s+mi|para\s+el)\s+"
                     r"(?:juego|programa)\b", orden, re.I):
             dibujos_del_juego()                         # «pinta los dibujos del juego» (el que está en el editor)
+            return
+        import pdf_kira as pdk_
+        o_pdf = pdk_.interpretar(orden)
+        if o_pdf is not None:                           # biblioteca de PDF: descargar de un enlace, leer, preguntar…
+            pdf_por_voz(o_pdf, orden)
+            return
+        import cierres_kira as ck_
+        if ck_.pide_seguir(orden):                      # «sigue con lo que hacías»: lo que cortó un cierre
+            trab = getattr(core, "trabajo", None)
+            t = trab.retomar() if trab is not None else None
+            if t is None:
+                decir("No tengo nada a medias. ¿Qué quieres que haga?")
+            elif t["tipo"] == "programa":
+                programa_por_voz(t["pedido"])
+            elif t["tipo"] == "experimento":
+                experimento_por_voz(t["pedido"])
+            elif t["tipo"] == "juego_realista":
+                juego_realista_por_voz(t["pedido"])
+            else:
+                mejora_por_voz(re.sub(r"^Mejora para [^:]{1,60}:\s*", "", t["pedido"]))
             return
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
@@ -381,6 +408,7 @@ def construir_interfaz(core, consola=None):
 
         flujo = {"hubo": False}
         en_vivo = ik.HablaEnVivo(voz, activa=ajustes.voz_hablar)   # dice cada frase en cuanto está completa
+        st["en_vivo"] = en_vivo                          # para poder callarla con «para»
 
         def mostrar_trozo(parcial):                      # la respuesta va apareciendo mientras Kira piensa
             if not st["ocupado"]:
@@ -748,7 +776,30 @@ def construir_interfaz(core, consola=None):
     def usar_oido_propio():
         return ajustes.oido_propio and oido.disponible()
 
+    def callar_ya():
+        """«Para», «cállate»: deja de hablar YA (y lo que faltaba de la respuesta ya no se dice)."""
+        try:
+            voz.callar()
+        except Exception:
+            pass
+        ev = st.get("en_vivo")
+        if ev is not None:
+            ev.callar()
+
+    def control_por_voz(que):
+        """'callar' o 'cancelar', oído aunque Kira esté hablando o trabajando. Desde cualquier hilo."""
+        callar_ya()
+        if que == "cancelar":
+            r = core.cancelar() if callable(getattr(core, "cancelar", None)) else "Vale."
+            Clock.schedule_once(lambda _dt: decir(r, hablar=True), 0.25)
+
     def al_frase_oido(texto):                          # llega desde el hilo de Java: se pasa al de la pantalla
+        control = esk.orden_control(texto)
+        if control:                                    # «para», «cancela»: valen SIEMPRE, también mientras habla
+            control_por_voz(control)
+            return
+        if voz.hablando() or time.monotonic() < st.get("hablo_hasta", 0.0):
+            return                                     # mientras habla, lo que oye es su propia voz: no lo atiende
         if getattr(core, "en_segundo_plano", False):    # estás en otra app: la pantalla de Kira está en pausa
             threading.Thread(target=frase_en_segundo_plano, args=(texto,), daemon=True).start()
             return
@@ -776,22 +827,24 @@ def construir_interfaz(core, consola=None):
                 voz.hablar(frase)
                 return
             try:
-                oido.pausar(True)
+                if callable(getattr(core, "nueva_tarea", None)):
+                    core.nueva_tarea()
                 r, _via = conv.preguntar(orden)
-                voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
+                if not core.cancelado() if callable(getattr(core, "cancelado", None)) else True:
+                    voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
             except Exception as e:
-                voz.hablar(f"No he podido: {e}")
-            finally:
-                oido.pausar(False)
+                if type(e).__name__ != "Cancelada":
+                    voz.hablar(f"No he podido: {e}")
         elif que == "orden":
             try:
-                oido.pausar(True)
+                if callable(getattr(core, "nueva_tarea", None)):
+                    core.nueva_tarea()
                 r, _via = conv.preguntar(orden)
-                voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
+                if not core.cancelado() if callable(getattr(core, "cancelado", None)) else True:
+                    voz.hablar(r.replace("[OK]", "").replace("[x]", "").replace("[i]", "")[:400])
             except Exception as e:
-                voz.hablar(f"No he podido: {e}")
-            finally:
-                oido.pausar(False)
+                if type(e).__name__ != "Cancelada":
+                    voz.hablar(f"No he podido: {e}")
 
     def arrancar_escucha():
         if st["esc_reloj"] is not None:
@@ -869,7 +922,9 @@ def construir_interfaz(core, consola=None):
             modelo.poner_estado(estado_base())
             pintar_escucha()
         if st["oido"]:                                 # el oído propio escucha en TODAS las pantallas
-            oido.pausar(st["ocupado"] or voz.hablando() or sm.current == "jugar")
+            if voz.hablando():                         # sigue oyendo mientras habla (para «para» y «cancela»)
+                st["hablo_hasta"] = time.monotonic() + 1.2     # y un poco después: el eco de su última frase
+            oido.pausar(sm.current == "jugar")
             if oido.estado == "error":
                 pintar_escucha(oido.mensaje)
             return
@@ -946,6 +1001,14 @@ def construir_interfaz(core, consola=None):
             texto += " Estoy cargando mi cerebro: en unos segundos podré charlar contigo."
         if ajustes.escucha_permanente and voz.puede_escuchar():
             texto += " Para hablarme, di «Kira»."
+        if getattr(core, "aviso_android", ""):        # por qué la cerró Android la última vez, y qué hacer
+            texto = core.aviso_android + " " + texto
+            core.aviso_android = ""
+        trab = getattr(core, "trabajo", None)
+        if trab is not None and trab.aviso():         # la cerraron a mitad de algo: se puede retomar
+            texto += " " + trab.aviso()
+        if getattr(ctl, "recuperada", False):
+            texto += " Tienes una mejora probada esperando tus dos toques en la Sala Hacker."
         cierre = getattr(core, "aviso_cierre", "")
         if cierre:                                   # la vez anterior se cerró de golpe: lo enseña para arreglarlo
             burbuja.text = ("La última vez me cerré de golpe. Hazle una captura a esto y mándasela a Claude:\n\n"
@@ -1409,6 +1472,87 @@ def construir_interfaz(core, consola=None):
                                        "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "NEON": NEON, "FUENTE": FUENTE,
                                        "core": core,
                                        "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
+
+    pdf_ui = montar_pdf(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo, "pantalla": pantalla,
+                             "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
+                             "FUENTE": FUENTE, "core": core, "avance": lambda t: avance(t)})
+
+    def recibir_compartido(intent=None):
+        """Lo que te COMPARTEN con Kira desde otra app (un PDF o un enlace), o un PDF que abres «con Kira»."""
+        if platform != "android":
+            return
+        try:
+            from jnius import autoclass
+            act = autoclass("org.kivy.android.PythonActivity").mActivity
+            intent = intent or act.getIntent()
+            s = str(autoclass("org.kira.servicio.ArchivosKira").leerIntent(act, intent, os.path.join(core.dir, "pdf")) or "")
+            act.setIntent(autoclass("android.content.Intent")())   # que no se vuelva a recibir al volver a la app
+        except Exception:
+            return
+        partes = s.split("\n")
+        if partes[0] == "archivo" and len(partes) >= 2:
+            ir("pdf")
+            decir("Me guardo el PDF que me has pasado…", hablar=False)
+
+            def fin(r):
+                if isinstance(r, Exception):
+                    decir(f"[x] No he podido guardar ese PDF: {r}")
+                else:
+                    pdf_ui["ver_lista"]()
+                    decir((f"Ese PDF ya lo tenía: es el número {r['n']}." if r.get("repetido") else
+                           f"Guardado como PDF {r['n']}: «{r['nombre']}», {r['paginas']} páginas. "
+                           f"Dime «resume el pdf {r['n']}» o pregúntame por él."))
+            nombre = partes[2] if len(partes) > 2 else ""
+            en_hilo(lambda: core.pdfs.anadir_archivo(partes[1], nombre[:-4] if nombre.lower().endswith(".pdf") else nombre,
+                                                     mover=True), fin)
+        elif partes[0] == "texto" and len(partes) >= 2:
+            import pdf_kira as pdk
+            url = pdk.url_de("\n".join(partes[1:]))
+            if url:
+                ir("pdf")
+                decir("Me has pasado un enlace: si es un PDF, me lo guardo.", hablar=False)
+                pdf_ui["descargar"](url, al_terminar=lambda r: decir(str(r).replace("[OK] ", "").replace("[x] ", "")))
+            else:
+                campo.text = "\n".join(partes[1:])[:2000]      # un texto: queda escrito para que le digas qué hacer
+                ir("inicio")
+    try:
+        if platform == "android":
+            import android.activity as aa
+            aa.bind(on_new_intent=lambda intent: Clock.schedule_once(lambda _dt, i_=intent: recibir_compartido(i_), 0.3))
+    except Exception:
+        pass
+    Clock.schedule_once(lambda _dt: recibir_compartido(), 2.5)
+
+    def pdf_por_voz(o, orden):
+        """«descarga este PDF: enlace», «mis pdf», «lee el pdf 2», «resume el pdf 2», «qué dice el pdf 2 sobre…»…"""
+        acc = o["accion"]
+        if acc == "descargar":
+            ir("pdf")
+            decir("Me pongo a descargar el PDF.", hablar=True)
+            pdf_ui["descargar"](o["url"], al_terminar=lambda r: decir(
+                str(r).replace("[OK] ", "").replace("[x] ", "") if not isinstance(r, Exception) else f"No he podido: {r}"))
+            return
+        if acc == "lista":
+            ir("pdf")
+            decir(core.pdfs.texto_lista())
+            return
+        if acc in ("leer", "abrir"):
+            e = core.pdfs.buscar_doc(o.get("doc"))
+            if e is None:
+                decir("No tengo ese PDF. Di «mis pdf» para ver la lista.")
+                return
+            ir("pdf")
+            pdf_ui["abrir"](e["n"], o.get("pagina", 1))
+            decir(f"Te abro «{e['nombre']}», página {o.get('pagina', 1)}.")
+            return
+        st["ocupado"] = True
+        modelo.poner_estado("pensando")
+        burbuja.text = "…"
+
+        def fin(r):
+            st["ocupado"] = False
+            decir(f"[x] {r}" if isinstance(r, Exception) else str(r).replace("[OK] ", "").replace("[i] ", ""))
+        en_hilo(lambda: core.orden_pdf(orden, al_progreso=lambda f, t: avance(t)), fin)
 
     # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)

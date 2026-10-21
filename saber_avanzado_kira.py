@@ -1215,9 +1215,25 @@ CONCEPTOS = [
 ]
 
 
+# las REDES NEURONALES (y algo más de programación avanzada) van en su propio archivo y se suman aquí
+try:
+    import saber_redes_kira as _redes
+    RECETAS = RECETAS + _redes.RECETAS
+    CONCEPTOS = CONCEPTOS + _redes.CONCEPTOS
+except ImportError:
+    pass
+
+
 # =====================================================================================================================
 #  AYUDAS
 # =====================================================================================================================
+def tipo_de(area):
+    """'redes' | 'programación' | 'diseño' (para «estudia redes neuronales / programación avanzada / diseño»)."""
+    if area.startswith("Redes"):
+        return "redes"
+    return "programación" if area.startswith("Programación") else "diseño"
+
+
 def areas():
     orden = {}
     for r in RECETAS:
@@ -1236,15 +1252,14 @@ def leccion(r):
 
 
 def fichas(tipo=None):
-    """(tema, texto) para el baúl. tipo: 'diseño' (diseño, UX, juegos, imagen), 'programación' o None (todo)."""
-    def es_diseno(area):
-        return not area.startswith("Programación")
+    """(tema, texto) para el baúl. tipo: 'diseño' (diseño, UX, juegos, imagen), 'programación', 'redes' (redes
+    neuronales) o None (todo)."""
     res = []
     for r in RECETAS:
-        if tipo is None or (tipo == "diseño") == es_diseno(r["area"]):
+        if tipo is None or tipo_de(r["area"]) == tipo:
             res.append((r["titulo"], f"{r['titulo']} ({r['area']}): {r['idea']} Coste: {r['complejidad']}. "
                                      f"Kira tiene una receta probada: «receta {r['id'].replace('_', ' ')}»."))
     for c in CONCEPTOS:
-        if tipo is None or (tipo == "diseño") == es_diseno(c["area"]):
+        if tipo is None or tipo_de(c["area"]) == tipo:
             res.append((c["titulo"], f"{c['titulo']}: {c['texto']}"))
     return res

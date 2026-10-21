@@ -217,6 +217,11 @@ MAPA = {
     "juego_realista_kira.py": "«hazme un juego realista de…»: plan, dibujos realistas con el pintor y el programa",
     "saber_avanzado_kira.py": "programación avanzada y diseño: 18 recetas probadas y 24 fichas de teoría",
     "experimentos_kira.py": "código experimental: hipótesis, pruebas en modo seguro, puntos, cuaderno y lecciones",
+    "saber_redes_kira.py": "redes neuronales en Python puro (autograd, CNN, RNN, atención, Adam, Q-learning) y sus fichas",
+    "pdf_kira.py": "biblioteca de PDF: descargar de un enlace, leer por páginas, buscar, preguntar, estudiar, gestionar",
+    "pantalla_pdf_kira.py": "pantalla «Mis PDF»: pegar un enlace, la lista, leer página a página y las acciones",
+    "cierres_kira.py": "por qué la cerró Android y qué estaba haciendo (para retomarlo tras un cierre)",
+    "android_src/org/kira/servicio/ArchivosKira.java": "PDF a Descargas y lo que te comparten con Kira desde otras apps",
     "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
     "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
     ".github/workflows/compilar_apk.yml": "compilación del APK en la nube (GitHub Actions)",
@@ -242,6 +247,9 @@ HISTORIA = [
     "Juegos realistas y siempre activa (v2.22-2.24): el pintor dibuja los personajes y Kira programa el juego con ellos.",
     "Saber avanzado y experimentos (v2.25): programación avanzada y diseño, y Kira inventa código experimental que "
     "prueba en modo seguro y apunta en su cuaderno.",
+    "Firma fija y equipo opcional (v2.26): se actualiza sin desinstalar; Claude ya no revisa las mejoras si no quieres.",
+    "Redes neuronales, PDF y «para» (v2.27): recetas que entrenan de verdad, biblioteca de PDF desde enlaces, «para» y "
+    "«cancela» mientras habla o trabaja, y nada se pierde si Android la cierra.",
 ]
 
 DIAGNOSTICOS = [
