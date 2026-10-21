@@ -1446,7 +1446,8 @@ def construir_interfaz(core, consola=None):
     # =================================================================================
     #  CONFIGURACIÓN
     # =================================================================================
-    _, c_cfg = pantalla("config", "CONFIGURACIÓN")
+    import version_kira
+    _, c_cfg = pantalla("config", f"CONFIGURACIÓN · Kira {version_kira.VERSION}")
     msg_cfg = Label(text="", size_hint_y=None, height=dp(60), color=TENUE, font_size=tam(13), halign="left",
                     valign="top", **FUENTE)
     msg_cfg.bind(width=lambda w, a: setattr(w, "text_size", (a, None)))

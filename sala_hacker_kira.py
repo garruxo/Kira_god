@@ -279,8 +279,9 @@ def montar_sala_hacker(sm, ctx):
         botones_al[n] = boton(n, lambda n_=n: elegir(n_), VERDE if n == "Kira" else GRIS, alto=40)
         fila_al.add_widget(botones_al[n])
     c_mej.add_widget(fila_al)
-    c_mej.add_widget(etiqueta("Kira la programa (con Claude, si están los dos), la prueba en su laboratorio del móvil "
-                              "(y en el del ordenador si está) y se instala como orden nueva solo con tus dos toques.",
+    import version_kira
+    c_mej.add_widget(etiqueta(f"Kira {version_kira.VERSION}: la programa (o usa una receta probada: «receta de …»), la "
+                              "prueba en su laboratorio del móvil y se instala como orden nueva solo con tus dos toques.",
                               alto=52))
     campo_mej = entrada("Qué quieres que Kira aprenda a hacer…")
     c_mej.add_widget(campo_mej)

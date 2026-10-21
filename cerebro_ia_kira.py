@@ -24,8 +24,9 @@ import urllib.request
 LOCAL = "\x00cerebro-local\x00"          # marca interna que se pasa en lugar de la clave cuando responde el modelo local
 MOTORES = ("auto", "local", "claude")
 URL_DEFECTO = "http://127.0.0.1:8080"
-MAX_TOKENS_LOCAL = 1024                  # un modelo de móvil va a ~3-10 palabras/s: respuestas largas tardarían minutos
-CTX_LOCAL = 2048                         # memoria de trabajo del cerebro del móvil (-c): lo leído + lo que escribe
+MAX_TOKENS_LOCAL = 1400                  # un modelo de móvil va a ~3-10 palabras/s: respuestas largas tardarían minutos
+CTX_LOCAL = 3072                         # memoria de trabajo del cerebro del móvil (-c): lo leído + lo que escribe
+                                         # (con 2048, un módulo algo largo se cortaba a medias: v2.32)
 LETRAS_POR_FICHA = 3.0                   # español con código: ~3 letras por ficha (por lo bajo, para no pasarse)
 ESPERA_LOCAL = 600                       # segundos que se espera la primera palabra (leer un texto largo tarda)
 

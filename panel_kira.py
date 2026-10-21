@@ -264,6 +264,12 @@ class PanelControl:
         if len(pedido) > MAX_PEDIDO:
             return {"ok": False, "aprobable": False, "intentos": 0,
                     "texto": f"[x] La orden es demasiado larga (máximo {MAX_PEDIDO} caracteres)."}
+        receta = self.receta_pedida(pedido)
+        if receta is not None:                         # «receta de red neuronal»: ya está hecha y probada, tal cual
+            r = self.probar_codigo(receta["codigo"].strip() + "\n", receta["id"], pedido)
+            r["texto"] = (f"Tengo una receta probada para eso («{receta['titulo']}»): la pruebo tal cual en el "
+                          f"laboratorio, sin escribir nada nuevo.\n\n" + r["texto"])
+            return r
         if not callable(getattr(self.core, "generar_mejora", None)):
             return {"ok": False, "aprobable": False, "intentos": 0, "texto": "[x] Este núcleo no sabe generar mejoras."}
         quien = self.core.cerebro_para_codigo() if callable(getattr(self.core, "cerebro_para_codigo", None)) else None
@@ -345,6 +351,18 @@ class PanelControl:
             return {"ok": False, "aprobable": False, "intentos": r["intentos"],
                     "texto": est["ultimo"] + f"\n\nNo se consiguió tras {r['intentos']} intentos." +
                     (f"\n\n{hist}" if hist else "")}
+
+    @staticmethod
+    def receta_pedida(pedido):
+        """Si el pedido nombra una RECETA («receta de red neuronal», «instala la receta dijkstra»), esa receta (si es
+        un módulo de Kira); si no, None. Instalar una receta probada no necesita que el cerebro escriba nada."""
+        m = re.search(r"\breceta\s+(?:de\s+(?:la\s+|el\s+|una?\s+)?)?(.+)$",
+                      re.sub(r"^Mejora para [^:]{1,60}:\s*", "", str(pedido or "")), re.I)
+        if not m:
+            return None
+        import saber_mejoras_kira as sm_
+        r = sm_.receta(m.group(1).strip(" .¿?¡!«»\"'"))
+        return r if r is not None and "def registrar" in r.get("codigo", "") else None
 
     def probar_codigo(self, codigo, nombre="", pedido="") -> dict:
         """«Kira, implementa este código»: si ya es un módulo de Kira (define registrar()), se prueba TAL CUAL en el

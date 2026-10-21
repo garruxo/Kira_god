@@ -122,14 +122,24 @@ def extraer_modulo(texto):
     Lanza ValueError si no hay ningún código reconocible."""
     t = str(texto or "")
     m_nombre = re.search(r"NOMBRE\s*:\s*`?([A-Za-z][A-Za-z0-9_]{0,30})", t)
-    m_codigo = re.search(r"```(?:python|py|python3)?[ \t]*\n(.*?)```", t, re.S | re.I)
-    if m_codigo:
+    m_codigo = re.search(r"```[ \t]*(?:python3?|py)?[ \t]*\n(.*?)```", t, re.S | re.I)
+    m_abierto = re.search(r"```[ \t]*(?:python3?|py)?[ \t]*\n(.*)$", t, re.S | re.I)
+    if m_codigo and "def registrar" in m_codigo.group(1):
+        codigo = m_codigo.group(1)
+    elif m_abierto and "```" not in m_abierto.group(1):     # el bloque se abrió y no se cerró: se CORTÓ
+        if "def registrar" not in m_abierto.group(1):
+            raise ValueError("La respuesta se cortó antes de terminar (el módulo era demasiado largo). Hazlo MUCHO más "
+                             "corto: menos de 40 líneas, sin comentarios largos, y registrar() al final.")
+        codigo = m_abierto.group(1)
+    elif m_codigo:
         codigo = m_codigo.group(1)
     elif "def registrar" in t:                              # sin bloque de código: desde el primer import/def
         i = min([p for p in (t.find("import "), t.find("from "), t.find("def ")) if p >= 0] or [0])
         codigo = t[i:]
     else:
-        raise ValueError("La respuesta de la IA no trae el código del módulo (falta el bloque ```python … ```).")
+        visto = " ".join(t.split())[:140]
+        raise ValueError("La respuesta de la IA no trae el código del módulo (falta el bloque ```python … ```)."
+                         + (f" Respondió: «{visto}»" if visto else " Respondió vacío."))
     codigo = codigo.strip("\n") + "\n"
     if m_nombre:
         nombre = m_nombre.group(1).lower()

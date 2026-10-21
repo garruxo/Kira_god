@@ -75,4 +75,22 @@ try:
     C.chat_local("s", [{"role": "user", "content": "hola"}], 50, timeout=1); ok(False, "debía tardar")
 except ci.CerebroError as e:
     ok("tardado demasiado" in str(e) and "cerebro ligero" in str(e), "«timed out» explicado: " + str(e))
+# v2.32: respuestas cortadas y recetas tal cual
+try:
+    mi.extraer_modulo("NOMBRE: red\n```python\nimport math\nclass Red:\n    def __init__(self):\n        self.w = [")
+    ok(False, "cortada")
+except ValueError as e:
+    ok("se cortó" in str(e) and "más corto" in str(e), "si la respuesta se corta, se lo dice al cerebro para que la acorte")
+try:
+    mi.extraer_modulo("Claro, una red neuronal es un modelo inspirado en el cerebro.")
+    ok(False, "sin código")
+except ValueError as e:
+    ok("Respondió: «Claro, una red" in str(e), "enseña qué respondió en vez del código")
+ok(mi.extraer_modulo("```\ndef registrar():\n    return {'a': len}\n```")[1].startswith("def registrar"), "``` sin «python» vale")
+ok(mi.extraer_modulo("```python\ndef registrar():\n    return {'a': len}\n")[1].startswith("def registrar"),
+   "abierto y sin cerrar pero completo: vale")
+vio.clear()
+r = ctl.enviar_orden("Mejora para Kira: receta de red neuronal")
+ok(r["aprobable"] and not vio and "receta probada" in r["texto"], "«receta de red neuronal»: la receta tal cual, sin cerebro")
+ok(ci.CTX_LOCAL >= 3072 and ci.MAX_TOKENS_LOCAL >= 1400, "más memoria de trabajo para escribir módulos")
 print("MEMORIA CEREBRO OK", n)
