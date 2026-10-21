@@ -34,7 +34,7 @@ source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tes
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.27
+version = 2.28
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]
@@ -46,7 +46,7 @@ version = 2.27
 #   requirements = python3,kivy,plyer,ffpyplayer
 # plyer (la voz) va DENTRO del proyecto (herramientas_pc/incluir_plyer.py): así python-for-android no necesita su pip
 # interno, que en algunos PCs se rompe (ImportError BuildDependencyInstallError). pyjnius tiene receta propia.
-requirements = python3,kivy,pyjnius,pypdf==5.9.0
+requirements = python3,kivy,pyjnius
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes

@@ -221,7 +221,7 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   «mis pdf», «lee (la página N d)el pdf N», «resume el pdf N», «busca X en el pdf N», «qué dice el pdf N sobre …»
   (responde con las páginas que vienen al caso), «estudia el pdf N» (al baúl), renombrar, borrar y «guarda el pdf N en
   descargas» (`ArchivosKira.java`, MediaStore). Compartir un PDF o un enlace con Kira desde otra app
-  (`herramientas_pc/filtros_compartir.xml`). El texto lo saca **pypdf** (nuevo en `requirements`); si faltara, el lector
+  (`herramientas_pc/filtros_compartir.xml`). El texto lo saca **pypdf** (lo mete en el proyecto `herramientas_pc/incluir_pypdf.py`, como plyer); si faltara, el lector
   sencillo propio (ahora también con ASCII85).
 - **«para» / «cállate» y «cancela»** (`escucha_kira.orden_control`): el oído ya NO se pausa mientras Kira habla o piensa;
   mientras habla solo atiende esas órdenes (frase entera, para que su propia voz no la corte). «cancela» corta al

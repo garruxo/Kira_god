@@ -41,6 +41,9 @@ jobs:
       - name: Incluir plyer (voz de reserva) dentro del proyecto
         run: python herramientas_pc/incluir_plyer.py
 
+      - name: Incluir pypdf (lector de PDF) dentro del proyecto
+        run: python herramientas_pc/incluir_pypdf.py
+
       - name: Revisión previa (falla en segundos en vez de tras una hora)
         run: python herramientas_pc/comprobar_antes_de_compilar.py
 
@@ -169,7 +172,7 @@ jobs:
           echo "$LIBS" | grep -q kira_pintor || echo "::warning title=Falta el pintor::El APK no lleva libkira_pintor*.so"
           echo "$DEX" | grep -q VozKira || echo "::warning title=Falta la voz::El APK no lleva VozKira: hablará con la voz antigua (lenta)"
           echo "$DEX" | grep -q ArchivosKira || echo "::warning title=Faltan los archivos::El APK no lleva ArchivosKira (PDF a Descargas y compartir)"
-          if unzip -l "$APK" | grep -q "pypdf"; then echo "::notice title=PDF::Lleva pypdf (lector de PDF completo)";
+          if unzip -l "$APK" | grep -q "pypdf" || unzip -p "$APK" assets/private.tar 2>/dev/null | tar -tz 2>/dev/null | grep -q "pypdf/"; then echo "::notice title=PDF::Lleva pypdf (lector de PDF completo)";
           else echo "::warning title=PDF::No encuentro pypdf dentro del APK: los PDF se leerán con el lector sencillo"; fi
           # el manifiesto: servicio «siempre activa», lista de apps (para «abre WhatsApp») y permiso de segundo plano
           AAPT=$(ls ~/.buildozer/android/platform/android-sdk/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
