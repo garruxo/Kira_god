@@ -16,6 +16,7 @@ laboratorio y solo se aplican con tu doble confirmación).
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -24,6 +25,41 @@ LOCAL = "\x00cerebro-local\x00"          # marca interna que se pasa en lugar de
 MOTORES = ("auto", "local", "claude")
 URL_DEFECTO = "http://127.0.0.1:8080"
 MAX_TOKENS_LOCAL = 1024                  # un modelo de móvil va a ~3-10 palabras/s: respuestas largas tardarían minutos
+CTX_LOCAL = 2048                         # memoria de trabajo del cerebro del móvil (-c): lo leído + lo que escribe
+LETRAS_POR_FICHA = 3.0                   # español con código: ~3 letras por ficha (por lo bajo, para no pasarse)
+ESPERA_LOCAL = 600                       # segundos que se espera la primera palabra (leer un texto largo tarda)
+
+
+def fichas_aprox(texto):
+    return int(len(str(texto or "")) / LETRAS_POR_FICHA) + 4
+
+
+def ajustar_a_contexto(msgs, max_tokens, ctx=CTX_LOCAL):
+    """Que lo que se le da al cerebro del móvil + lo que va a escribir quepa en su memoria de trabajo. Si no cabe,
+    primero escribe menos (hasta 400 fichas) y después se recorta por el MEDIO el mensaje más largo (no el de
+    instrucciones), dejando el principio y el final. Antes, un pedido demasiado largo hacía que el cerebro tardara
+    muchísimo («timed out») o se perdiera."""
+    msgs = [dict(m) for m in msgs]
+    total = sum(fichas_aprox(m["content"]) for m in msgs if isinstance(m["content"], str))
+    margen = 64
+    if total + max_tokens + margen > ctx:
+        max_tokens = max(400, ctx - total - margen)
+    sobra = total + max_tokens + margen - ctx
+    while sobra > 0:
+        textos = [i for i, m in enumerate(msgs) if isinstance(m["content"], str) and m["role"] != "system"]
+        if not textos:
+            break
+        i = max(textos, key=lambda k: len(msgs[k]["content"]))
+        t = msgs[i]["content"]
+        quitar = int(sobra * LETRAS_POR_FICHA) + 40
+        if len(t) - quitar < 200:
+            msgs[i]["content"] = t[:120] + " […] " + t[-80:]
+            break
+        medio = len(t) // 2
+        msgs[i]["content"] = t[:medio - quitar // 2] + "\n[…]\n" + t[medio + quitar // 2 + quitar % 2:]
+        total = sum(fichas_aprox(m["content"]) for m in msgs if isinstance(m["content"], str))
+        sobra = total + max_tokens + margen - ctx
+    return msgs, max_tokens
 _URL_OK = re.compile(r"^https?://[A-Za-z0-9.\-]+(:\d{1,5})?/?$")
 _PENSAMIENTO = re.compile(r"<think>.*?</think>\s*", re.S | re.I)
 
@@ -181,7 +217,9 @@ class Cerebro:
                 "Menú › «Cerebro y oído», o pon la clave con «config clave: …».")
 
     # ---- hablar con el modelo local (formato OpenAI de llama-server) ----
-    def chat_local(self, system, mensajes, max_tokens=512, timeout=300, al_trozo=None, parar=None):
+    _turno = threading.Lock()                        # un solo pedido cada vez al cerebro del móvil (-np 1)
+
+    def chat_local(self, system, mensajes, max_tokens=512, timeout=ESPERA_LOCAL, al_trozo=None, parar=None):
         """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra.
         parar() -> True la corta a mitad («cancela»): lanza Cancelada."""
         if parar is not None and al_trozo is None:
@@ -191,7 +229,20 @@ class Cerebro:
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
             {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
             for m in mensajes]
-        cuerpo = json.dumps({"messages": msgs, "max_tokens": int(min(max_tokens, MAX_TOKENS_LOCAL)),
+        msgs, max_tokens = ajustar_a_contexto(msgs, int(min(max_tokens, MAX_TOKENS_LOCAL)))
+        inicio = time.time()
+        while not Cerebro._turno.acquire(timeout=0.5):   # otro pedido está usando el cerebro: espera su turno
+            if parar is not None and parar():
+                raise Cancelada("Cancelado.")
+            if time.time() - inicio > timeout:
+                raise CerebroError("Mi cerebro lleva demasiado rato ocupado con otra cosa. Inténtalo en un momento.")
+        try:
+            return self._chat_local(msgs, max_tokens, timeout, al_trozo, parar)
+        finally:
+            Cerebro._turno.release()
+
+    def _chat_local(self, msgs, max_tokens, timeout, al_trozo, parar):
+        cuerpo = json.dumps({"messages": msgs, "max_tokens": int(max_tokens),
                              "temperature": 0.6, "stream": bool(al_trozo),
                              "cache_prompt": True,                               # reutiliza lo ya leído: responde antes
                              "chat_template_kwargs": {"enable_thinking": False}  # sin «pensar en voz baja» (Qwen)
@@ -218,6 +269,10 @@ class Cerebro:
             raise CerebroError(f"El modelo local respondió {e.code}.")
         except Exception as e:
             self._cache = (0.0, None)
+            if "timed out" in str(e).lower() or type(e).__name__ in ("timeout", "TimeoutError"):
+                raise CerebroError(f"Mi cerebro ha tardado demasiado en contestar (más de {timeout // 60} min). El "
+                                   "móvil va justo: cierra apps grandes, prueba con el cerebro ligero (2B) en «Cerebro y "
+                                   "oído» o pídemelo más corto.")
             raise CerebroError(f"No se pudo hablar con el modelo local: {e}")
         if datos is not None:
             try:

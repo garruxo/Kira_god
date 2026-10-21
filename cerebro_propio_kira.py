@@ -222,7 +222,8 @@ class CerebroPropio:
             return False
 
     def _argumentos(self, binario, extra=True, ojos=None):
-        args = [binario, "-m", self.ruta_modelo(), "-c", "2048", "-t", str(self.hilos),
+        import cerebro_ia_kira
+        args = [binario, "-m", self.ruta_modelo(), "-c", str(cerebro_ia_kira.CTX_LOCAL), "-t", str(self.hilos),
                 "--host", "127.0.0.1", "--port", str(PUERTO)]
         if self.ojos_instalados() if ojos is None else ojos:
             args += ["--mmproj", self.ruta_ojos()]       # con ojos: entiende fotos y capturas

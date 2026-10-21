@@ -293,27 +293,37 @@ def construir_interfaz(core, consola=None):
     def enviar(texto=None):
         texto = campo.text if texto is None else texto
         texto = ik.limpiar_entrada(texto)
+        if texto and contestar_pregunta(texto):         # «sí» / «déjalo» a «¿sigo con lo que dejé a medias?»
+            campo.text = ""
+            return
         if texto and esk.orden_control(texto):         # «para», «cancela» (escrito): vale aunque esté ocupada
             campo.text = ""
             control_por_voz(esk.orden_control(texto))
             return
         if not texto:
             return
-        if contestar_pregunta(texto):                   # «sí» / «no» a «¿lo dejo y hago lo tuyo?»
-            campo.text = ""
-            return
         if gestor.ocupado() or st["ocupado"]:
             orden_n = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto
             campo.text = ""
             if moverse(orden_n):                        # moverse por la app no interrumpe nada
                 return
+            if re.match(r"^(?:qu[eé] est[aá]s haciendo|en qu[eé] est[aá]s|c[oó]mo vas|por d[oó]nde vas|"
+                        r"cu[aá]nto te queda|qu[eé] haces)\b", esk._norm(orden_n)):
+                decir((gestor.resumen() or "Estoy terminando de contestarte") + ".")   # informa sin parar nada
+                return
+            # TU ORDEN VA PRIMERO: Kira para lo que hace, te dice qué era, te atiende y luego decides tú si sigue
             if gestor.ocupado():
-                st["pregunta"] = orden_n
-                escucha.atender(25)                     # la respuesta vale sin decir «Kira» otra vez
-                decir(gestor.resumen() + ". ¿Lo dejo guardado y hago lo que me pides? Dime «sí» o «no».")
+                resumen = gestor.resumen()
+                t = gestor.interrumpir()
+                st["preguntado"] = False
+                decir(f"Paro: {resumen[len('Estoy con '):] if resumen.startswith('Estoy con ') else resumen}. "
+                      "Te atiendo, y luego me dices si sigo con ello.")
             else:
-                gestor.encolar(orden_n)
-                decir("Dame un momento, estoy terminando de contestarte. Lo tuyo va justo después.")
+                st["charla_cortada"] = True             # una respuesta a medias: se corta y no se dice
+                callar_ya()
+            if callable(getattr(core, "cancelar", None)):
+                core.cancelar()
+            gestor.cola.insert(0, orden_n)              # en cuanto pare (un segundo), lo tuyo
             return
         campo.text = ""
         if callable(getattr(core, "nueva_tarea", None)):
@@ -338,6 +348,8 @@ def construir_interfaz(core, consola=None):
             pdf_por_voz(o_pdf, orden)
             return
         import cierres_kira as ck_
+        if ck_.pide_seguir(orden) and retomar_aparcada():   # «sigue con lo que hacías»: la que dejó por ti
+            return
         if ck_.pide_seguir(orden):                      # «sigue con lo que hacías»: lo que cortó un cierre
             trab = getattr(core, "trabajo", None)
             t = trab.retomar() if trab is not None else None
@@ -452,6 +464,8 @@ def construir_interfaz(core, consola=None):
 
         def terminado(r):
             st["ocupado"] = False
+            if st.pop("charla_cortada", False):        # la cortaste con otra orden: no se dice
+                return
             if isinstance(r, Exception):
                 decir(f"[x] Algo falló: {r}", hablar=False)
             else:
@@ -638,45 +652,57 @@ def construir_interfaz(core, consola=None):
         barra["colocar"]()
 
     def libre_para_mas(_dt=None):
-        """Cuando Kira queda libre: lo que pediste mientras trabajaba y, después, la tarea que dejó aparcada."""
+        """Cuando Kira queda libre: primero lo que le pediste; después te PREGUNTA si sigue con lo que dejó a medias
+        (decides tú)."""
         if gestor.ocupado() or st["ocupado"] or voz.hablando() or st.get("pregunta"):
             return
-        sig = gestor.siguiente()
-        if sig is None:
+        if gestor.cola:
+            enviar(gestor.cola.pop(0))
             return
-        que, cosa = sig
-        if que == "orden":
-            enviar(cosa)
-        else:
-            decir(f"Ya he terminado lo tuyo. Vuelvo con lo que estaba haciendo: «{cosa.descripcion[:60]}».")
-            if callable(cosa.relanzar):
-                Clock.schedule_once(lambda _dt, f_=cosa.relanzar: f_(), 1.5)
+        if gestor.aparcadas and not st.get("preguntado"):
+            t = gestor.aparcadas[-1]
+            st["pregunta"], st["preguntado"] = t, True
+            escucha.atender(30)                         # la respuesta vale sin decir «Kira»
+            decir(f"Ya he terminado lo tuyo. Había dejado a medias {tk_.NOMBRES.get(t.tipo, t.tipo)}: "
+                  f"«{t.descripcion[:60]}». ¿Sigo con ello? Dime «sí» o «déjalo».")
+
+    def retomar_aparcada():
+        """«sigue con lo que hacías»: la última tarea que dejó a medias. True si había alguna."""
+        if not gestor.aparcadas:
+            return False
+        t = gestor.aparcadas.pop()
+        gestor._guardar()
+        st["preguntado"] = False
+        decir(f"Vuelvo con {tk_.NOMBRES.get(t.tipo, t.tipo)}: «{t.descripcion[:60]}».")
+        if callable(t.relanzar):
+            Clock.schedule_once(lambda _dt, f_=t.relanzar: f_(), 1.2)
+        return True
     Clock.schedule_interval(lambda _dt: (pintar_barra(), libre_para_mas()), 1.0)
 
     def contestar_pregunta(texto):
-        """«sí» / «no» a «¿dejo lo que estoy haciendo y hago lo tuyo?». True si era la respuesta."""
-        orden = st.get("pregunta")
-        if not orden:
+        """Tu respuesta a «¿sigo con lo que dejé a medias?»: «sí / sigue» la retoma, «no / déjalo» la olvida.
+        Si dices otra cosa, la tarea se queda guardada («sigue con lo que hacías» la retoma luego). True si respondía."""
+        t = st.get("pregunta")
+        if t is None:
             return False
         b = esk._norm(texto).strip(" .!¡?¿,")
         b = re.sub(r"^(?:kira\s*,?\s*)", "", b)
-        si = re.match(r"^(?:si|vale|venga|claro|dale|ok|de acuerdo|dejalo|hazlo|haz lo mio|si,? (?:dejalo|hazlo|para)|"
-                      r"para (?:eso|lo otro)|atiendeme)\b", b)
-        no = re.match(r"^(?:no|sigue|continua|termina (?:primero|lo tuyo|eso)|espera|luego|despues)\b", b)
-        if not (si or no):
-            return False
+        si = re.match(r"^(?:si|vale|venga|claro|dale|ok|de acuerdo|sigue|continua|retomalo|retoma|termina(?:lo)?|hazlo)\b", b)
+        no = re.match(r"^(?:no|dejalo|deja(?:lo)? estar|olvidalo|olvida(?:lo)?|ya no|no hace falta|cancela(?:lo)?|"
+                      r"borra(?:lo)?|para)\b", b)
         st["pregunta"] = None
         if si:
-            t = gestor.interrumpir()
-            gestor.cola.insert(0, orden)               # primero lo tuyo; la aparcada, después
-            if callable(getattr(core, "cancelar", None)):
-                core.cancelar()
-            decir(f"Vale, dejo «{t.descripcion[:60] if t else 'lo que hacía'}» guardado y hago lo que me pides. "
-                  "Cuando termine, vuelvo con ello.")
-        else:
-            gestor.encolar(orden)
-            decir("Vale, sigo. Lo que me has pedido lo hago en cuanto termine.")
-        return True
+            retomar_aparcada()
+            return True
+        if no:
+            if gestor.aparcadas and gestor.aparcadas[-1] is t:
+                gestor.aparcadas.pop()
+                gestor._guardar()
+            st["preguntado"] = False
+            decir(f"Vale, dejo «{t.descripcion[:60]}».")
+            return True
+        st["preguntado"] = False                        # otra orden: se atiende y, al acabar, te vuelve a preguntar
+        return False
 
     def juego_realista_por_voz(pedido):
         """«Kira, hazme un juego realista de un caballero que esquiva dragones»: piensa el juego, el pintor dibuja el
@@ -935,7 +961,7 @@ def construir_interfaz(core, consola=None):
             Clock.schedule_once(lambda _dt: decir(r, hablar=True), 0.25)
 
     def al_frase_oido(texto):                          # llega desde el hilo de Java: se pasa al de la pantalla
-        control = esk.orden_control(texto)
+        control = esk.orden_control(texto) if st.get("pregunta") is None else None   # «déjalo» puede ser la respuesta
         if control:                                    # «para», «cancela»: valen SIEMPRE, también mientras habla
             control_por_voz(control)
             return

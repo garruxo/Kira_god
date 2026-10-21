@@ -114,7 +114,7 @@ llamadas = []
 def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
     quien = "kira" if clave == ci.LOCAL else "claude"
     llamadas.append((quien, system[:40], usuario))
-    if system == mi.SISTEMA_MEJORA_LOCAL:
+    if system in (mi.SISTEMA_MEJORA_LOCAL, mi.SISTEMA_MEJORA_LOCAL_CORTO):
         return "NOMBRE: saluda\n```python\n" + KIRA_MOD + "```"
     if system.startswith(ak.SISTEMA_REVISION[:40]) and quien == "claude":
         return "ACUERDO: NO\nMOTIVOS: Si no le dices el nombre, saluda al vacío.\nNOMBRE: saluda\n```python\n" + CLAUDE_MOD + "```"

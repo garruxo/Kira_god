@@ -68,7 +68,7 @@ ok(r["aprobable"] and r["intentos"] == 4, f"lo consigue al 4º intento con el mo
 ok(len(prom.llamadas) == 1 and "import os" not in prom.llamadas[0], "solo el código bueno llega al laboratorio")
 ok("falló" in pedidos[1] and "bloque" in pedidos[1], "el 2º pedido explica el fallo de formato")
 ok("'os'" in pedidos[2] and "sintaxis" in pedidos[3].lower(), "los siguientes explican el import prohibido y la sintaxis")
-ok(all(s == mi.SISTEMA_MEJORA_LOCAL for s in sistemas), "con el modelo local usa las instrucciones cortas con ejemplos")
+ok(all(s in (mi.SISTEMA_MEJORA_LOCAL, mi.SISTEMA_MEJORA_LOCAL_CORTO) for s in sistemas), "con el modelo local usa las instrucciones cortas con ejemplos")
 # con Claude: 3 intentos como antes y sus instrucciones completas
 pedidos.clear(); sistemas.clear(); prom.llamadas.clear()
 core._leer_clave = lambda tarea="general": "clave-falsa"

@@ -277,9 +277,10 @@ class PanelControl:
         registrar = getattr(self.core, "registrar_error", None)
         with self._lock:
             self.pendiente = None
-            contexto = self.lecciones_texto()
+            contexto = self.lecciones_texto(max_chars=350 if autor == "local" or quien == "local" else 1200)
             bit = getattr(self.core, "bitacora", None)
-            if bit is not None:                               # mapa del proyecto + fallos recientes (contexto, no órdenes)
+            if bit is not None and quien != "local" and autor != "local":   # el mapa del proyecto, solo para Claude:
+                # al cerebro del móvil no le cabe (con él tardaba tanto que daba «timed out»)
                 contexto = (contexto + "\n\n" if contexto else "") + bit.texto_para_mejoras()
             est = {"ultimo": "[x] Sin resultado.", "lab_caido": False, "error_gen": ""}
 

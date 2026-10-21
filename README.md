@@ -215,10 +215,16 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   con una **barra arriba en todas las pantallas** (▰▱, % y «quedan ~1 min 20 s»). El % sale de la propia tarea cuando
   lo sabe y, si no, de lo que tardaron las de ese tipo otras veces (lo aprende: media de las últimas 5). Nunca dice
   100 % antes de acabar.
-- Si le pides otra cosa mientras trabaja, **pregunta**: «Estoy con … (45 %, quedan unos 2 min). ¿Lo dejo guardado y
-  hago lo que me pides?». «Sí»: la aparca (`core.cancelar()` + `Gestor.interrumpir`), hace lo tuyo y luego **vuelve a
-  ella** (la vuelve a empezar: lo ya pintado o descargado no se repite). «No»: sigue y lo tuyo va a la cola. Moverse por
-  la app no interrumpe nada.
+- **Tu orden va primero** (v2.30, como pidió el dueño): si le pides otra cosa mientras trabaja, Kira la PARA
+  (`core.cancelar()` + `Gestor.interrumpir`), dice qué estaba haciendo («Paro: escribir un programa «…» (45 %, quedan
+  unos 2 min). Te atiendo…»), hace lo tuyo y al acabar PREGUNTA «¿Sigo con ello?»: «sí» la retoma (la vuelve a empezar:
+  lo ya pintado o descargado no se repite), «déjalo» la olvida; si contestas con otra orden, la atiende y vuelve a
+  preguntar después. «qué estás haciendo» informa sin parar nada. Moverse por la app no interrumpe nada.
+- **«No se pudo hablar con el modelo local: timed out»** (v2.30): el pedido de una mejora (instrucciones + mapa del
+  proyecto + receta) no cabía en la memoria de trabajo del cerebro del móvil (2048 fichas) y tardaba muchísimo. Ahora:
+  `cerebro_ia_kira.ajustar_a_contexto` hace que siempre quepa (recorta por el medio si hace falta), instrucciones cortas
+  para mejoras sencillas (`mejoras_ia_kira.sistema_local`), sin el mapa del proyecto para el cerebro del móvil, un
+  pedido cada vez al cerebro (`Cerebro._turno`), 10 min de espera y un mensaje claro si aun así tarda demasiado.
 - **Mejoras instaladas**: `KiraGodCore.modulo_para` / `es_orden_de_modulo`: su orden se mira ANTES que las del núcleo
   (salvo las de una sola palabra reservada, como «busca») y también en la interfaz antes de pintor, internet, etc.; se
   entiende aunque no se diga exacta («convierte 10 euros a dólares» → «convierte euros»). Al aplicarla, Kira dice y

@@ -90,6 +90,26 @@ SISTEMA_MEJORA_LOCAL = (
 )
 
 
+# versión CORTA para el cerebro del móvil cuando el pedido no necesita audio, archivos, avisos ni juegos: su memoria
+# de trabajo es pequeña y con las instrucciones enteras le cabía muy poco código (y tardaba tanto que daba «timed out»)
+_EJEMPLO_1 = EJEMPLOS.split("Ejemplo 2")[0].rstrip()
+SISTEMA_MEJORA_LOCAL_CORTO = (
+    "Escribe un módulo de Python para KiraOS. Responde SOLO con:\n"
+    "NOMBRE: nombre_en_minusculas\n```python\n...código...\n```\n"
+    "Reglas:\n1) Define registrar() que devuelve {\"orden en minúsculas\": funcion}.\n"
+    "2) La función recibe (texto) y devuelve un texto.\n"
+    "3) " + MODULOS + "Prohibido: os, sys, subprocess, socket, open, eval, exec, sleep.\n"
+    + _EJEMPLO_1 + "\nAhora escribe SOLO el módulo pedido, con el mismo formato."
+)
+_NECESITA_API = re.compile(r"audio|v[ií]deo|m[uú]sica|canci[oó]n|sonido|mp3|volumen|archivo|fichero|guarda|recuerd|"
+                           r"av[ií]sa|alarma|recordatorio|temporizador|juego|jugar|naves|serpiente|pong|dato", re.I)
+
+
+def sistema_local(pedido):
+    """Las instrucciones para el cerebro del móvil: las cortas si el pedido no necesita la «caja de herramientas»."""
+    return SISTEMA_MEJORA_LOCAL if _NECESITA_API.search(str(pedido or "")) else SISTEMA_MEJORA_LOCAL_CORTO
+
+
 # las reglas, sin el formato de respuesta (para quien REVISA una mejora)
 REGLAS_MODULO = (
     "debe definir registrar() que devuelva {\"orden en minúsculas\": funcion}; la función recibe (texto) o (texto, kira) "

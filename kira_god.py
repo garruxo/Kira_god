@@ -678,7 +678,8 @@ class KiraGodCore:
         import saber_mejoras_kira as sm_
         saber = sm_.contexto_para(pedido.split("\n\n")[0], getattr(self, "recuerdos", None), local=local)
         usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n\n{saber}" if saber else "")
-        texto = self._llamar_api(clave, mi.SISTEMA_MEJORA_LOCAL if local else mi.SISTEMA_MEJORA, usuario)
+        texto = self._llamar_api(clave, mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA,
+                                 usuario)
         return mi.extraer_modulo(texto)
 
     # ---------- trabajar en EQUIPO: Kira (cerebro del móvil) + Claude ----------

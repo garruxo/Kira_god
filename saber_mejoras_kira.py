@@ -71,7 +71,7 @@ def contexto_para(pedido, recuerdos=None, local=False, para_editor=False):
     Si el código de la receta es demasiado largo para ese cerebro, va solo la idea (y su coste), que también ayuda.
     para_editor=True: para un PROGRAMA del editor (las recetas de ingeniería van como programa con sus pruebas)."""
     partes = []
-    tope_codigo = 2600 if local else 6000
+    tope_codigo = 2400 if local else 6000              # el cerebro del móvil tiene poca memoria de trabajo
     for _p, r in buscar(pedido, 1 if local else 2):
         codigo = (programa(r) if para_editor and r.get("prueba") else r["codigo"]).strip()
         if para_editor and "def registrar" in codigo:

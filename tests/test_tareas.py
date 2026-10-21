@@ -118,17 +118,21 @@ correr(0.8)
 escribir("Kira, escríbeme un programa que sea LENTO")
 ok(correr(3, lambda: core2.tareas.ocupado() and "%" in barra() and "quedan" in barra()), "una tarea larga: barra con % y tiempo: " + barra())
 sm.ir("inicio"); correr(0.3)
+escribir("qué estás haciendo")
+ok(correr(2, lambda: any("Estoy con escribir un programa" in d and "%" in d for d in VOZ.dichos)) and core2.tareas.ocupado(),
+   "«qué estás haciendo»: lo dice con su % y no para nada")
 escribir("escríbeme un programa que sea rápido")
-ok(correr(2, lambda: any("¿Lo dejo guardado" in d for d in VOZ.dichos)), "si le pides otra cosa, pregunta si la deja")
-ok(any("Estoy con escribir un programa" in d and "%" in d for d in VOZ.dichos), "y dice por dónde va")
+ok(correr(2, lambda: any(d.startswith("Paro: escribir un programa") and "Te atiendo" in d for d in VOZ.dichos)),
+   "TU ORDEN VA PRIMERO: para lo que hace y dice qué era")
+ok(correr(8, lambda: any("soy el RAPIDO" in t for t in textos("editor_codigo"))), "y te atiende")
+ok(correr(6, lambda: any("¿Sigo con ello?" in d and "LENTO" in d for d in VOZ.dichos)), "al acabar lo tuyo, PREGUNTA si sigue")
+ok(not core2.tareas.ocupado(), "y no sigue sola: decides tú")
 escribir("sí")
-ok(correr(8, lambda: any("soy el RAPIDO" in t for t in textos("editor_codigo"))), "«sí»: deja la suya y hace lo tuyo")
-ok(any("Vuelvo con lo que estaba haciendo" in d for d in VOZ.dichos) or correr(6, lambda: any(
-    "Vuelvo con lo que estaba haciendo" in d for d in VOZ.dichos)), "y al terminar vuelve a la que dejó")
+ok(correr(3, lambda: any("Vuelvo con escribir un programa" in d for d in VOZ.dichos)), "«sí»: vuelve con ello")
 espera["lento"] = False
-ok(correr(10, lambda: any("soy el LENTO" in t for t in textos("editor_codigo"))), "y la termina")
+ok(correr(10, lambda: any("soy el LENTO" in t for t in textos("editor_codigo"))), "y lo termina")
 ok(correr(3, lambda: not core2.tareas.ocupado() and "quedan" not in barra()), "sin tareas, la barra se va")
-# «no»: sigue con lo suyo y lo tuyo va después
+# «déjalo»: la olvida
 espera["lento"] = True
 sm.ir("inicio"); correr(0.3)
 VOZ.dichos.clear()
@@ -136,14 +140,12 @@ escribir("escríbeme un programa que sea LENTO otra vez")
 correr(1.5)
 sm.ir("inicio"); correr(0.3)
 escribir("escríbeme un programa que sea rápido")
-correr(1.0)
-escribir("no, sigue")
-ok(correr(2, lambda: any("lo hago en cuanto termine" in d for d in VOZ.dichos)), "«no»: sigue")
-correr(1.0)
-ok(core2.tareas.actual is not None and "LENTO" in core2.tareas.actual.descripcion, "con la suya")
+ok(correr(8, lambda: any("¿Sigo con ello?" in d for d in VOZ.dichos)), "otra vez: para, te atiende y pregunta")
+escribir("déjalo")
+ok(correr(2, lambda: any(d.startswith("Vale, dejo") for d in VOZ.dichos)) and not core2.tareas.aparcadas, "«déjalo»: la olvida")
+correr(2.5)
+ok(not core2.tareas.ocupado() and not any(d.startswith("Vuelvo con") for d in VOZ.dichos), "y no vuelve a ella")
 espera["lento"] = False
-ok(correr(12, lambda: sum("soy el" in t for t in textos("editor_codigo")) and any("RAPIDO" in t for t in textos("editor_codigo"))
-          and not core2.tareas.ocupado()), "y después hace lo tuyo")
 # una mejora instalada se usa aunque otra pantalla la quisiera interceptar
 os.makedirs(os.path.join(core2.dir, "modulos"), exist_ok=True)
 open(os.path.join(core2.dir, "modulos", "pinta.py"), "w").write(
