@@ -78,5 +78,12 @@ ok(ik.pedido_mejora("Mejórate: que me digas el tiempo") == "que me digas el tie
 ok(ik.pedido_mejora("quiero que sepas leer códigos QR") == "leer códigos QR", "quiero que sepas …")
 ok(ik.pedido_mejora("aprende que mi perro se llama Toby") is None, "«aprende que» es recordar, no programar")
 ok(ik.pedido_mejora("aprende sola") is None and ik.pedido_mejora("aprende sobre volcanes") is None, "estudiar no es programar")
+_frase = ("aprende a programar una mejora para el gato, pero primero escribe el código en tu laboratorio del móvil "
+          "y espera las órdenes de tu usuario.")
+ok(ik.pedido_mejora(_frase) == "una mejora para el gato", "lo de «primero en el laboratorio y espera» no va al cerebro")
+ok(ik.pide_esperar(_frase) and not ik.pide_esperar("aprende a convertir euros a dólares"), "se nota que pide esperar")
+ok(ik.pedido_mejora("añade un temporizador, pruébalo en tu laboratorio y no lo instales") == "un temporizador",
+   "«pruébalo en tu laboratorio» y «no lo instales» tampoco")
+ok(ik.pedido_mejora("aprende a hacer tortitas y espera a que te diga") == "hacer tortitas", "«espera a que te diga»")
 ok(ik.pedido_mejora("qué tal estás") is None and ik.pedido_mejora("mejora") is None, "charla normal o pedido vacío")
 print("ESCUCHA OK", n)

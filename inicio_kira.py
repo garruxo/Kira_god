@@ -197,7 +197,40 @@ def pedido_mejora(texto):
         return None
     if m.group("verbo").lower().startswith("ap") and re.match(r"^que\b", pedido, re.I):
         return None                                     # «aprende que…» = recordar un dato
-    return pedido
+    limpio = _quitar_proceso(pedido)
+    return limpio if len(limpio) >= 4 else pedido
+
+
+# Lo que el dueño añade sobre CÓMO hacerlo («pero primero escribe el código en tu laboratorio y espera mis órdenes»)
+# no es parte de la mejora: Kira ya lo hace siempre (laboratorio del móvil + dos toques). Si llegara al cerebro, este
+# intentaría programar «esperar órdenes» y la mejora saldría rara.
+_PROCESO = [
+    re.compile(r"[,;.]?\s*(?:pero\s+|y\s+)?(?:antes|primero)(?:\s+de\s+nada)?[\s,]+(?:escr[ií]bel[oa]|escribe|"
+               r"pru[eé]bal[oa]|prueba|hazl[oa]|haz|ens[aá]yal[oa]|ensaya|m[eé]tel[oa]|ponl[oa])\b.*$", re.I | re.S),
+    re.compile(r"[,;.]?\s*(?:pero\s+|y\s+)?(?:escr[ií]bel[oa]|escribe(?:\s+el\s+c[oó]digo)?|pru[eé]bal[oa]|prueba(?:lo)?|"
+               r"ens[aá]yal[oa])\s+(?:\S+\s+){0,3}?(?:en\s+)?(?:tu|el|mi)\s+laboratorio\b.*$", re.I | re.S),
+    re.compile(r"[,;.]?\s*(?:y\s+)?(?:luego\s+|despu[eé]s\s+)?espera\s+(?:a\s+)?(?:mis|las|tus|la|mi|a\s+que|que)\s+"
+               r"(?:[oó]rden(?:es)?|instrucciones|aprobaci[oó]n|permiso|te\s+diga|diga|yo)\b.*$", re.I | re.S),
+    re.compile(r"[,;.]?\s*(?:pero\s+|y\s+)?(?:no\s+(?:la|lo|me\s+la|me\s+lo)\s+instales|sin\s+instalar(?:la|lo)?)\b.*$",
+               re.I | re.S),
+]
+_VERBO_MEJORA = re.compile(r"^(?:a\s+)?(?:programar|hacer|crear|escribir|preparar)(?:te|me)?\s+"
+                           r"(?=(?:una|la|un|el)\s+(?:mejora|m[oó]dulo|habilidad|funci[oó]n)\b)", re.I)
+
+
+def _quitar_proceso(pedido):
+    corte = len(pedido)
+    for rx in _PROCESO:
+        m = rx.search(pedido)
+        if m and m.start() > 0:
+            corte = min(corte, m.start())
+    return _VERBO_MEJORA.sub("", pedido[:corte]).strip(" ,.:;")
+
+
+def pide_esperar(texto):
+    """¿El dueño pidió expresamente que la pruebe primero y espere su orden? (Ya es así siempre: se le confirma.)"""
+    t = limpiar_entrada(texto)
+    return any(rx.search(t) for rx in _PROCESO)
 
 
 def limpiar_entrada(texto):

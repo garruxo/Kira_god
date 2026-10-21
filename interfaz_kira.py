@@ -400,7 +400,7 @@ def construir_interfaz(core, consola=None):
             return
         pedido = ik.pedido_mejora(orden)
         if pedido is not None:                          # «Kira, mejora…» / «aprende a…»: al flujo de mejoras
-            mejora_por_voz(pedido)
+            mejora_por_voz(pedido, espera=ik.pide_esperar(orden))
             return
         bajo = texto.lower()
         if re.match(r"^abre lo le[ií]do", bajo):        # lo que leyó de una captura, al editor
@@ -547,7 +547,7 @@ def construir_interfaz(core, consola=None):
             return ""
         return f"{'yo' if autor == 'local' else 'Claude'} y {'Claude' if revisor == 'claude' else 'yo'}" if revisor else ""
 
-    def mejora_por_voz(pedido):
+    def mejora_por_voz(pedido, espera=False):
         quien = getattr(core, "cerebro_para_codigo", lambda: None)()
         if quien is None:
             decir("Para programar mejoras necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude "
@@ -555,7 +555,8 @@ def construir_interfaz(core, consola=None):
             return
         equipo = en_equipo()
         tarea_empieza("mejora", pedido, lambda p_=pedido: mejora_por_voz(p_), {"pedido": pedido})
-        decir(f"Vale, me pongo a programar: {pedido}. Lo pruebo aquí en el móvil"
+        decir((f"Entendido: «{pedido}». Como me pides, primero escribo el código y lo pruebo en mi laboratorio del móvil"
+               if espera else f"Vale, me pongo a programar: {pedido}. Lo pruebo aquí en el móvil")
               + (" (y en el ordenador, que está conectado)" if getattr(ctl.pasarela, "url", "") else "")
               + (". Lo haremos en equipo Claude y yo hasta ponernos de acuerdo" if equipo else "")
               + ". Para instalarlo tendrás que tocar Aplicar dos veces.")
