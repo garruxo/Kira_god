@@ -29,6 +29,7 @@ APARTADOS = [
     {"id": "pintor",    "titulo": "Pintor",          "desc": "Imágenes con su propia IA",   "color": (0.95, 0.40, 0.55), "destino": ("pantalla", "pintor")},
     {"id": "internet",  "titulo": "Internet",        "desc": "Busca, lee y aprende",        "color": (0.25, 0.60, 0.95), "destino": ("pantalla", "internet")},
     {"id": "pdf",       "titulo": "Mis PDF",         "desc": "Descarga, lee y pregunta",    "color": (0.95, 0.30, 0.30), "destino": ("pantalla", "pdf")},
+    {"id": "librerias", "titulo": "Librerías",       "desc": "Python de PyPI para programar", "color": (0.30, 0.75, 0.55), "destino": ("pantalla", "librerias")},
     {"id": "lector",    "titulo": "Lector",          "desc": "Lee capturas: texto y código", "color": (0.20, 0.65, 0.75), "destino": ("pantalla", "lector")},
     {"id": "juegos",    "titulo": "Juegos",          "desc": "Juega y programa juegos",     "color": (0.95, 0.45, 0.30), "destino": ("pantalla", "juegos")},
     {"id": "editor_codigo", "titulo": "Editor de código", "desc": "Escribe y ejecuta Python", "color": (0.30, 0.55, 0.95), "destino": ("pantalla", "editor_codigo")},
@@ -116,6 +117,18 @@ AYUDA = (
     "REDES NEURONALES: «estudia redes neuronales» (sin internet) y «recetas de redes neuronales»: autograd, red "
     "multicapa, convolucional, recurrente, atención, optimizadores y Q-learning, que entrenan de verdad en el móvil. "
     "«abre la receta convolucional» la lleva al editor; «implementa este código» la convierte en una mejora.\n"
+    "LIBRERÍAS: «Kira, instala la librería kivymd» (o rich, sympy, networkx, beautifulsoup4…): te dice qué es, qué más "
+    "necesita y cuánto pesa, y la instalas tú con dos toques en Menú › Librerías. Después la puede usar al programar. "
+    "Solo valen las de Python puro (pandas o torch no tienen versión para el móvil); numpy ya va dentro. «mis "
+    "librerías», «quita la librería …».\n"
+    "INTELIGENCIA ARTIFICIAL: «estudia inteligencia artificial» (o «estudia lenguaje natural», «estudia machine "
+    "learning») y «recetas de lenguaje natural» / «recetas de aprendizaje automático»: raíces, TF-IDF, BM25, "
+    "sentimiento, n-gramas, entidades, RAG, regresión logística, árboles de decisión y LoRA, en código que funciona.\n"
+    "PREGUNTA A TUS DOCUMENTOS (RAG): «pregunta a mis documentos: …» o «qué dicen mis apuntes sobre …»: busca en TODOS "
+    "tus PDF y contesta citando documento y página.\n"
+    "AJUSTE FINO: las mejoras que apruebas le sirven de ejemplo para las siguientes. «prepara datos de entrenamiento y "
+    "guárdalos en descargas» saca un archivo para afinar su cerebro con LoRA en un PC con tarjeta gráfica o en Google "
+    "Colab; luego «instala mi ajuste: enlace» y «quita mi ajuste».\n"
     "UNA TAREA CADA VEZ: mientras Kira hace algo largo (programar, una mejora, un experimento, pintar, un PDF) verás "
     "arriba una barra con el % y el tiempo que le queda. TU ORDEN VA PRIMERO: si le pides otra cosa, para lo que hace, te "
     "dice qué era y te atiende. Al terminar lo tuyo te pregunta «¿sigo con ello?»: «sí» lo retoma (empieza esa tarea otra "

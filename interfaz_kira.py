@@ -54,6 +54,7 @@ def construir_interfaz(core, consola=None):
     from pantalla_pintor_kira import montar_pintor
     from pantalla_internet_kira import montar_internet
     from pantalla_pdf_kira import montar_pdf
+    from pantalla_librerias_kira import montar_librerias
     from sala_av_kira import montar_av
 
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
@@ -341,6 +342,11 @@ def construir_interfaz(core, consola=None):
                     r"(?:dibujos|gr[aá]ficos|personajes|sprites|im[aá]genes)\s+(?:del|de\s+este|de\s+mi|para\s+el)\s+"
                     r"(?:juego|programa)\b", orden, re.I):
             dibujos_del_juego()                         # «pinta los dibujos del juego» (el que está en el editor)
+            return
+        import librerias_kira as lbk_
+        o_lib = lbk_.interpretar(orden)
+        if o_lib is not None:                           # «instala la librería X»: la decides tú (dos toques)
+            libreria_por_voz(o_lib, orden)
             return
         import pdf_kira as pdk_
         o_pdf = pdk_.interpretar(orden)
@@ -1644,6 +1650,26 @@ def construir_interfaz(core, consola=None):
                              "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
                              "FUENTE": FUENTE, "core": core, "avance": lambda t: avance(t)})
 
+    librerias_ui = montar_librerias(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
+                                         "pantalla": pantalla, "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS,
+                                         "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE, "core": core,
+                                         "avance": lambda t, f=None: avance(t, f), "decir": lambda t: decir(t)})
+
+    def libreria_por_voz(o, orden):
+        """«instala la librería X»: la enseña en «Librerías» y espera tus dos toques; «mis librerías»; «quita…»."""
+        if o["accion"] == "preparar":
+            ir("librerias")
+            decir(f"Miro qué es «{o['nombre']}». Si te convence, toca Instalar dos veces.")
+            librerias_ui["ver"](o["nombre"], al_terminar=lambda r: decir(
+                f"[x] {r}" if isinstance(r, Exception) else
+                f"«{r['plan'][0]['nombre_bonito']}»: {r['plan'][0]['resumen'][:120]}. Pesa {r['bytes'] / 1e6:.1f} megas"
+                + (f" y necesita {len(r['plan']) - 1} más" if len(r["plan"]) > 1 else "") + ". Toca Instalar dos veces."))
+            return
+        if o["accion"] == "lista":
+            ir("librerias")
+        decir(str(core.orden_librerias(orden)).replace("[OK] ", "").replace("[x] ", ""))
+        librerias_ui["pintar_lista"]()
+
     def recibir_compartido(intent=None):
         """Lo que te COMPARTEN con Kira desde otra app (un PDF o un enlace), o un PDF que abres «con Kira»."""
         if platform != "android":
@@ -1718,8 +1744,9 @@ def construir_interfaz(core, consola=None):
             pdf_ui["abrir"](e["n"], o.get("pagina", 1))
             decir(f"Te abro «{e['nombre']}», página {o.get('pagina', 1)}.")
             return
-        tarea_empieza("pdf", {"resumir": "resumir", "preguntar": "preguntar a", "estudiar": "estudiar",
-                              "buscar": "buscar en"}.get(acc, acc) + " el PDF " + str(o.get("doc") or ""),
+        tarea_empieza("pdf", ("preguntar a tus documentos: " + o.get("pregunta", "")) if acc == "rag" else
+                      {"resumir": "resumir", "preguntar": "preguntar a", "estudiar": "estudiar",
+                       "buscar": "buscar en"}.get(acc, acc) + " el PDF " + str(o.get("doc") or ""),
                       lambda o_=o, t_=orden: pdf_por_voz(o_, t_))
         modelo.poner_estado("pensando")
         burbuja.text = "…"

@@ -222,6 +222,10 @@ MAPA = {
     "pantalla_pdf_kira.py": "pantalla «Mis PDF»: pegar un enlace, la lista, leer página a página y las acciones",
     "cierres_kira.py": "por qué la cerró Android y qué estaba haciendo (para retomarlo tras un cierre)",
     "tareas_kira.py": "una tarea larga cada vez: barra con % y tiempo que queda, aparcar y volver a ella",
+    "librerias_kira.py": "librerías de Python de PyPI (solo puras), con dependencias y huella; instalar con dos toques",
+    "pantalla_librerias_kira.py": "pantalla «Librerías»: ver qué es, instalar (dos toques) y quitar",
+    "saber_pln_kira.py": "lenguaje natural, RAG, aprendizaje automático y LoRA en Python puro, y sus fichas",
+    "afinado_kira.py": "aprender de las mejoras aprobadas, datos de entrenamiento JSONL y el ajuste LoRA del cerebro",
     "android_src/org/kira/servicio/ArchivosKira.java": "PDF a Descargas y lo que te comparten con Kira desde otras apps",
     "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
     "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
@@ -253,6 +257,9 @@ HISTORIA = [
     "«cancela» mientras habla o trabaja, y nada se pierde si Android la cierra.",
     "Una tarea cada vez (v2.29): barra con % y tiempo, pregunta antes de dejar lo que hace y vuelve a ello; las "
     "mejoras instaladas se usan de verdad (su orden va primero y dice cómo se usan).",
+    "Tu orden primero (v2.30) y sin «timed out»: Kira para, informa, te atiende y te pregunta si sigue.",
+    "Sin límites (v2.31): librerías de PyPI con tu aprobación, numpy dentro, lenguaje natural, RAG con tus documentos, "
+    "aprendizaje automático y ajuste fino (ejemplos propios, datos de entrenamiento y LoRA).",
 ]
 
 DIAGNOSTICOS = [

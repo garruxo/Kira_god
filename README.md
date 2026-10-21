@@ -210,6 +210,25 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Librerías, IA de verdad y ajuste fino (nuevo, v2.31)
+- **`librerias_kira.py`** + **`pantalla_librerias_kira.py`** («Librerías» en el menú): «instala la librería X» consulta PyPI,
+  coge la rueda de **Python puro** (`py3-none-any`), resuelve dependencias (con sus condiciones: Python 3.11, Linux, sin
+  extras), enseña qué es, licencia y tamaño, y **solo se instala con dos toques**. Comprueba la sha256 de PyPI y que la
+  rueda no escriba fuera de su carpeta. Va a `KIRA_DATA_DIR/librerias` (en `sys.path`); `ejecutor_kira.permitidos()` y
+  `laboratorio_movil_kira.permitidos()` aceptan lo instalado (y **numpy**, que ahora va en `requirements`). El cerebro
+  sabe qué librerías tiene al programar. Las compiladas (pandas, torch, scikit-learn) no tienen versión para Android.
+- **`saber_pln_kira.py`** (se suma a `saber_avanzado_kira`): 10 recetas (raíces en español, TF-IDF + coseno, BM25,
+  Naive Bayes de sentimiento, n-gramas, entidades, RAG en pequeño, regresión logística, árbol ID3, LoRA en pequeño) y 10
+  fichas (PLN, fichas de los LLM, RAG, buen RAG, ajuste fino, LoRA/QLoRA, RLHF/DPO, ML clásico, frameworks, datos).
+  «estudia inteligencia artificial / lenguaje natural / machine learning».
+- **RAG con tus documentos**: «pregunta a mis documentos: …» / «qué dicen mis apuntes sobre …» → `Biblioteca.recuperar`
+  (BM25 sobre todos los PDF) → `KiraGodCore.preguntar_documentos` (responde SOLO con los trozos y cita documento y página).
+- **`afinado_kira.py`**: las mejoras aprobadas son **recetas propias** (`saber_mejoras_kira.mejor_propia`: el cerebro las
+  recibe como ejemplo); «prepara datos de entrenamiento [y guárdalos en descargas]» (JSONL de chat);
+  `herramientas_pc/afinar_lora.py` (PEFT + Transformers, para PC con GPU o Colab; **sin probar aquí**) y «instala mi
+  ajuste: enlace» / «quita mi ajuste» (`CerebroPropio.ruta_ajuste`, `--lora`).
+- Pruebas: `tests/test_librerias.py`, `tests/test_afinado.py`, `tests/test_pdf.py`, `tests/test_saber_avanzado.py`.
+
 ## Una tarea cada vez y mejoras que se usan de verdad (nuevo, v2.29)
 - **`tareas_kira.py`** (`Gestor`): la tarea larga en marcha (programa, mejora, experimento, juego realista, imagen, PDF)
   con una **barra arriba en todas las pantallas** (▰▱, % y «quedan ~1 min 20 s»). El % sale de la propia tarea cuando

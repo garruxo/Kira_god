@@ -52,6 +52,8 @@ DESTINOS = {
                "Te abro el pintor."),
     "internet": (("buscador de internet", "pantalla de internet", "internet de kira", "busquedas en internet",
                   "resultados de internet"), "Te abro internet."),
+    "librerias": (("librerias", "pantalla de librerias", "librerias de python", "paquetes de python"),
+                  "Te abro las librerías."),
     "pdf": (("mis pdf", "mis pdfs", "biblioteca de pdf", "pantalla de pdf", "los pdf", "lector de pdf"),
             "Te abro tus PDF."),
     "conocimiento": (("conocimiento", "lo que has aprendido"), "Te enseño lo que he aprendido."),
@@ -141,7 +143,8 @@ def interpretar(texto, juegos_extra=()):
         return None
     try:                                            # «abre el pdf 2», «mis pdf»: son de la biblioteca de PDF
         import pdf_kira
-        if pdf_kira.interpretar(texto) is not None:
+        import librerias_kira
+        if pdf_kira.interpretar(texto) is not None or librerias_kira.interpretar(texto) is not None:
             return None
     except ImportError:
         pass

@@ -55,6 +55,15 @@ TOPE_CARGA, TOPE_LLAMADA, TOPE_JUEGO = 5.0, 2.0, 12.0
 NOMBRE_ARCHIVO = "<mejora en prueba>"
 
 
+def permitidos():
+    """La lista de siempre + numpy (si va en el APK) + las librerías que tú has instalado (dos toques)."""
+    try:
+        import librerias_kira
+        return PERMITIDOS | librerias_kira.extra_permitidos()
+    except Exception:
+        return PERMITIDOS
+
+
 class TiempoAgotado(Exception):
     pass
 
@@ -95,12 +104,12 @@ def revisar_seguridad(arbol):
     for n in ast.walk(arbol):
         if isinstance(n, ast.Import):
             for a in n.names:
-                if a.name.split(".")[0] not in PERMITIDOS:
+                if a.name.split(".")[0] not in permitidos():
                     return (f"Línea {n.lineno}: en una mejora no se puede importar «{a.name}». Módulos permitidos: "
                             "math, random, datetime, time, json, re, collections, itertools, statistics, string… "
                             "Para archivos, audio y avisos usa las funciones de 'kira'.")
         elif isinstance(n, ast.ImportFrom):
-            if n.level or not n.module or n.module.split(".")[0] not in PERMITIDOS:
+            if n.level or not n.module or n.module.split(".")[0] not in permitidos():
                 return f"Línea {n.lineno}: en una mejora no se puede importar de «{n.module or '.'}»."
             for a in n.names:
                 if a.name in ATRIBUTOS_PROHIBIDOS:
@@ -164,7 +173,7 @@ def con_tope(funcion, limite, *args, **kw):
 
 
 def _importador(nombre, globales=None, locales=None, desde=(), nivel=0):
-    if nivel or nombre.split(".")[0] not in PERMITIDOS:
+    if nivel or nombre.split(".")[0] not in permitidos():
         raise ImportError(f"en el laboratorio del móvil no se puede importar «{nombre}»")
     return builtins.__import__(nombre, globales, locales, desde, nivel)
 

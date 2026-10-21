@@ -159,6 +159,10 @@ def _limpiar(t):
     return t.strip()
 
 
+def trozos_de(texto, largo=1800):
+    return trozos(texto, largo)
+
+
 def trozos(texto, largo=1800):
     """El texto en trozos de ~largo letras, cortando por párrafos o frases."""
     res, actual = [], ""
@@ -418,6 +422,40 @@ class Biblioteca:
                 sal.append(f"[página 1] {ini}")
         return "\n\n".join(sal)
 
+    # ---------- RAG: preguntar a TODOS tus documentos ----------
+    def recuperar(self, pregunta, n=5, largo=1100):
+        """Los n trozos de TODOS los PDF que mejor responden la pregunta (BM25): [(puntos, ficha, página, trozo)]."""
+        import math
+        q = palabras(pregunta)
+        if not q:
+            return []
+        trozos = []
+        for e in self.lista:
+            try:
+                for i, t in enumerate(self.textos(e), 1):
+                    for tz in trozos_de(t, largo):
+                        trozos.append((e, i, tz, palabras(tz)))
+            except PdfError:
+                continue
+        if not trozos:
+            return []
+        media = sum(len(p) for *_x, p in trozos) / len(trozos)
+        df = {}
+        for *_x, p in trozos:
+            for w in p:
+                df[w] = df.get(w, 0) + 1
+        res = []
+        for e, i, tz, p in trozos:
+            punt = 0.0
+            for w in q & p:
+                idf = math.log(1 + (len(trozos) - df[w] + 0.5) / (df[w] + 0.5))
+                f = _plano(tz).count(w)
+                punt += idf * f * 2.5 / (f + 1.5 * (0.25 + 0.75 * len(p) / max(1.0, media)))
+            if punt > 0:
+                res.append((punt, e, i, tz))
+        res.sort(key=lambda x: -x[0])
+        return res[:n]
+
     # ---------- gestionar ----------
     def renombrar(self, e, nombre):
         nombre = re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", " ", str(nombre or "")).strip()[:80]
@@ -470,6 +508,12 @@ def interpretar(texto):
                 r"(?:pdfs?|documentos\s+pdf)\s*$", b) or \
             b in ("biblioteca de pdf", "mi biblioteca", "mis documentos pdf", "que pdf tienes", "que pdfs tienes"):
         return {"accion": "lista"}
+    m = re.match(r"^(?:preg[uú]nta(?:le)?\s+a\s+(?:mis|tus|los)\s+(?:documentos|pdfs?|apuntes|libros)|"
+                 r"busca\s+en\s+(?:mis|tus|los)\s+(?:documentos|pdfs?|apuntes|libros)|"
+                 r"qu[eé]\s+dicen\s+(?:mis|tus|los)\s+(?:documentos|pdfs?|apuntes|libros)\s+(?:sobre|de|del|acerca\s+de)|"
+                 r"seg[uú]n\s+(?:mis|tus|los)\s+(?:documentos|pdfs?|apuntes|libros))\s*[:,]?\s*(?P<q>.+)$", t, re.I)
+    if m:
+        return {"accion": "rag", "pregunta": m.group("q").strip(" ¿?")}
     if not re.search(r"\b(?:pdf|documento\s+\d+|libro\s+\d+)\b", b):
         return None
     m = re.match(r"^(?:lee(?:me)?|leer)\s+(?:la\s+)?p[aá]gina\s+(?P<p>\d+)\s+(?:del?\s+)?" + _N + "$", t, re.I)

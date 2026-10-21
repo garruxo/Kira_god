@@ -130,6 +130,18 @@ class CerebroPropio:
         self.modelo = id_
         self._guardar()
 
+    # ---------- ajuste fino (LoRA en GGUF, hecho en un PC/Colab con herramientas_pc/afinar_lora.py) ----------
+    def ruta_ajuste(self, id_=None):
+        """Un adaptador sirve solo para el modelo con el que se entrenó: uno por modelo."""
+        return os.path.join(self.carpeta_modelos, f"ajuste_{id_ or self.modelo}.gguf")
+
+    def tiene_ajuste(self, id_=None):
+        try:
+            with open(self.ruta_ajuste(id_), "rb") as f:
+                return f.read(4) == b"GGUF"
+        except OSError:
+            return False
+
     # ---------- ojos (visión: entender fotos y la pantalla) ----------
     def ruta_ojos(self, id_=None):
         o = MODELOS[id_ or self.modelo].get("ojos")
@@ -227,6 +239,8 @@ class CerebroPropio:
                 "--host", "127.0.0.1", "--port", str(PUERTO)]
         if self.ojos_instalados() if ojos is None else ojos:
             args += ["--mmproj", self.ruta_ojos()]       # con ojos: entiende fotos y capturas
+        if self.tiene_ajuste():
+            args += ["--lora", self.ruta_ajuste()]      # tu ajuste fino (LoRA) encima del modelo
         if extra:
             args += ["--reasoning-budget", "0",     # sin «pensar en voz alta»: responde mucho antes
                      "-np", "1"]                    # una sola conversación: toda la memoria para ella y lo leído se reutiliza

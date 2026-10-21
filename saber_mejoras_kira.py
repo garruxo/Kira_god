@@ -57,6 +57,22 @@ def buscar(pedido, n=2):
     return res[:n]
 
 
+def mejor_propia(pedido, minimo=2):
+    """La mejora aprobada por el dueño que más se parece al pedido (o None). Así Kira aprende de lo que le aprobaste."""
+    try:
+        import afinado_kira
+        propias = afinado_kira.recetas_propias()
+    except Exception:
+        return None
+    p = _raices(pedido)
+    mejor, puntos = None, 0
+    for r in propias:
+        n = len(p & _raices(r["temas"]))
+        if n > puntos:
+            mejor, puntos = r, n
+    return mejor if puntos >= minimo else None
+
+
 def receta(id_o_nombre):
     q = normalizar(id_o_nombre).strip()
     for r in RECETAS:
@@ -72,6 +88,10 @@ def contexto_para(pedido, recuerdos=None, local=False, para_editor=False):
     para_editor=True: para un PROGRAMA del editor (las recetas de ingeniería van como programa con sus pruebas)."""
     partes = []
     tope_codigo = 2400 if local else 6000              # el cerebro del móvil tiene poca memoria de trabajo
+    propia = mejor_propia(pedido)                      # una mejora TUYA aprobada que se parece: el mejor ejemplo
+    if propia is not None and len(propia["codigo"]) <= tope_codigo:
+        partes.append(f"Una mejora tuya que el dueño APROBÓ y funciona («{propia['titulo']}»). Úsala de modelo "
+                      f"(estilo y forma) si encaja:\n```python\n{propia['codigo'].strip()}\n```")
     for _p, r in buscar(pedido, 1 if local else 2):
         codigo = (programa(r) if para_editor and r.get("prueba") else r["codigo"]).strip()
         if para_editor and "def registrar" in codigo:

@@ -47,6 +47,15 @@ ATRIBUTOS_PROHIBIDOS = {"__subclasses__", "__globals__", "__builtins__", "__code
                         "system", "popen", "remove", "unlink", "rmtree"}
 
 
+def permitidos():
+    """La lista de siempre + numpy (si va en el APK) + las librerías que tú has instalado (dos toques)."""
+    try:
+        import librerias_kira
+        return MODULOS_PERMITIDOS | librerias_kira.extra_permitidos()
+    except Exception:
+        return MODULOS_PERMITIDOS
+
+
 class TiempoAgotado(Exception):
     pass
 
@@ -64,10 +73,10 @@ def revisar(codigo):
     for n in ast.walk(arbol):
         if isinstance(n, ast.Import):
             for a in n.names:
-                if a.name.split(".")[0] not in MODULOS_PERMITIDOS:
+                if a.name.split(".")[0] not in permitidos():
                     return f"Línea {n.lineno}: el modo seguro no permite importar «{a.name}»."
         elif isinstance(n, ast.ImportFrom):
-            if not n.module or n.level or n.module.split(".")[0] not in MODULOS_PERMITIDOS:
+            if not n.module or n.level or n.module.split(".")[0] not in permitidos():
                 return f"Línea {n.lineno}: el modo seguro no permite importar «{n.module or '.'}»."
         elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in LLAMADAS_PROHIBIDAS:
             return f"Línea {n.lineno}: el modo seguro no permite usar {n.func.id}()."
@@ -80,7 +89,7 @@ def revisar(codigo):
 
 def _importador(entorno_import):
     def importar(nombre, globales=None, locales=None, desde=(), nivel=0):
-        if nivel or nombre.split(".")[0] not in MODULOS_PERMITIDOS:
+        if nivel or nombre.split(".")[0] not in permitidos():
             raise ImportError(f"el modo seguro no permite importar «{nombre}»")
         return entorno_import(nombre, globales, locales, desde, nivel)
     return importar

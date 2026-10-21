@@ -126,6 +126,13 @@ class KiraGodCore:
             self.recuerdos = None
             self.estudio = None
             logger.error(f"No se pudo abrir el baúl de recuerdos: {e}")
+        try:                                     # las librerías que instalaste (dos toques) se pueden importar
+            import librerias_kira
+            self.librerias = librerias_kira.Librerias()
+            self.librerias.activar()
+        except Exception as e:
+            self.librerias = None
+            logger.error(f"Librerías: {e}")
         self.cargar_modulos()
 
     def registrar_error(self, origen, texto):
@@ -677,7 +684,9 @@ class KiraGodCore:
         existentes = ", ".join(sorted(n for n, _ in set(self.comandos_modulos.values()))) or "ninguno"
         import saber_mejoras_kira as sm_
         saber = sm_.contexto_para(pedido.split("\n\n")[0], getattr(self, "recuerdos", None), local=local)
-        usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n\n{saber}" if saber else "")
+        extra = self.texto_librerias_para_programar()
+        usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n{extra}" if extra else "") + \
+            (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA,
                                  usuario)
         return mi.extraer_modulo(texto)
@@ -749,7 +758,8 @@ class KiraGodCore:
             except Exception:
                 sabe = ""
             saber = ("Lo que sabes de este tema (de tus estudios y experimentos anteriores):\n" + sabe) if sabe else ""
-        usuario = f"Programa pedido: {pedido}" + (f"\n\n{saber}" if saber else "")
+        extra = self.texto_librerias_para_programar()
+        usuario = f"Programa pedido: {pedido}" + (f"\n{extra}" if extra else "") + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, pk.SISTEMA_PROGRAMA_LOCAL if local else pk.SISTEMA_PROGRAMA, usuario,
                                  max_tokens=1200 if local else 3000)
         return pk.extraer_programa(texto)
@@ -1135,6 +1145,95 @@ class KiraGodCore:
             b = self.__dict__["_pdfs"] = pdf_kira.Biblioteca(os.path.join(self.dir, "pdf"))
         return b
 
+    def orden_librerias(self, command):
+        """«instala la librería X» (la PREPARA: instalar es con tus dos toques en «Librerías»), «mis librerías»,
+        «quita la librería X»."""
+        import librerias_kira as lk
+        o = lk.interpretar(command)
+        lib = getattr(self, "librerias", None)
+        if o is None or lib is None:
+            return "[x] Las librerías no están disponibles."
+        try:
+            if o["accion"] == "lista":
+                return lib.texto_lista()
+            if o["accion"] == "quitar":
+                e = lib.quitar(o["nombre"])
+                return f"[OK] He quitado «{e.get('nombre', o['nombre'])}». Del todo, al volver a abrir Kira."
+            lib.preparar(o["nombre"])
+            return ("[OK] LIBRERIA_PENDIENTE\n" + lib.texto_plan() + "\n\nPara instalarla, toca «Instalar» DOS veces "
+                    "en Menú › Librerías (la voz no puede instalar nada).")
+        except lk.LibreriaError as e:
+            return f"[x] {e}"
+
+    def orden_afinado(self, command, al_progreso=None):
+        """«prepara datos de entrenamiento [y guárdalos en descargas]», «instala mi ajuste: enlace», «quita mi ajuste»,
+        «mi ajuste»."""
+        import afinado_kira as af
+        o = af.interpretar(command)
+        if o is None:
+            return "[x] No entiendo esa orden de ajuste."
+        cer = getattr(self, "cerebro_propio", None)
+        if o["accion"] == "datos":
+            ruta = os.path.join(self.dir, "entrenamiento", "kira_mejoras.jsonl")
+            n, propias = af.exportar(ruta)
+            texto = (f"[OK] He preparado {n} ejemplos de entrenamiento ({propias} son mejoras tuyas aprobadas; el resto, "
+                     "mis recetas probadas) en formato de chat (JSONL).")
+            if o["descargas"]:
+                ok, msg = self.exportar_a_descargas(ruta, "kira_mejoras.jsonl", "application/json")
+                texto += " " + msg
+            return texto + (" Con ellos se entrena un LoRA en un PC con tarjeta gráfica o en Google Colab "
+                            "(herramientas_pc/afinar_lora.py); luego dime «instala mi ajuste: » y el enlace del .gguf.")
+        if cer is None:
+            return "[x] No tengo cerebro propio en este dispositivo."
+        if o["accion"] == "estado":
+            return (f"[i] Llevo tu ajuste puesto ({os.path.getsize(cer.ruta_ajuste()) / 1e6:.0f} MB) encima del cerebro "
+                    f"«{cer.modelo}»." if cer.tiene_ajuste() else
+                    "[i] Uso mi cerebro sin ajustes. Para afinarlo: «prepara datos de entrenamiento».")
+        if o["accion"] == "quitar":
+            if not cer.tiene_ajuste():
+                return "[i] No llevo ningún ajuste."
+            os.remove(cer.ruta_ajuste())
+            self._reiniciar_cerebro()
+            return "[OK] He quitado el ajuste: vuelvo a mi cerebro normal (lo reinicio)."
+        import descargas_kira as dk
+        destino = cer.ruta_ajuste()
+        tmp = destino + ".bajando"
+        try:
+            dk.bajar(o["url"], tmp, None, "el ajuste", progreso=(lambda f, b, t: al_progreso(f, f"Bajando el ajuste… "
+                                                                                                f"{b / 1e6:.0f} MB"))
+                     if al_progreso else None, cancelado=self.cancelado)
+        except dk.DescargaError as e:
+            return f"[x] {e}"
+        if not af.es_gguf(tmp):
+            os.remove(tmp)
+            return "[x] Eso no es un adaptador GGUF (tiene que salir de convert_lora_to_gguf.py de llama.cpp)."
+        os.replace(tmp, destino)
+        self._reiniciar_cerebro()
+        return (f"[OK] Ajuste instalado para el cerebro «{cer.modelo}». Lo reinicio para cargarlo. Si notas algo raro, "
+                "«quita mi ajuste».")
+
+    def _reiniciar_cerebro(self):
+        cer = getattr(self, "cerebro_propio", None)
+        try:
+            if cer is not None and cer.encendido():
+                cer.apagar()
+                cer.encender_en_segundo_plano(lambda ok: self.cerebro_ia.local_disponible(forzar=True))
+        except Exception as e:
+            self.registrar_error("cerebro", f"No pude reiniciar el cerebro: {e}")
+
+    def texto_librerias_para_programar(self):
+        """Para el cerebro: qué librerías extra puede usar al escribir código."""
+        lib = getattr(self, "librerias", None)
+        try:
+            import librerias_kira as lk
+            nombres = sorted(lk.extra_permitidos())
+        except Exception:
+            nombres = []
+        if not nombres:
+            return ""
+        return ("Además de la librería estándar, puedes importar: " + ", ".join(nombres) +
+                " (instaladas en este móvil).")
+
     def orden_pdf(self, command, al_progreso=None):
         """Todas las órdenes de la biblioteca de PDF. Devuelve el texto para el usuario. Si la orden abre un PDF
         en pantalla, el texto empieza por «[OK] ABRIR_PDF n p»."""
@@ -1165,6 +1264,8 @@ class KiraGodCore:
                 return (f"[OK] He guardado el PDF {e['n']}: «{e['nombre']}» ({e['paginas']} páginas, "
                         f"{e['bytes'] / 1e6:.1f} MB).{aviso} Dime «lee el pdf {e['n']}», «resume el pdf {e['n']}» o "
                         f"«qué dice el pdf {e['n']} sobre …».")
+            if acc == "rag":
+                return self.preguntar_documentos(o["pregunta"], al_progreso)
             e = bib.buscar_doc(o.get("doc"))
             if e is None:
                 return ("[x] No tengo ese PDF. " + ("Di «mis pdf» para ver la lista." if bib.lista else
@@ -1239,6 +1340,33 @@ class KiraGodCore:
         except cerebro_ia_kira.Cancelada:
             return "[x] Cancelado."
         return "[x] No entiendo esa orden de PDF."
+
+    def preguntar_documentos(self, pregunta, al_progreso=None):
+        """RAG: busca en TODOS tus PDF los trozos que responden (BM25) y el cerebro contesta SOLO con ellos, citando
+        documento y página. Sin cerebro: los trozos tal cual."""
+        import cerebro_ia_kira
+        bib = self.pdfs
+        if not bib.lista:
+            return "[x] Todavía no tengo documentos. Dime «descarga este PDF: » y el enlace."
+        if al_progreso:
+            al_progreso(0.2, "Buscando en tus documentos…")
+        clave = self._clave_para("general")
+        local = clave == cerebro_ia_kira.LOCAL
+        res = bib.recuperar(pregunta, n=3 if local else 6, largo=700 if local else 1100)
+        if not res:
+            return f"[i] En tus documentos no encuentro nada sobre «{pregunta}» (y no me lo invento)."
+        fuentes = "; ".join(dict.fromkeys(f"«{e['nombre']}» pág. {i}" for _p, e, i, _t in res))
+        if not clave:
+            return ("[i] Sin cerebro no puedo redactar la respuesta, pero esto dicen tus documentos:\n" +
+                    "\n".join(f"- «{e['nombre']}», página {i}: …{' '.join(t.split())[:260]}…" for _p, e, i, t in res[:3]))
+        ctx = "\n\n".join(f"[«{e['nombre']}», página {i}] {t}" for _p, e, i, t in res)
+        self.nueva_tarea()
+        if al_progreso:
+            al_progreso(0.5, "Leyendo los trozos que vienen al caso…")
+        r = self._llamar_api(clave, self.SISTEMA_PDF.replace("un documento PDF", "los documentos del usuario"),
+                             f"Trozos de los documentos:\n{ctx}\n\nPregunta: {pregunta}", max_tokens=500 if local else 900)
+        r = cerebro_ia_kira.limpiar_respuesta(r).strip()
+        return (r or "[x] El cerebro no ha respondido.") + f"\n\n(Fuentes: {fuentes})"
 
     def exportar_a_descargas(self, ruta, nombre, tipo="application/pdf"):
         """Copia un archivo a la carpeta Descargas del móvil (para abrirlo con otras apps). (ok, mensaje)."""
@@ -1559,14 +1687,18 @@ class KiraGodCore:
                     "Dijkstra». Mis técnicas con código: «recetas de ingeniería».")
         m = re.match(r"^estudia\s*:?\s*(?:el\s+|la\s+|las\s+)?(dise[ñn]o(?:\s+gr[aá]fico)?|programaci[oó]n\s+avanzada|"
                      r"programaci[oó]n\s+y\s+dise[ñn]o|todo\s+lo\s+avanzado|redes\s+neuronales|deep\s+learning|"
-                     r"aprendizaje\s+profundo|inteligencia\s+artificial)\s*$", cmd_lower)
-        if m and m.group(1).startswith(("redes", "deep", "aprendizaje", "inteligencia")) and \
+                     r"aprendizaje\s+profundo|inteligencia\s+artificial|machine\s+learning|aprendizaje\s+autom[aá]tico|"
+                     r"(?:procesamiento\s+del?\s+)?lenguaje\s+natural|pln|nlp|rag|fine[\s-]?tuning|ajuste\s+fino)\s*$",
+                     cmd_lower)
+        _ia = ("redes", "deep", "aprendizaje", "inteligencia", "machine", "lenguaje", "procesamiento", "pln", "nlp", "rag",
+               "fine", "ajuste")
+        if m and m.group(1).startswith(_ia) and \
                 re.match(r"^estudia\s*:", cmd_lower):
             m = None                                   # «estudia: redes neuronales» (con dos puntos): a la Wikipedia
         if m:
             g = m.group(1)
             tipo = "diseño" if g.startswith("dise") else ("programación" if g.endswith("avanzada") else (
-                "redes" if g.startswith(("redes", "deep", "aprendizaje", "inteligencia")) else None))
+                "redes" if g.startswith(_ia) else None))
             try:
                 nuevas, total = est.estudiar_avanzado(tipo)
             except (ImportError, OSError) as e:
@@ -1577,10 +1709,11 @@ class KiraGodCore:
                         "pedirle imágenes al pintor). Pregúntame «qué es la regla de los tercios» o «ley de Fitts». "
                         "Mis técnicas con código: «recetas de diseño».")
             if tipo == "redes":
-                return (f"[OK] He estudiado redes neuronales sin internet: {nuevas} ficha(s) nuevas (tengo {total}: "
-                        "neurona, retropropagación, pérdidas, sobreajuste, CNN, RNN y LSTM, transformers, embeddings, "
-                        "refuerzo, difusión, entrenar en el móvil y evaluar). Pregúntame «qué es la retropropagación» o "
-                        "«cómo funciona un transformer». Con código que se ejecuta: «recetas de redes neuronales».")
+                return (f"[OK] He estudiado inteligencia artificial sin internet: {nuevas} ficha(s) nuevas (tengo {total}: "
+                        "redes neuronales, transformers, lenguaje natural, RAG, aprendizaje automático, ajuste fino con "
+                        "LoRA, preferencias y datos de entrenamiento). Pregúntame «qué es la retropropagación», «qué es "
+                        "un RAG» o «qué es LoRA». Con código que se ejecuta: «recetas de redes neuronales», «recetas de "
+                        "lenguaje natural», «recetas de aprendizaje automático».")
             return (f"[OK] He estudiado {'programación avanzada' if tipo else 'programación avanzada y diseño'} sin "
                     f"internet: {nuevas} ficha(s) nuevas (tengo {total}). Pregúntame, por ejemplo, «qué es un ECS» o "
                     "«qué es una función pura». Mis técnicas: «recetas de programación avanzada».")
@@ -1801,6 +1934,10 @@ class KiraGodCore:
             except cerebro_ia_kira.CerebroError as e:
                 return f"[x] {e}"
             return self.cerebro_ia.estado_texto(self._leer_clave_api())
+        elif __import__("afinado_kira").interpretar(command) is not None:    # datos de entrenamiento y ajuste LoRA
+            return self.orden_afinado(command)
+        elif __import__("librerias_kira").interpretar(command) is not None:  # librerías de Python (PyPI)
+            return self.orden_librerias(command)
         elif __import__("pdf_kira").interpretar(command) is not None:      # biblioteca de PDF
             return self.orden_pdf(command)
         elif cmd_lower in ("recuerdos", "baul", "baúl", "baúl de recuerdos", "baul de recuerdos") or \

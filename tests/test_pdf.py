@@ -125,6 +125,15 @@ ok(core.procesar_orden(f"descarga el pdf {URL}/pagina").startswith("[x] En ese e
 cop = os.path.join(T, "compartido_1.pdf"); open(cop, "wb").write(HIST)
 e = core.pdfs.anadir_archivo(cop, "Historia", mover=True)
 ok(e["nombre"] == "Historia" and not os.path.exists(cop), "compartir un PDF con Kira lo mete en la biblioteca")
+# RAG: preguntar a TODOS los documentos
+core.procesar_orden(f"descarga el pdf {URL}/apuntes.pdf")
+core.procesar_orden(f"descarga el pdf {URL}/historia")
+res = core.pdfs.recuperar("¿cuándo empezó la Revolución Francesa?")
+ok(res and "Historia" in res[0][1]["nombre"], "recupera el trozo del documento que toca")
+vio.clear()
+r = core.procesar_orden("pregunta a mis documentos: ¿por dónde sube el agua en las plantas?")
+ok("Fuentes:" in r and "pág. 3" in r and "xilema" in vio[-1][1] and "ignora" in vio[-1][0], "«pregunta a mis documentos»: responde con citas " + r)
+ok("no me lo invento" in core.procesar_orden("qué dicen mis apuntes sobre la paella valenciana"), "lo que no está, no se inventa")
 
 # ---------- la interfaz ----------
 import kivy_falso; kivy_falso.instalar()
@@ -162,7 +171,7 @@ import menu_kira as mk
 ok("pdf" in mk.PRINCIPALES and any(a["id"] == "pdf" for a in mk.APARTADOS), "«Mis PDF» en el menú")
 decir_a_kira(f"Kira, descárgate este PDF {URL}/apuntes.pdf")
 ok(correr(6, lambda: sm.current == "pdf" and any(". apuntes" in t for t in textos("pdf"))), "por voz: descarga y lo enseña " + sm.current)
-ok(correr(3, lambda: any("He guardado el PDF" in d for d in VOZ.dichos)), "y lo dice")
+ok(correr(3, lambda: any("He guardado el PDF" in d or "ya lo tenía" in d for d in VOZ.dichos)), "y lo dice")
 decir_a_kira("lee la página 3 del pdf apuntes")
 ok(correr(3, lambda: sm.current == "pdf" and any("xilema" in t for t in textos("pdf"))), "«lee la página 3 del pdf apuntes» lo abre ahí")
 ok(any("Página 3 de 3" in t for t in textos("pdf")), "con el número de página")

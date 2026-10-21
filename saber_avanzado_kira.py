@@ -1216,12 +1216,13 @@ CONCEPTOS = [
 
 
 # las REDES NEURONALES (y algo más de programación avanzada) van en su propio archivo y se suman aquí
-try:
-    import saber_redes_kira as _redes
-    RECETAS = RECETAS + _redes.RECETAS
-    CONCEPTOS = CONCEPTOS + _redes.CONCEPTOS
-except ImportError:
-    pass
+for _nombre in ("saber_redes_kira", "saber_pln_kira"):   # redes neuronales; lenguaje natural, RAG, ML y ajuste fino
+    try:
+        _m = __import__(_nombre)
+        RECETAS = RECETAS + _m.RECETAS
+        CONCEPTOS = CONCEPTOS + _m.CONCEPTOS
+    except ImportError:
+        pass
 
 
 # =====================================================================================================================
@@ -1229,7 +1230,7 @@ except ImportError:
 # =====================================================================================================================
 def tipo_de(area):
     """'redes' | 'programación' | 'diseño' (para «estudia redes neuronales / programación avanzada / diseño»)."""
-    if area.startswith("Redes"):
+    if area.startswith(("Redes", "IA")):
         return "redes"
     return "programación" if area.startswith("Programación") else "diseño"
 
