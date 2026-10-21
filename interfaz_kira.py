@@ -202,6 +202,10 @@ def construir_interfaz(core, consola=None):
 
     # ---------- bocadillo: Kira contesta en la pantalla en la que estés (sin llevarte a su botón) ----------
     boc = {"w": None, "hasta": 0.0, "reloj": None, "visible": False}
+    import tareas_kira as tk_
+    gestor = getattr(core, "tareas", None) or tk_.Gestor(os.path.join(getattr(core, "dir", "."), "tareas.json"))
+    core.tareas = gestor                               # una tarea larga cada vez, con su barra de tiempo y %
+    barra = {"w": None, "visible": False, "colocar": None}
 
     def ocultar_bocadillo(*_):
         w = boc["w"]
@@ -293,7 +297,23 @@ def construir_interfaz(core, consola=None):
             campo.text = ""
             control_por_voz(esk.orden_control(texto))
             return
-        if not texto or st["ocupado"]:
+        if not texto:
+            return
+        if contestar_pregunta(texto):                   # «sí» / «no» a «¿lo dejo y hago lo tuyo?»
+            campo.text = ""
+            return
+        if gestor.ocupado() or st["ocupado"]:
+            orden_n = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto
+            campo.text = ""
+            if moverse(orden_n):                        # moverse por la app no interrumpe nada
+                return
+            if gestor.ocupado():
+                st["pregunta"] = orden_n
+                escucha.atender(25)                     # la respuesta vale sin decir «Kira» otra vez
+                decir(gestor.resumen() + ". ¿Lo dejo guardado y hago lo que me pides? Dime «sí» o «no».")
+            else:
+                gestor.encolar(orden_n)
+                decir("Dame un momento, estoy terminando de contestarte. Lo tuyo va justo después.")
             return
         campo.text = ""
         if callable(getattr(core, "nueva_tarea", None)):
@@ -301,6 +321,9 @@ def construir_interfaz(core, consola=None):
         import diseno_kira as dk_
         import programar_kira as pk_
         orden = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto  # escrito «Kira, …»
+        if callable(getattr(core, "es_orden_de_modulo", None)) and core.es_orden_de_modulo(orden):
+            hablar_con_kira(orden)                      # una MEJORA INSTALADA: se usa ella (nada la intercepta)
+            return
         if ik.pedido_con_codigo(orden):                 # «implementa este código (en las mejoras)»
             mejora_con_codigo(orden)
             return
@@ -398,6 +421,10 @@ def construir_interfaz(core, consola=None):
             return
         if moverse(texto):                              # «abre la sala hacker», «abre WhatsApp», «atrás»…
             return
+        hablar_con_kira(texto)
+
+    def hablar_con_kira(texto):
+        """La charla de siempre (y las órdenes del núcleo y de las mejoras instaladas): la respuesta va apareciendo."""
         st["ocupado"] = True
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()
@@ -507,12 +534,16 @@ def construir_interfaz(core, consola=None):
                   "(«config clave: …»). Cuando lo tenga, pídemelo otra vez.")
             return
         equipo = en_equipo()
+        tarea_empieza("mejora", pedido, lambda p_=pedido: mejora_por_voz(p_), {"pedido": pedido})
         decir(f"Vale, me pongo a programar: {pedido}. Lo pruebo aquí en el móvil"
               + (" (y en el ordenador, que está conectado)" if getattr(ctl.pasarela, "url", "") else "")
               + (". Lo haremos en equipo Claude y yo hasta ponernos de acuerdo" if equipo else "")
               + ". Para instalarlo tendrás que tocar Aplicar dos veces.")
 
         def al_terminar(r):
+            t = tarea_fin(bool(r.get("aprobable")))
+            if t is not None and t.interrumpida:
+                return
             if r.get("aprobable"):
                 voz.hablar(("Claude y yo estamos de acuerdo. " if r.get("acuerdo") else
                             "Claude y yo no nos hemos puesto de acuerdo: mira lo que dice cada uno. "
@@ -538,39 +569,134 @@ def construir_interfaz(core, consola=None):
             decir("Ese código es un programa normal: para convertirlo en mejora necesito un cerebro (el mío o la clave "
                   "de Claude). Si ya fuera un módulo de Kira (con registrar()), lo probaría tal cual.")
             return
+        tarea_empieza("mejora", "implementar el código de " + origen, lambda o_=orden: mejora_con_codigo(o_))
         decir(f"Vale: cojo el código de {origen} y lo pruebo en mi laboratorio"
               + (" tal cual" if modulo else " después de convertirlo en una mejora")
               + ". Para instalarlo tendrás que tocar Aplicar dos veces.")
 
         def al_terminar(r):
+            t = tarea_fin(bool(r.get("aprobable")))
+            if t is not None and t.interrumpida:
+                return
             voz.hablar("Ha pasado las pruebas. Revísalo y toca Aplicar dos veces si te parece bien." if r.get("aprobable")
                        else "No ha pasado las pruebas. Te dejo el motivo en la terminal.")
         Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](
             ("Implementar el código de " + origen + (f" «{nombre}»" if nombre else "")), al_terminar,
             codigo=codigo), 1.5)
 
-    def avance(texto):                                  # progreso largo (llega desde un hilo): sin hablar
+    def avance(texto, fraccion=None):                   # progreso largo (llega desde un hilo): sin hablar
+        gestor.progreso(fraccion, texto)               # la barra de la tarea (tiempo y % que queda)
+
         def poner(_dt):
             burbuja.text = texto
             bocadillo(texto)
         Clock.schedule_once(poner, 0)
 
+    # ---------- UNA tarea larga cada vez, con su barra (tiempo y %) ----------
+    def tarea_empieza(tipo, descripcion, relanzar, datos=None):
+        gestor.empezar(tipo, descripcion, relanzar, datos)
+        pintar_barra()
+
+    def tarea_fin(ok=True):
+        """La tarea terminó. Devuelve la Tarea: si estaba aparcada (la dejaste por otra cosa), no se anuncia."""
+        t = gestor.terminar(ok)
+        pintar_barra()
+        return t
+
+    def pintar_barra(*_):
+        texto = gestor.texto_barra()
+        w = barra["w"]
+        if not texto:
+            if w is not None and barra["visible"]:
+                barra["visible"] = False
+                try:
+                    Window.remove_widget(w)
+                except Exception:
+                    pass
+            return
+        if w is None:
+            w = Label(text="", size_hint=(None, None), color=(1, 1, 1, 1), font_size=tam(12.5), halign="left",
+                      valign="middle", **FUENTE)
+            est.fondo_redondeado(w, (0.10, 0.12, 0.22, 0.93), radio=12)
+
+            def colocar(*_):
+                w.width = max(dp(120), Window.width - dp(16))
+                w.height = dp(46)
+                w.text_size = (w.width - dp(20), w.height)
+                w.x, w.top = dp(8), Window.height - dp(4)
+            try:
+                Window.bind(size=colocar)
+            except Exception:
+                pass
+            barra["w"], barra["colocar"] = w, colocar
+        e = gestor.estimacion() or (0.0, 0.0)
+        llenos = int(round(e[0] * 16))
+        w.text = "▰" * llenos + "▱" * (16 - llenos) + "  " + texto
+        if not barra["visible"]:
+            barra["visible"] = True
+            Window.add_widget(w)
+        barra["colocar"]()
+
+    def libre_para_mas(_dt=None):
+        """Cuando Kira queda libre: lo que pediste mientras trabajaba y, después, la tarea que dejó aparcada."""
+        if gestor.ocupado() or st["ocupado"] or voz.hablando() or st.get("pregunta"):
+            return
+        sig = gestor.siguiente()
+        if sig is None:
+            return
+        que, cosa = sig
+        if que == "orden":
+            enviar(cosa)
+        else:
+            decir(f"Ya he terminado lo tuyo. Vuelvo con lo que estaba haciendo: «{cosa.descripcion[:60]}».")
+            if callable(cosa.relanzar):
+                Clock.schedule_once(lambda _dt, f_=cosa.relanzar: f_(), 1.5)
+    Clock.schedule_interval(lambda _dt: (pintar_barra(), libre_para_mas()), 1.0)
+
+    def contestar_pregunta(texto):
+        """«sí» / «no» a «¿dejo lo que estoy haciendo y hago lo tuyo?». True si era la respuesta."""
+        orden = st.get("pregunta")
+        if not orden:
+            return False
+        b = esk._norm(texto).strip(" .!¡?¿,")
+        b = re.sub(r"^(?:kira\s*,?\s*)", "", b)
+        si = re.match(r"^(?:si|vale|venga|claro|dale|ok|de acuerdo|dejalo|hazlo|haz lo mio|si,? (?:dejalo|hazlo|para)|"
+                      r"para (?:eso|lo otro)|atiendeme)\b", b)
+        no = re.match(r"^(?:no|sigue|continua|termina (?:primero|lo tuyo|eso)|espera|luego|despues)\b", b)
+        if not (si or no):
+            return False
+        st["pregunta"] = None
+        if si:
+            t = gestor.interrumpir()
+            gestor.cola.insert(0, orden)               # primero lo tuyo; la aparcada, después
+            if callable(getattr(core, "cancelar", None)):
+                core.cancelar()
+            decir(f"Vale, dejo «{t.descripcion[:60] if t else 'lo que hacía'}» guardado y hago lo que me pides. "
+                  "Cuando termine, vuelvo con ello.")
+        else:
+            gestor.encolar(orden)
+            decir("Vale, sigo. Lo que me has pedido lo hago en cuanto termine.")
+        return True
+
     def juego_realista_por_voz(pedido):
         """«Kira, hazme un juego realista de un caballero que esquiva dragones»: piensa el juego, el pintor dibuja el
         escenario y los personajes (estilo real, recortados) y lo deja en el editor ya jugando."""
-        st["ocupado"] = True
+        tarea_empieza("juego_realista", pedido, lambda p_=pedido: juego_realista_por_voz(p_), {"pedido": pedido})
         modelo.poner_estado("pensando")
         decir(f"¡Vamos allá! Diseño el juego, pinto los personajes en estilo realista y lo programo: {pedido}. "
               "Pintar cuatro dibujos puede tardar unos minutos.")
         ultimo = {"t": 0.0}
 
         def prog(f, texto):
+            gestor.progreso(f, texto)
             if time.monotonic() - ultimo["t"] > 0.7:
                 ultimo["t"] = time.monotonic()
-                avance(f"{texto}\n({f * 100:.0f} % del juego)")
+                avance(texto, f)
 
         def fin(r):
-            st["ocupado"] = False
+            t = tarea_fin(not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
             if isinstance(r, Exception):
                 decir(f"[x] No pude crear el juego: {r}")
                 return
@@ -592,17 +718,20 @@ def construir_interfaz(core, consola=None):
                   "«dibujos» con lo que hay que pintar (o pídeme «hazme un juego realista de…»).")
             return
         carpeta = carpeta or "juego"
-        st["ocupado"] = True
+        tarea_empieza("imagen", f"pintar {len(dibujos)} dibujo(s) del juego", dibujos_del_juego)
         decir(f"Pinto {len(dibujos)} dibujo(s) del juego en estilo realista. Tardo un poco.")
         ultimo = {"t": 0.0}
 
         def prog(f, texto):
+            gestor.progreso(f, texto)
             if time.monotonic() - ultimo["t"] > 0.7:
                 ultimo["t"] = time.monotonic()
-                avance(texto)
+                avance(texto, f)
 
         def fin(r):
-            st["ocupado"] = False
+            t = tarea_fin(not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
             if isinstance(r, Exception):
                 decir(f"[x] {r}")
             else:
@@ -616,13 +745,15 @@ def construir_interfaz(core, consola=None):
             decir("Para escribir programas necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude.")
             return
         equipo = en_equipo()
-        st["ocupado"] = True
+        tarea_empieza("programa", pedido, lambda p_=pedido: programa_por_voz(p_), {"pedido": pedido})
         modelo.poner_estado("pensando")
         decir(f"Vale, te escribo un {pedido}. Lo pruebo en modo seguro"
               + (" y lo repaso con Claude" if equipo else "") + " antes de enseñártelo.")
 
         def terminado(r):
-            st["ocupado"] = False
+            t = tarea_fin(not isinstance(r, Exception) and bool(r.get("ok")))
+            if t is not None and t.interrumpida:
+                return
             if isinstance(r, Exception):
                 decir(f"[x] No pude escribir el programa: {r}", hablar=False)
                 return
@@ -638,6 +769,7 @@ def construir_interfaz(core, consola=None):
                 aviso += " Si pide datos, escríbelos en la caja de entrada (separados con ;)."
             if r.get("acuerdo") is not None:
                 aviso += "\n\n" + r["texto"]
+            aviso += " Si quieres que sea parte de Kira (una orden nueva), dime «implementa este código»."
             codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"] or "", aviso)
             decir(("Listo, y Claude y yo estamos de acuerdo. " if r.get("acuerdo") else "Listo. ")
                   + f"Te lo dejo en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
@@ -650,13 +782,15 @@ def construir_interfaz(core, consola=None):
             decir("Para inventar código necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude.")
             return
         equipo = en_equipo()
-        st["ocupado"] = True
+        tarea_empieza("experimento", tema, lambda t_=tema: experimento_por_voz(t_), {"pedido": tema})
         modelo.poner_estado("pensando")
         decir(f"¡Me encanta! Voy a experimentar con {tema}: pruebo varias ideas en modo seguro, me quedo con la "
               "mejor" + (" y la repaso con Claude" if equipo else "") + ". Puede tardar un rato.")
 
         def terminado(r):
-            st["ocupado"] = False
+            t = tarea_fin(not isinstance(r, Exception) and bool(r.get("ok")))
+            if t is not None and t.interrumpida:
+                return
             if isinstance(r, Exception):
                 decir(f"[x] No pude experimentar: {r}", hablar=False)
                 return
@@ -674,7 +808,7 @@ def construir_interfaz(core, consola=None):
             decir(f"Listo: {buenas} de {len(r['resultados'])} ideas funcionan" +
                   (" y Claude y yo estamos de acuerdo con la mejor" if r.get("acuerdo") else "") +
                   f". Te dejo la mejor en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
-        en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t)), terminado)
+        en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t, f)), terminado)
 
     def diseno_por_voz(tipo, descripcion):
         nombres = {"web": "la página", "app": "la maqueta", "clip": "el videoclip"}
@@ -694,14 +828,21 @@ def construir_interfaz(core, consola=None):
                   "internet.")
             return
         ir("pintor")
+        tarea_empieza("imagen", descripcion, lambda d_=descripcion: imagen_por_voz(d_))
         decir(f"Vale, pinto: {descripcion}. Te enseño cómo se va formando.")
 
         def hecho(r):
+            t = tarea_fin(r is not None)
+            if t is not None and t.interrumpida:
+                return
             if r is None:
                 voz.hablar("No he podido pintarla. Te dejo el motivo en la pantalla.")
             else:
                 voz.hablar(f"Ya está, en {r['segundos']:.0f} segundos. Si te gusta, toca «A la galería».")
-        Clock.schedule_once(lambda _dt: pintor_ui["pintar"](descripcion, al_terminar=hecho), 0.3)
+        def pintar_ya(_dt):
+            if pintor_ui["pintar"](descripcion, al_terminar=hecho) is False:
+                tarea_fin(False)                        # no llegó a empezar
+        Clock.schedule_once(pintar_ya, 0.3)
 
     def internet_por_voz(p_red, orden):
         """«Kira, busca en internet…», «lee el 2», «resume el 2», «guarda el 2», «estudia en internet…»."""
@@ -1528,9 +1669,15 @@ def construir_interfaz(core, consola=None):
         acc = o["accion"]
         if acc == "descargar":
             ir("pdf")
+            tarea_empieza("pdf", "descargar " + o["url"][:60], lambda o_=o, t_=orden: pdf_por_voz(o_, t_))
             decir("Me pongo a descargar el PDF.", hablar=True)
-            pdf_ui["descargar"](o["url"], al_terminar=lambda r: decir(
-                str(r).replace("[OK] ", "").replace("[x] ", "") if not isinstance(r, Exception) else f"No he podido: {r}"))
+
+            def bajado(r):
+                t = tarea_fin(not isinstance(r, Exception) and not str(r).startswith("[x]"))
+                if t is not None and t.interrumpida:
+                    return
+                decir(str(r).replace("[OK] ", "").replace("[x] ", "") if not isinstance(r, Exception) else f"No he podido: {r}")
+            pdf_ui["descargar"](o["url"], al_terminar=bajado)
             return
         if acc == "lista":
             ir("pdf")
@@ -1545,14 +1692,18 @@ def construir_interfaz(core, consola=None):
             pdf_ui["abrir"](e["n"], o.get("pagina", 1))
             decir(f"Te abro «{e['nombre']}», página {o.get('pagina', 1)}.")
             return
-        st["ocupado"] = True
+        tarea_empieza("pdf", {"resumir": "resumir", "preguntar": "preguntar a", "estudiar": "estudiar",
+                              "buscar": "buscar en"}.get(acc, acc) + " el PDF " + str(o.get("doc") or ""),
+                      lambda o_=o, t_=orden: pdf_por_voz(o_, t_))
         modelo.poner_estado("pensando")
         burbuja.text = "…"
 
         def fin(r):
-            st["ocupado"] = False
+            t = tarea_fin(not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
             decir(f"[x] {r}" if isinstance(r, Exception) else str(r).replace("[OK] ", "").replace("[i] ", ""))
-        en_hilo(lambda: core.orden_pdf(orden, al_progreso=lambda f, t: avance(t)), fin)
+        en_hilo(lambda: core.orden_pdf(orden, al_progreso=lambda f, t: avance(t, f)), fin)
 
     # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)

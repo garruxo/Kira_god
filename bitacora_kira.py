@@ -221,6 +221,7 @@ MAPA = {
     "pdf_kira.py": "biblioteca de PDF: descargar de un enlace, leer por páginas, buscar, preguntar, estudiar, gestionar",
     "pantalla_pdf_kira.py": "pantalla «Mis PDF»: pegar un enlace, la lista, leer página a página y las acciones",
     "cierres_kira.py": "por qué la cerró Android y qué estaba haciendo (para retomarlo tras un cierre)",
+    "tareas_kira.py": "una tarea larga cada vez: barra con % y tiempo que queda, aparcar y volver a ella",
     "android_src/org/kira/servicio/ArchivosKira.java": "PDF a Descargas y lo que te comparten con Kira desde otras apps",
     "estilo_kira.py": "estilo común: letra proporcional con tope y textos que siempre caben (se parten o encogen)",
     "android_src/org/kira/servicio/VozKira.java": "la voz de Kira: un solo motor de Android, en español, frase a frase",
@@ -250,6 +251,8 @@ HISTORIA = [
     "Firma fija y equipo opcional (v2.26): se actualiza sin desinstalar; Claude ya no revisa las mejoras si no quieres.",
     "Redes neuronales, PDF y «para» (v2.27): recetas que entrenan de verdad, biblioteca de PDF desde enlaces, «para» y "
     "«cancela» mientras habla o trabaja, y nada se pierde si Android la cierra.",
+    "Una tarea cada vez (v2.29): barra con % y tiempo, pregunta antes de dejar lo que hace y vuelve a ello; las "
+    "mejoras instaladas se usan de verdad (su orden va primero y dice cómo se usan).",
 ]
 
 DIAGNOSTICOS = [

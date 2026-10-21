@@ -390,9 +390,22 @@ class PanelControl:
                 n = self.core.cargar_modulos()
                 self._guardar_leccion(pend.nombre, "aprobada", "aplicada desde el panel", self.pedido_actual)
                 msg += f" Comandos de módulos activos: {n}."
+                uso = self.como_se_usa(pend.nombre)
+                if uso:
+                    msg += f" YA ESTÁ INSTALADA. Úsala diciendo: {uso}."
+                elif pend.nombre in getattr(self.core, "errores_modulos", {}):
+                    msg += f" Pero no ha cargado: {self.core.errores_modulos[pend.nombre]}"
                 if self._aprender_habilidad(pend.nombre, self.pedido_actual):
                     msg += " Kira ya sabe usarla: la tiene apuntada en su baúl."
             return {"ok": ok, "texto": ("[OK] " if ok else "[x] ") + msg}
+
+    def como_se_usa(self, nombre):
+        """«convierte euros …», «juega a naves»… de un módulo instalado ('' si no tiene órdenes)."""
+        ordenes = sorted(p for p, v in getattr(self.core, "comandos_modulos", {}).items()
+                         if isinstance(v, tuple) and v and v[0] == nombre)
+        juegos = sorted(j for j, c in getattr(self.core, "juegos_modulos", {}).items()
+                        if getattr(c, "__module__", "").endswith(nombre))
+        return ", ".join(f"«Kira, {o} …»" for o in ordenes) or ", ".join(f"«Kira, juega a {j}»" for j in juegos)
 
     def _aprender_habilidad(self, nombre, pedido):
         """Kira se ADAPTA a su mejora nueva: apunta en su baúl qué hace y cómo se pide (y la charla la conoce)."""

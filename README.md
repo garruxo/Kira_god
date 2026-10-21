@@ -210,6 +210,21 @@ móvil dedicado a Kira (8 GB → modelos de 2-4B en Q4). Guía paso a paso: **`C
   `enciende cerebro`, `apaga cerebro`. Pruebas: `test_cerebro_propio.py`, `test_flujo.py`, `test_oido.py`,
   `test_cableado_cerebro.py`.
 
+## Una tarea cada vez y mejoras que se usan de verdad (nuevo, v2.29)
+- **`tareas_kira.py`** (`Gestor`): la tarea larga en marcha (programa, mejora, experimento, juego realista, imagen, PDF)
+  con una **barra arriba en todas las pantallas** (▰▱, % y «quedan ~1 min 20 s»). El % sale de la propia tarea cuando
+  lo sabe y, si no, de lo que tardaron las de ese tipo otras veces (lo aprende: media de las últimas 5). Nunca dice
+  100 % antes de acabar.
+- Si le pides otra cosa mientras trabaja, **pregunta**: «Estoy con … (45 %, quedan unos 2 min). ¿Lo dejo guardado y
+  hago lo que me pides?». «Sí»: la aparca (`core.cancelar()` + `Gestor.interrumpir`), hace lo tuyo y luego **vuelve a
+  ella** (la vuelve a empezar: lo ya pintado o descargado no se repite). «No»: sigue y lo tuyo va a la cola. Moverse por
+  la app no interrumpe nada.
+- **Mejoras instaladas**: `KiraGodCore.modulo_para` / `es_orden_de_modulo`: su orden se mira ANTES que las del núcleo
+  (salvo las de una sola palabra reservada, como «busca») y también en la interfaz antes de pintor, internet, etc.; se
+  entiende aunque no se diga exacta («convierte 10 euros a dólares» → «convierte euros»). Al aplicarla, Kira dice y
+  escribe cómo se usa (`PanelControl.como_se_usa`). Los programas del editor recuerdan «implementa este código».
+- Pruebas: `tests/test_tareas.py`.
+
 ## Redes neuronales, PDF y «para» / «cancela» (nuevo, v2.27)
 - **`saber_redes_kira.py`** (se suma a `saber_avanzado_kira.py`): 7 recetas de **redes neuronales** en Python puro
   que entrenan de verdad en el móvil (autograd, red multicapa con softmax, convolucional, recurrente que escribe,

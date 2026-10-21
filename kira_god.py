@@ -265,19 +265,73 @@ class KiraGodCore:
         return api_modulos_kira.ApiModulo(nombre, self.herramientas, self.dir, getattr(self, "recuerdos", None),
                                           getattr(self, "avisos", None))
 
-    def _comando_modulo(self, cmd_lower, command):
-        for prefijo, (nombre, fn) in self.comandos_modulos.items():
-            if cmd_lower.startswith(prefijo):
-                try:
-                    texto = command[len(prefijo):].strip()
-                    if self._acepta_kira(fn):
-                        return str(fn(texto, self.api_para(nombre)))
-                    return str(fn(texto))
-                except Exception as e:
-                    logger.error(f"Módulo '{nombre}' falló: {e}")
-                    self.registrar_error("módulos", f"Módulo '{nombre}' falló: {e}")
-                    return f"[x] El módulo '{nombre}' falló: {e}"
+    # palabras con las que empiezan órdenes del núcleo: un módulo de UNA sola de estas palabras va al final
+    RESERVADAS = {"config", "mejorar", "mejora", "aplicar", "aplica", "estudia", "recetas", "receta", "recargar",
+                  "cerebro", "acuerdo", "activa", "desactiva", "borra", "olvida", "guarda", "busca", "lee", "resume",
+                  "abre", "descarga", "pinta", "mis", "que", "cancela", "para", "ayuda", "estado", "recuerdos",
+                  "experimenta", "inventa", "hazme", "escribeme", "programa", "disena", "implementa", "sigue"}
+
+    @staticmethod
+    def _plano(t):
+        import unicodedata
+        t = unicodedata.normalize("NFD", str(t or "").lower())
+        return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+    def modulo_para(self, command):
+        """(prefijo, resto) de la mejora instalada que encaja con la frase, o None. Primero el comienzo exacto
+        (también sin tildes); si no, una frase que lleve todas las palabras de una orden de 2 o más palabras al
+        principio («convierte 10 euros a dólares» -> «convierte euros»)."""
+        if not getattr(self, "comandos_modulos", None):
+            return None
+        plano = " ".join(re.sub(r"[^\w\s]", " ", self._plano(command)).split())
+        plano = re.sub(r"^(?:oye\s+|hola\s+)?kira\s+", "", plano)
+        plano = re.sub(r"^(?:por favor\s+|puedes\s+|podrias\s+)", "", plano)
+        originales = str(command or "").split()
+        while originales and self._plano(originales[0]).strip(",.:;¡!") in ("oye", "hola", "kira", "por", "favor",
+                                                                             "puedes", "podrias"):
+            originales.pop(0)                       # lo que va DESPUÉS se pasa tal cual (con tildes y mayúsculas)
+        for prefijo in sorted(self.comandos_modulos, key=len, reverse=True):
+            pp = " ".join(re.sub(r"[^\w\s]", " ", self._plano(prefijo)).split())
+            if pp and (plano == pp or plano.startswith(pp + " ")):
+                resto = " ".join(originales[len(pp.split()):])
+                return prefijo, resto.lstrip(":,. ")
+        palabras = plano.split()
+        for prefijo in sorted(self.comandos_modulos, key=len, reverse=True):
+            pw = self._plano(prefijo).split()
+            if len(pw) < 2 or not palabras or palabras[0][:5] != pw[0][:5]:
+                continue
+            ventana = palabras[:len(pw) + 3]
+            raices = [w[:5] for w in ventana]
+            if all(w[:5] in raices for w in pw):
+                usadas = {w[:5] for w in pw}
+                resto = [w for w in originales if self._plano(w).strip(",.:;¡!¿?")[:5] not in usadas]
+                return prefijo, " ".join(resto)
         return None
+
+    def es_orden_de_modulo(self, command, solo_prioritarias=True):
+        m = self.modulo_para(command)
+        if m is None:
+            return False
+        p = m[0].split()
+        return not solo_prioritarias or len(p) >= 2 or self._plano(p[0]) not in self.RESERVADAS
+
+    def _comando_modulo(self, cmd_lower, command):
+        m = self.modulo_para(command)
+        if m is not None:
+            prefijo, resto = m
+            nombre, fn = self.comandos_modulos[prefijo]
+            return self._ejecutar_modulo(nombre, fn, resto)
+        return None
+
+    def _ejecutar_modulo(self, nombre, fn, texto):
+        try:
+            if self._acepta_kira(fn):
+                return str(fn(texto, self.api_para(nombre)))
+            return str(fn(texto))
+        except Exception as e:
+            logger.error(f"Módulo '{nombre}' falló: {e}")
+            self.registrar_error("módulos", f"Módulo '{nombre}' falló: {e}")
+            return f"[x] El módulo '{nombre}' falló: {e}"
 
     def hechos_capacidades(self, consultar_laboratorio=True):
         """Lo que hay ahora, para comparar con el catálogo de capacidades (ffmpeg local o en el laboratorio, módulos…)."""
@@ -1627,6 +1681,12 @@ class KiraGodCore:
         """Núcleo universal de ejecución rápida y control."""
         cmd_lower = command.lower().strip()
 
+        # las MEJORAS INSTALADAS van primero (si su orden no es una palabra suelta del núcleo, como «busca»): así
+        # lo que Kira aprende se usa de verdad y no se lo traga otra orden parecida
+        if self.es_orden_de_modulo(command):
+            r = self._comando_modulo(cmd_lower, command)
+            if r is not None:
+                return r
         # La clave de API nunca pasa por el búfer ni por el log
         if cmd_lower.startswith("config clave:"):
             clave = command.split(":", 1)[1].strip()

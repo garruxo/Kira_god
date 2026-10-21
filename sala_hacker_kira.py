@@ -310,6 +310,9 @@ def montar_sala_hacker(sm, ctx):
     def enviar_mejora(al_terminar=None, codigo=None):
         pedido = ik.limpiar_entrada(campo_mej.text)
         if not pedido or btn_env.disabled:
+            if al_terminar is not None:                  # quien lo pidió por voz tiene que enterarse
+                al_terminar({"ok": False, "aprobable": False,
+                             "texto": "[x] Ya estoy con otra mejora." if pedido else "[x] No hay pedido."})
             return
         btn_env.disabled = True
         decision(False)
@@ -353,7 +356,15 @@ def montar_sala_hacker(sm, ctx):
             return
         reiniciar_confirmacion()
         btn_aplicar.disabled = btn_rechazar.disabled = True
-        en_hilo(lambda: ctl.aplicar(True), lambda r: setattr(res, "text", res.text + "\n\n" + (r["texto"] if isinstance(r, dict) else f"[x] {r}")))
+        def aplicado(r):
+            res.text = res.text + "\n\n" + (r["texto"] if isinstance(r, dict) else f"[x] {r}")
+            voz_ = ctx.get("voz")
+            if isinstance(r, dict) and r.get("ok") and voz_ is not None and "Úsala diciendo" in r["texto"]:
+                try:
+                    voz_.hablar("Instalada. Úsala diciendo " + r["texto"].split("Úsala diciendo:", 1)[1].strip()[:200])
+                except Exception:
+                    pass
+        en_hilo(lambda: ctl.aplicar(True), aplicado)
 
     def rechazar():
         if ctl.pendiente is None:
