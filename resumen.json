@@ -1,0 +1,277 @@
+{
+ "pintor": {
+  "descarga_rapido": {
+   "ok": true,
+   "segundos": 5.3,
+   "bytes": 682847200,
+   "sha_ok": true
+  },
+  "descarga_realista": {
+   "ok": true,
+   "segundos": 20.9,
+   "bytes": 1838924448,
+   "sha_ok": true
+  },
+  "descarga_ampliador": {
+   "ok": true,
+   "segundos": 0.4,
+   "bytes": 67040989
+  },
+  "pintar_0_rapido_cuadrada": {
+   "ok": true,
+   "segundos": 16.5,
+   "prompt": "a lighthouse on a rocky island at sunset, realistic photo, natural light",
+   "imagen": "0_rapido_cuadrada.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 39
+  },
+  "pintar_1_realista_cuadrada": {
+   "ok": true,
+   "segundos": 59.4,
+   "prompt": "a lighthouse on a rocky island at sunset, realistic photo, natural light",
+   "imagen": "1_realista_cuadrada.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 51
+  },
+  "pintar_2_realista_vertical": {
+   "ok": true,
+   "segundos": 62.8,
+   "prompt": "cat black sleeping in sofá red, realistic photo, natural light, sharp focus, high detail, 35mm photograph",
+   "imagen": "2_realista_vertical.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 51
+  },
+  "pintar_3_rapido_horizontal": {
+   "ok": true,
+   "segundos": 14.8,
+   "prompt": "acuarela of velero in sea, watercolor painting, soft colors, paper texture",
+   "imagen": "3_rapido_horizontal.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 39
+  },
+  "log_final": "ning in eps-prediction mode\n[INFO   ] image.cpp:814  - generate_image 640x448\n[INFO   ] denoiser.hpp:1129 - get_sigmas with discrete scheduler\n[INFO   ] request.cpp:420  - sampling using Euler A method\n[INFO   ] ggml_graph_cut.cpp:1032 - clip build cached graph cut plan done (taking 0 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 73 tensors in 1 files (158.44 MB), taking 0.00s\n\r  |##                                                | 4/196 - 0.00MB/s\u001b[K\r  |##################################################| 196/196 - 1.63MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n[INFO   ] image.cpp:529  - get_learned_condition completed, taking 0.36s\n[INFO   ] image.cpp:866  - generating image: 1/1 - seed 42\n[INFO   ] ggml_graph_cut.cpp:1032 - unet build cached graph cut plan done (taking 1 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 115 tensors in 1 files (487.40 MB), taking 0.00s\n\r  |####                                              | 21/280 - 0.00MB/s\u001b[K\r  |##################################################| 280/280 - 1.60MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n\r  |==================================================| 1/1 - 5.45s/it\u001b[K\n[INFO   ] image.cpp:899  - sampling completed, taking 5.46s\n[INFO   ] image.cpp:911  - generating 1 latent images completed, taking 5.46s\n[INFO   ] image.cpp:554  - decoding 1 latents\n[INFO   ] ggml_graph_cut.cpp:1032 - taesd build cached graph cut plan done (taking 0 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 35 tensors in 1 files (2.33 MB), taking 0.00s\n\r  |############################                      | 37/67 - 1.71MB/s\u001b[K\r  |##################################################| 67/67 - 0.02MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n\r  |======>                                           | 1/8 - 1.28s/it\u001b[K\r  |============>                                     | 2/8 - 1.09s/it\u001b[K\r  |==================>                               | 3/8 - 1.08s/it\u001b[K\r  |=========================>                        | 4/8 - 1.08s/it\u001b[K\r  |===============================>                  | 5/8 - 1.07s/it\u001b[K\r  |=====================================>            | 6/8 - 1.07s/it\u001b[K\r  |===========================================>      | 7/8 - 1.07s/it\u001b[K\r  |==================================================| 8/8 - 1.07s/it\u001b[K\n[INFO   ] image.cpp:620  - latent 1 decoded, taking 8.80s\n[INFO   ] image.cpp:624  - decode_first_stage completed, taking 8.80s\n[INFO   ] image.cpp:1050 - generate_image completed in 14.62s\n[INFO   ] main.cpp:497  - save result image 0 to '/home/runner/work/Kira_god/Kira_god/.pruebas_datos/imagenes/kira_20261023_143554_0042.png' (success)\n[INFO   ] main.cpp:573  - 1/1 images saved\n",
+  "juego_fondo": {
+   "ok": true,
+   "segundos": 63.0,
+   "nota": "escenario",
+   "prompt": "castle, empty scene with no characters, wide view, realistic photo, natural light, highly detailed, game background"
+  },
+  "juego_jugador": {
+   "ok": true,
+   "segundos": 59.4,
+   "nota": "fondo quitado (72 %)",
+   "prompt": "a knight, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "juego_enemigo": {
+   "ok": true,
+   "segundos": 59.5,
+   "nota": "fondo quitado (36 %)",
+   "prompt": "a dragon, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "juego_premio": {
+   "ok": true,
+   "segundos": 59.5,
+   "nota": "fondo quitado (17 %)",
+   "prompt": "a coin, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "ampliar": {
+   "ok": true,
+   "segundos": 583.8
+  }
+ },
+ "internet": {
+  "web": {
+   "ok": true,
+   "n": 8,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "Guía definitiva para plantar tomates en maceta: técnicas, cuidados y ...",
+     "url": "https://www.jardineriaon.com/como-plantar-tomates-en-maceta.html",
+     "resumen": "Descubre cómo plantar tomates en maceta con éxito: variedades, riego, sustrato, cuidados avanzados y soluciones a problemas. ¡Cosecha tomates perfectos!",
+     "fuente": "jardineriaon.com"
+    },
+    {
+     "titulo": "Cómo cultivar tomates en maceta paso a paso (guía completa 2026)",
+     "url": "https://www.jardinesvivos.com/articulos/cultivar-tomates-en-maceta.html",
+     "resumen": "Aprende a cultivar tomates en maceta desde cero. Qué variedad elegir, tamaño de maceta, riego, abono, tutores y cómo conseguir una cosecha abundante.",
+     "fuente": "jardinesvivos.com"
+    },
+    {
+     "titulo": "Historia de la jardinería (Wikipedia)",
+     "fuente": "es.wikipedia.org",
+     "url": "https://es.wikipedia.org/wiki/Historia_de_la_jardiner%C3%ADa",
+     "resumen": "II mandó plantar unos quinientos jardines en honor a Amón. Por otro lado, existen evidencias de que se importaban plantas de otros países, como Siria, Arabia"
+    },
+    {
+     "titulo": "¿Cómo plantar tomateras en maceta con éxito?",
+     "url": "https://www.picaronablog.com/hortalizas-plantas/tomate/tomate-como-plantar-maceta/",
+     "resumen": "Descubre cómo plantar tomates en maceta fácilmente. Guía paso a paso con consejos sobre sus cuidados esenciales. ¡Empieza tu huerto en casa!",
+     "fuente": "picaronablog.com"
+    },
+    {
+     "titulo": "Cómo cultivar Tomate en maceta y sus cuidados",
+     "url": "https://www.ecojardinmagico.com/como-cultivar-tomate-en-maceta-y-sus-cuidados/",
+     "resumen": "Si quieres plantar tomates pero no tienes el espacio, puedes hacerlo en macetas. Aprende cómo cultivar tomates en macetas y sus cuidados",
+     "fuente": "ecojardinmagico.com"
+    },
+    {
+     "titulo": "Guía definitiva para plantar tomates en maceta y huerto en casa",
+     "url": "https://www.jardineriaon.com/como-plantar-tomates.html",
+     "resumen": "Aprende cómo plantar tomates en maceta y huerto paso a paso. Consejos de sustrato, riego, variedades y cuidados para una cosecha abundante y sabrosa.",
+     "fuente": "jardineriaon.com"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://www.jardineriaon.com/como-plantar-tomates-en-maceta.html",
+     "tipo": "web",
+     "titulo": "Guía definitiva para plantar tomates en maceta: técnicas, cuidados y trucos avanzados para una cosecha abundante y sabrosa",
+     "letras": 17077,
+     "codigos": 0,
+     "principio": "El cultivo de tomates en maceta es una práctica cada vez más extendida en huertos urbanos, balcones y terrazas, permitiendo a cualquier persona disfrutar del sabor y la frescura de los tomates recién cosechados. A pesar de que el tomate es uno de los cultivos más emblemáticos del huerto, su éxito en"
+    },
+    {
+     "url": "https://www.jardinesvivos.com/articulos/cultivar-tomates-en-maceta.html",
+     "tipo": "web",
+     "titulo": "Cómo Cultivar Tomates en Maceta Paso a Paso (Guía Completa 2026) | Jardines Vivos",
+     "letras": 13086,
+     "codigos": 0,
+     "principio": "🍅\n\nEl tomate es la verdura más cultivada en huertos domésticos — y por buenas razones. Un tomate recién cogido de tu propia planta tiene un sabor completamente diferente al del supermercado. Y la buena noticia es que no necesitas jardín para cultivarlos: en una maceta grande en un balcón soleado pue"
+    },
+    {
+     "url": "https://es.wikipedia.org/wiki/Historia_de_la_jardiner%C3%ADa",
+     "tipo": "web",
+     "titulo": "Historia de la jardinería - Wikipedia, la enciclopedia libre",
+     "letras": 40000,
+     "codigos": 0,
+     "principio": "## Historia de la jardinería\n\nUn wikipedista está trabajando actualmente en este artículo o sección. Puede tener lagunas de contenido o deficiencias de formato.\n\nSi quieres, puedes ayudar y editar, pero antes de realizar correcciones mayores contáctalo en su página de discusión o en la del artículo "
+    }
+   ]
+  },
+  "codigo": {
+   "ok": true,
+   "n": 7,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "lufegue/leecsvconpython (GitHub)",
+     "url": "https://github.com/lufegue/leecsvconpython",
+     "fuente": "github.com",
+     "resumen": "Programa para leer un archivo csv con python y crear un excel · ★ 1 · Python"
+    },
+    {
+     "titulo": "gianmarco-holm/CovidAnalysis_Python_DataAnalyst (GitHub)",
+     "url": "https://github.com/gianmarco-holm/CovidAnalysis_Python_DataAnalyst",
+     "fuente": "github.com",
+     "resumen": "Es un análisis de un data set de las muertes que provoco el COVID, contiene modulo para hacer gráficos y leer archivos CSV. · ★ 1 · Python"
+    },
+    {
+     "titulo": "iamdanielgomez/Lectura_archivos_csv_xlsx_y_json (GitHub)",
+     "url": "https://github.com/iamdanielgomez/Lectura_archivos_csv_xlsx_y_json",
+     "fuente": "github.com",
+     "resumen": "En este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y json. · ★ 0 · Python"
+    },
+    {
+     "titulo": "csv — CSV file reading and writing — documentación de Python - 3.15.1",
+     "url": "https://docs.python.org/es/3/library/csv.html",
+     "resumen": "The csv module implements classes to read and write tabular data in CSV format. It allows programmers to say, «write this data in the format preferred by Excel,» or «read data from this file which was generated by Excel,» without knowing the precise details of the CSV format used by Excel.",
+     "fuente": "docs.python.org"
+    },
+    {
+     "titulo": "Leer y escribir CSV en Python — Guía práctica con csv y pandas",
+     "url": "https://elpythonista.com/leer-escribir-csv-python",
+     "resumen": "Esta entrada es la guía práctica para leer y escribir CSV en Python sin sufrir. Con la librería estándar csv (cuando quieres control total) y con pandas (cuando quieres velocidad y no reinventar la rueda).",
+     "fuente": "elpythonista.com"
+    },
+    {
+     "titulo": "Cómo leer un archivo CSV en Python (Módulo, Ejemplos de Pandas) - Guru99",
+     "url": "https://www.guru99.com/es/python-csv.html",
+     "resumen": "En este Python tutorial, aprenderá cómo leer y escribir archivos CSV usando Module & Pandas, Python Módulo CSV y descargue el archivo CSV de muestra para Python.",
+     "fuente": "guru99.com"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://github.com/lufegue/leecsvconpython",
+     "tipo": "web",
+     "titulo": "GitHub - lufegue/leecsvconpython: Programa para leer un archivo csv con python y crear un excel · GitHub",
+     "letras": 691,
+     "codigos": 0,
+     "principio": "Skip to content\n\nYou signed in with another tab or window. Reload to refresh your session.\nYou signed out in another tab or window. Reload to refresh your session.\nYou switched accounts on another tab or window. Reload to refresh your session.\n\nDismiss alert\n\nBranchesTags\n\nOpen more actions menu\n\n##"
+    },
+    {
+     "url": "https://github.com/gianmarco-holm/CovidAnalysis_Python_DataAnalyst",
+     "tipo": "web",
+     "titulo": "GitHub - gianmarco-holm/CovidAnalysis_Python_DataAnalyst: Es un análisis de un data set de las muertes que provoco el COVID, contiene modulo para hacer gráficos y leer archivos CSV. · GitHub",
+     "letras": 1005,
+     "codigos": 0,
+     "principio": "Skip to content\n\nYou signed in with another tab or window. Reload to refresh your session.\nYou signed out in another tab or window. Reload to refresh your session.\nYou switched accounts on another tab or window. Reload to refresh your session.\n\nDismiss alert\n\nBranchesTags\n\nOpen more actions menu\n\n##"
+    },
+    {
+     "url": "https://github.com/iamdanielgomez/Lectura_archivos_csv_xlsx_y_json",
+     "tipo": "texto",
+     "titulo": "Lectura_archivos_csv_xlsx_y_json",
+     "letras": 584,
+     "codigos": 0,
+     "principio": "# Lectura_archivos_csv_xlsx_y_json\nEn este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y json.\nEn este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y j"
+    }
+   ]
+  },
+  "docs": {
+   "ok": true,
+   "n": 1,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "Adenosín trifosfato (Wikipedia)",
+     "fuente": "es.wikipedia.org",
+     "url": "https://es.wikipedia.org/wiki/Adenos%C3%ADn_trifosfato",
+     "resumen": "los productos de la fotosíntesis, el oxígeno no se utiliza y es liberado al medio. A partir de los productos de la fotosíntesis, se pueden continuar"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://es.wikipedia.org/wiki/Adenos%C3%ADn_trifosfato",
+     "tipo": "web",
+     "titulo": "Adenosín trifosfato - Wikipedia, la enciclopedia libre",
+     "letras": 17079,
+     "codigos": 0,
+     "principio": "## Adenosín trifosfato\n\ncompuesto químico\n\nEl adenosín trifosfato (ATP) o trifosfato de adenosina (TFA) (en inglés adenosine triphosphate) es un nucleótido fundamental en la obtención de energía celular. Está formado por un azúcar de tipo ribosa unido a una base nitrogenada adenina (por el carbono u"
+    }
+   ]
+  }
+ }
+}
