@@ -206,6 +206,7 @@ button{background:#334155;color:#fff;border:0;border-radius:8px;padding:8px 12px
   function py(y){ return cv.height - oy - y * esc; }        // en el juego (0,0) está ABAJO a la izquierda
   function pintar(d, fondo){
     ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.save(); ctx.beginPath(); ctx.rect(ox, oy, W * esc, H * esc); ctx.clip();   // nada fuera del campo
     ctx.fillStyle = col(fondo); ctx.fillRect(ox, oy, W * esc, H * esc);
     for (var i = 0; i < d.length; i++){
       var p = d[i], f = p[0], x = p[1], y = p[2], w = p[3], h = p[4], c = p[5], t = p[6], tam = p[7], pts = p[8];
@@ -231,6 +232,7 @@ button{background:#334155;color:#fff;border:0;border-radius:8px;padding:8px 12px
         ctx.textBaseline = 'bottom'; ctx.fillText(t, px(x), py(y));
       }
     }
+    ctx.restore();
   }
   function fallo(e){ vivo = false; aviso.style.display = 'block';
     aviso.textContent = 'Error en el juego: ' + (typeof e == 'string' ? e : (e && e.message) || String(e)); }

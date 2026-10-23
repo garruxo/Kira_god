@@ -29,6 +29,7 @@ class Widget:
         for k, f in kw.items(): self._b.setdefault(k, []).append(f)
     def setter(self, n): return lambda inst, v: setattr(self, n, v)
     def collide_point(self, x, y): return True
+    def to_window(self, x, y, *a, **k): return (x, y)
     def walk(self):
         yield self
         for c in self.children:

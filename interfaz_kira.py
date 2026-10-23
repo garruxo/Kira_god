@@ -383,7 +383,10 @@ def construir_interfaz(core, consola=None):
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
             import juego_realista_kira as jr_
+            import generos_juegos_kira as gj_
             resto = jr_.es_realista(prog)
+            if resto is None and prog.startswith("juego ") and gj_.genero_de(prog) != "esquivar":
+                resto = re.sub(r"^juego\s+(?:de\s+|del\s+)?", "", prog)   # «juego de carreras…»: con plantilla
             if resto is not None:                       # «hazme un juego realista de…»: pintor + programa
                 juego_realista_por_voz(resto or "un explorador")
             else:
@@ -721,8 +724,12 @@ def construir_interfaz(core, consola=None):
         escenario y los personajes (estilo real, recortados) y lo deja en el editor ya jugando."""
         tarea_empieza("juego_realista", pedido, lambda p_=pedido: juego_realista_por_voz(p_), {"pedido": pedido})
         modelo.poner_estado("pensando")
-        decir(f"¡Vamos allá! Diseño el juego, pinto los personajes en estilo realista y lo programo: {pedido}. "
-              "Pintar cuatro dibujos puede tardar unos minutos.")
+        import generos_juegos_kira as gj_
+        g_ = gj_.genero_de(pedido)
+        decir(f"¡Vamos allá! Un juego de {gj_.NOMBRES[g_]}: {pedido}. " + (
+            "Lo retro va con formas, sin dibujos: enseguida está." if g_ == "retro" else
+            "Diseño el juego, pinto los personajes en estilo realista y lo programo. Pintar los dibujos puede tardar "
+            "unos minutos."))
         ultimo = {"t": 0.0}
 
         def prog(f, texto):
@@ -742,8 +749,10 @@ def construir_interfaz(core, consola=None):
                      + (r["aviso"] + " " if r["aviso"] else "") + "Pulsa «Jugar» para jugarlo otra vez.")
             codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"], aviso)
             codigo_ui["empezar_juego"](r["codigo"], volver="editor_codigo")
+            import generos_juegos_kira as gj_
+            como = gj_.instrucciones(r["plan"])
             decir("¡Listo! " + ("" if not r["aviso"] else r["aviso"] + " ")
-                  + f"Mueve a {r['plan']['protagonista']} con el dedo. El programa está en el editor por si quieres cambiarlo.")
+                  + como + " El programa está en el editor por si quieres cambiarlo.")
         en_hilo(lambda: core.crear_juego_realista(pedido, al_progreso=prog), fin)
 
     def app_por_voz(que="app"):

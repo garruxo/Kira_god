@@ -12,15 +12,17 @@ import json
 import re
 import unicodedata
 
+import generos_juegos_kira as gj
 import sprites_kira as spk
 
-ESTILO_PERSONAJE = ("only one, alone, full body, centered, isolated on a pure white background, realistic photo, "
+ESTILO_PERSONAJE = ("only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, "
                     "highly detailed, no text")
 ESTILO_FONDO = "empty scene with no characters, wide view, realistic photo, natural light, highly detailed, game background"
 
 SISTEMA_PLAN = (
-    "Diseñas un juego móvil sencillo de «esquivar y recoger» con gráficos realistas a partir de lo que pide el usuario. "
-    "Responde SOLO con un objeto JSON: {\"titulo\": str (español, corto), \"protagonista\": str (español), "
+    "Diseñas un juego móvil con gráficos realistas a partir de lo que pide el usuario. "
+    "Responde SOLO con un objeto JSON: {\"tipo\": uno de \"esquivar\", \"carreras\", \"plataformas\", \"naves\", "
+    "\"combate\", \"retro\"; \"titulo\": str (español, corto), \"protagonista\": str (español), "
     "\"enemigo\": str (español, lo que hay que esquivar), \"premio\": str (español, lo que se recoge), "
     "\"escenario\": str (español), \"protagonista_en\": str, \"enemigo_en\": str, \"premio_en\": str, "
     "(personajes y objetos en SINGULAR: uno solo) "
@@ -50,7 +52,10 @@ def es_realista(pedido):
 
 
 def plan_simple(resto, traducir=None):
-    """Sin cerebro: «un caballero que esquiva dragones y recoge monedas en un castillo»."""
+    """Sin cerebro: «un caballero que esquiva dragones y recoge monedas en un castillo», «carreras de motos»…"""
+    g = gj.genero_de(resto)
+    if g != "esquivar":
+        return plan_genero(g, resto, traducir)
     t = " ".join(str(resto or "").split())
     prota, enemigo, premio, lugar = t or "un explorador", "rocas que caen", "monedas de oro", "un paisaje"
     m = re.match(r"^(?P<p>.+?)\s+que\s+(?:esquiva|evita|huye\s+de|escapa\s+de)\s+(?P<e>.+?)"
@@ -69,10 +74,34 @@ def plan_simple(resto, traducir=None):
                        "premio_en": tr(premio), "escenario_en": tr(lugar)})
 
 
-def normalizar(d):
+def plan_genero(g, resto, traducir=None):
+    """Plan de un género sin cerebro: lo que diga la frase y, lo que no, lo de siempre de ese género."""
+    tr = traducir or (lambda x: x)
+    df = gj.DEFECTOS[g]
+    quien = gj.tema(g, resto)
+    t = " ".join(str(resto or "").split())
+    lugar = re.search(r"\s(?:en|por)\s+(?:(?:las|los|la|el|unas|unos|una|un)\s+)?(.+)$", t, re.I)
+    if quien and lugar and lugar.group(0).strip() in quien:                  # «samuráis en un templo» -> «samuráis»
+        quien = quien.replace(lugar.group(0).strip(), "").strip(" ,") or None
+    prota_es = quien or df["protagonista"][0]
+    if quien and g == "carreras":
+        prota_en = next((en for rx, (es, en) in gj._VEHICULOS if es == quien), tr(quien))
+    else:
+        prota_en = tr(quien) if quien else df["protagonista"][1]
+    plan = {"titulo": {"carreras": "Carrera", "plataformas": "Saltos", "naves": "Batalla espacial",
+                       "combate": "Combate", "retro": "Laberinto"}[g] + (f": {prota_es}" if quien else ""),
+            "protagonista": prota_es, "protagonista_en": prota_en,
+            "enemigo": df["enemigo"][0], "enemigo_en": df["enemigo"][1],
+            "premio": df["premio"][0] or "nada", "premio_en": df["premio"][1] or "nothing",
+            "escenario": lugar.group(1) if lugar else df["escenario"][0],
+            "escenario_en": tr(lugar.group(1)) if lugar else df["escenario"][1]}
+    return normalizar(plan, g)
+
+
+def normalizar(d, tipo=None):
     if not isinstance(d, dict):
         raise ValueError("el plan no es un objeto")
-    sal = {}
+    sal = {"tipo": tipo or (d.get("tipo") if d.get("tipo") in gj.GENEROS else "esquivar")}
     for k, defecto in (("titulo", "Juego realista"), ("protagonista", "el héroe"), ("enemigo", "obstáculos"),
                        ("premio", "monedas"), ("escenario", "un paisaje"), ("protagonista_en", "a brave explorer"),
                        ("enemigo_en", "a falling rock"), ("premio_en", "a shiny gold coin"),
@@ -83,11 +112,13 @@ def normalizar(d):
     return sal
 
 
-def plan_desde_ia(texto):
+def plan_desde_ia(texto, pedido=""):
+    """El plan que da el cerebro. Si la frase nombra un género («carreras…»), manda la frase."""
     m = re.search(r"\{.*\}", str(texto or ""), re.S)
     if not m:
         raise ValueError("sin JSON")
-    return normalizar(json.loads(m.group(0)))
+    g = gj.genero_de(pedido) if pedido else None
+    return normalizar(json.loads(m.group(0)), g if g and g != "esquivar" else None)
 
 
 def singular(texto):
@@ -102,8 +133,33 @@ def singular(texto):
     return t if re.match(r"^(?:a|an|one|the)\b", t, re.I) else ("an " if t[:1].lower() in "aeiou" else "a ") + t
 
 
+VISTAS = {
+    "carreras": ("top-down view from directly above of {}, pointing up", "top-down view from directly above of {}, "
+                 "pointing up", "{}", "{}, roadside landscape seen from above"),
+    "plataformas": ("side view of {} running, facing right", "side view of {} walking, facing left", "{}",
+                    "{}, side view, wide 2D game background"),
+    "naves": ("top-down view of {}, pointing up", "top-down view of {}, pointing down", "{}", "{}"),
+    "combate": ("side view of {} in a fighting stance, facing right", "side view of {} in a fighting stance, "
+                "facing left", "{}", "{}, empty fighting arena"),
+}
+
+
 def dibujos(plan):
     """{nombre: descripción en inglés} con el estilo realista ya puesto."""
+    g = plan.get("tipo", "esquivar")
+    if g == "retro":
+        return {}                                   # lo retro va con formas (píxeles grandes), sin pintar
+    if g in VISTAS:
+        vj, ve, vp, vf = VISTAS[g]
+        d = {"fondo": f"{vf.format(plan['escenario_en'])}, {ESTILO_FONDO}",
+             "jugador": f"{vj.format(singular(plan['protagonista_en']))}, {ESTILO_PERSONAJE}",
+             "enemigo": f"{ve.format(singular(plan['enemigo_en']))}, {ESTILO_PERSONAJE}"}
+        if g != "combate":
+            d["premio"] = f"{vp.format(singular(plan['premio_en']))}, {ESTILO_PERSONAJE}"
+        if g == "plataformas":
+            d["plataforma"] = f"{gj.DEFECTOS['plataformas']['plataforma'][1]}, side view, isolated on a pure white " \
+                              "background, game asset, highly detailed"
+        return d
     return {"fondo": f"{plan['escenario_en']}, {ESTILO_FONDO}",
             "jugador": f"{singular(plan['protagonista_en'])}, {ESTILO_PERSONAJE}",
             "enemigo": f"{singular(plan['enemigo_en'])}, {ESTILO_PERSONAJE}",
@@ -112,6 +168,8 @@ def dibujos(plan):
 
 def codigo(plan):
     """El programa del juego (se abre en el editor: puedes leerlo y cambiarlo)."""
+    if plan.get("tipo", "esquivar") != "esquivar":
+        return gj.codigo(plan, dibujos(plan))
     d = dibujos(plan)
     lineas_dibujos = "\n".join(f"        {k!r}: {v!r}," for k, v in d.items())
     return f'''from motor_juegos_kira import Juego

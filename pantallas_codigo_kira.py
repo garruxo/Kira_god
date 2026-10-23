@@ -16,7 +16,7 @@ def montar_codigo(sm, p):
     """p: piezas de la interfaz (boton, entrada, texto_largo, en_hilo, pantalla, ir, colores, dir_datos, ganchos)."""
     from kivy.clock import Clock
     from kivy.core.text import Label as CoreLabel
-    from kivy.graphics import Color, Ellipse, Line, Mesh, Rectangle
+    from kivy.graphics import Color, Ellipse, Line, Mesh, Rectangle, ScissorPop, ScissorPush
     from kivy.metrics import dp, sp
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.gridlayout import GridLayout
@@ -221,6 +221,8 @@ def montar_codigo(sm, p):
             s, ox, oy = self.escala()
             self.canvas.clear()
             with self.canvas:
+                wx, wy = self.to_window(ox, oy)            # lo que se salga del campo de juego no se ve
+                ScissorPush(x=int(wx), y=int(wy), width=max(1, int(g.ancho * s)), height=max(1, int(g.alto * s)))
                 Color(*mj.color(g.fondo))
                 Rectangle(pos=(ox, oy), size=(g.ancho * s, g.alto * s))
                 for forma, x, y, w, h, col, texto, tam, puntos in g.dibujo():
@@ -248,6 +250,7 @@ def montar_codigo(sm, p):
                     elif forma == "texto" and texto:
                         tx = self.textura(texto, max(8, int(tam * s)))
                         Rectangle(texture=tx, pos=(ox + x * s, oy + y * s), size=tx.size)
+                ScissorPop()
 
         def on_touch_down(self, t):
             if self.juego and self.collide_point(*t.pos):

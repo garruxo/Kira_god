@@ -198,6 +198,24 @@ def quitar_fondo(w, h, rgba, tolerancia=48):
             pila.append(i - w)
         if y < h - 1:
             pila.append(i + w)
+    if claro:                                           # el halo blanquecino pegado al dibujo (2 pasadas)
+        for _ in range(2):
+            quitar = []
+            for i in range(w * h):
+                j = i * 4
+                if rgba[j + 3] == 0:
+                    continue
+                r, g, b = rgba[j], rgba[j + 1], rgba[j + 2]
+                if min(r, g, b) < 200 or max(r, g, b) - min(r, g, b) > 28:
+                    continue
+                x, y = i % w, i // w
+                if (x > 0 and rgba[j - 1] == 0) or (x < w - 1 and rgba[j + 7] == 0) or \
+                        (y > 0 and rgba[j - w * 4 + 3] == 0) or (y < h - 1 and rgba[j + w * 4 + 3] == 0):
+                    quitar.append(j)
+            for j in quitar:
+                rgba[j + 3] = 0
+            quitados += len(quitar)
+    quitados += quitar_islas(w, h, rgba)
     # borde suave: lo que toca lo quitado queda medio transparente (sin dientes de sierra)
     for i in range(w * h):
         if rgba[i * 4 + 3] == 0:
@@ -208,6 +226,38 @@ def quitar_fondo(w, h, rgba, tolerancia=48):
         if any(rgba[j * 4 + 3] == 0 for j in vecinos) and parecido(i * 4) is False:
             rgba[i * 4 + 3] = 170
     return rgba, quitados / float(w * h)
+
+
+def quitar_islas(w, h, rgba, minimo=0.12):
+    """Quita los trocitos sueltos (restos de sombra o de fondo) que no están unidos al dibujo principal: se quedan
+    las partes de al menos un 12 % del tamaño de la mayor. Cambia rgba; devuelve cuántos píxeles quitó."""
+    grupo = [0] * (w * h)
+    tam = [0]
+    for inicio in range(w * h):
+        if grupo[inicio] or rgba[inicio * 4 + 3] == 0:
+            continue
+        n = len(tam)
+        tam.append(0)
+        grupo[inicio] = n
+        pila = [inicio]
+        while pila:
+            i = pila.pop()
+            tam[n] += 1
+            x, y = i % w, i // w
+            for v in ((i - 1) if x > 0 else -1, (i + 1) if x < w - 1 else -1, (i - w) if y > 0 else -1,
+                      (i + w) if y < h - 1 else -1):
+                if v >= 0 and not grupo[v] and rgba[v * 4 + 3]:
+                    grupo[v] = n
+                    pila.append(v)
+    if len(tam) <= 2:
+        return 0
+    corte = max(tam) * minimo
+    quitados = 0
+    for i in range(w * h):
+        if grupo[i] and tam[grupo[i]] < corte:
+            rgba[i * 4 + 3] = 0
+            quitados += 1
+    return quitados
 
 
 def preparar_sprite(origen, destino, fondo=False, lado=256):

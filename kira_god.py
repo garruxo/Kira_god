@@ -1587,7 +1587,8 @@ class KiraGodCore:
         clave = self._clave_para("general")
         if clave:
             try:
-                plan = jr.plan_desde_ia(self._llamar_api(clave, jr.SISTEMA_PLAN, f"Pedido: {pedido}", max_tokens=350))
+                plan = jr.plan_desde_ia(self._llamar_api(clave, jr.SISTEMA_PLAN, f"Pedido: {pedido}", max_tokens=350),
+                                        pedido)
             except Exception:
                 plan = None
         if plan is None:
@@ -1599,7 +1600,7 @@ class KiraGodCore:
         elif not self.pintor.instalados():
             aviso = ("Aún no tengo pincel: el juego sale con recuadros. Descarga uno en «Pintor» y di «Kira, pinta los "
                      "dibujos del juego».")
-        else:
+        elif jr.dibujos(plan):                              # (lo retro va con formas: no hay nada que pintar)
             pintados = self.pintar_dibujos(plan["carpeta"], jr.dibujos(plan), al_progreso, rehacer=True)
         return {"codigo": programa, "nombre": plan["carpeta"], "plan": plan, "aviso": aviso, "pintados": pintados}
 
