@@ -759,15 +759,14 @@ def construir_interfaz(core, consola=None):
             decir("Primero juega (o abre en el editor) el juego que quieres convertir, y luego dime «conviértelo en "
                   "una app».")
             return
-        if que == "apk":
-            decir("La app de verdad (un APK compilado en GitHub) aún no está lista: es el siguiente paso. De momento "
-                  "te lo pongo en la pantalla de inicio y como página web.")
-            que = "app"
         juego, error = jk_.cargar(cod)
         if error:
             decir(f"[x] Ese juego no arranca, así que no lo convierto todavía: {error}")
             return
         titulo = getattr(juego, "titulo", "") or wj_.titulo_de(cod)
+        if que == "apk":
+            apk_por_voz(cod, titulo)
+            return
         partes = []
 
         def al_inicio():
@@ -830,6 +829,53 @@ def construir_interfaz(core, consola=None):
             en_hilo(web, tras_web)
         else:
             terminar()
+
+    def apk_por_voz(cod, titulo):
+        """La app DE VERDAD (APK) del juego: se compila en TU GitHub (repositorio kira-juegos) y baja a Descargas."""
+        import apk_juegos_kira as apk_
+        import sprites_kira as spk_
+        import web_juegos_kira as wj_
+        token = core.clave_github() if hasattr(core, "clave_github") else ""
+        if not token:
+            decir("Para la app de verdad necesito tu clave de GitHub (solo una vez). En github.com: tu foto › Settings › "
+                  "Developer settings › Personal access tokens › Tokens (classic) › Generate new token (classic). "
+                  "Marca «public_repo» y «workflow», ponle caducidad y cópiala. Luego escríbeme «config github: » y "
+                  "la clave, y repíteme «conviértelo en una app de verdad».")
+            return
+        tarea_empieza("apk", f"app de «{titulo}»", lambda: apk_por_voz(cod, titulo), {"titulo": titulo})
+        decir(f"Hago la app de «{titulo}» en tu GitHub. La primera vez tarda unos 30 minutos (luego menos); te voy "
+              "contando y, al terminar, te la dejo en Descargas.")
+
+        def trabajo():
+            gh = apk_.GitHub(token)
+            carpeta, _d = spk_.dibujos_de(cod)
+            dibujos = wj_.dibujos_png(os.path.dirname(spk_.ruta(carpeta or "juego", "x"))) if carpeta else {}
+            reg = apk_.Registro(os.path.join(core.dir, "apk_juegos.json"))
+            r = apk_.compilar(gh, cod, titulo, reg, dibujos, progreso=lambda f, t: avance(t, f),
+                              cancelado=getattr(core, "cancelado", None))
+            import descargas_kira as dsk
+            dest = os.path.join(core.dir, "apk", r["id"] + ".apk")
+            for viejo in (dest, dest + ".parte"):
+                if os.path.exists(viejo):
+                    os.remove(viejo)
+            avance("Bajo el APK…", 0.99)
+            dsk.bajar(r["url_apk"], dest, None, "el APK")
+            r["ruta"] = dest
+            r["descargas"] = core.exportar_a_descargas(dest, r["id"] + ".apk", "application/vnd.android.package-archive")
+            return r
+
+        def fin(r):
+            t = tarea_fin(not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
+            if isinstance(r, Exception):
+                decir(f"[x] {r}")
+                return
+            ok, msg = r["descargas"]
+            decir(f"¡Lista la app de «{titulo}» (versión {r['n']})! "
+                  + ("Está en Descargas › Kira como «" + r["id"] + ".apk»: ábrela desde Archivos y pulsa Instalar."
+                     if ok else f"No la he podido poner en Descargas ({msg}); bájala de aquí: {r['url_apk']}"))
+        en_hilo(trabajo, fin)
 
     def ej_nombre(texto):
         import ejecutor_kira as ej__

@@ -1,0 +1,75 @@
+# Prueba de verdad de «conviértelo en una app de verdad»: genera el repositorio kira-juegos que haría Kira (con el
+# Rompeladrillos) y lo compila con la MISMA receta (compilar_juego.sh). Sale el artefacto «prueba-juego-apk».
+name: Probar APK de un juego
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apk_juegos_kira.py
+      - .github/workflows/probar_apk_juego.yml
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo6 cmake libffi-dev libltdl-dev libssl-dev automake autopoint gettext
+      - name: Buildozer
+        run: pip install buildozer setuptools cython==0.29.34
+      - name: Recuperar lo ya descargado y compilado
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.kira_build
+          key: prueba-juegos-${{ runner.os }}-v1-${{ github.run_id }}
+          restore-keys: prueba-juegos-${{ runner.os }}-v1-
+      - name: Generar el repositorio de juegos (como lo sube Kira)
+        run: |
+          python - <<'PY'
+          import apk_juegos_kira as apk, juegos_kira as jk
+          j = jk.JUEGOS[0]
+          jid, arch = apk.proyecto(j["codigo"], j["titulo"], 1)
+          todo = apk.repo_base(); todo.update(arch)
+          apk.escribir("prueba_repo", todo)
+          print(jid, len(todo), "archivos")
+          PY
+      - name: Firma y compilar (la misma receta que en tu GitHub)
+        run: |
+          cd prueba_repo
+          bash compilar_juego.sh firma
+          bash compilar_juego.sh compilar juegos/rompeladrillos
+          ls -la salida
+      - name: Guardar lo descargado y compilado
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.kira_build
+          key: prueba-juegos-${{ runner.os }}-v1-${{ github.run_id }}
+      - name: Registro si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registro-prueba-juego
+          path: prueba_repo/compilacion.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prueba-juego-apk
+          path: prueba_repo/salida/*.apk
+          if-no-files-found: error

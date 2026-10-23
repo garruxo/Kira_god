@@ -151,8 +151,8 @@ def saludo(hora, tiene_clave, voz_hablar_ok=False, voz_escuchar_ok=False):
 # =====================================================================================
 #  CONVERSACIÓN
 # =====================================================================================
-_SECRETO = re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")
-_CONFIG = re.compile(r"^\s*config\w*\s+(clave|token|pasarela)\b.*$", re.I | re.S)
+_SECRETO = re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}|ghp_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}")
+_CONFIG = re.compile(r"^\s*config\w*\s+(clave|token|pasarela|github)\b.*$", re.I | re.S)
 
 
 def ocultar_secretos(texto):
@@ -161,7 +161,7 @@ def ocultar_secretos(texto):
     m = _CONFIG.match(t)
     if m:
         return f"config {m.group(1).lower()}: (oculto)"
-    return _SECRETO.sub("sk-ant-****", t)
+    return _SECRETO.sub(lambda m_: m_.group(0)[:7] + "****", t)
 
 
 _MEJORA = re.compile(

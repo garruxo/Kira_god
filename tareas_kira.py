@@ -18,10 +18,10 @@ import time
 
 # lo que suele tardar cada tipo (segundos) hasta que Kira aprende lo suyo en tu móvil
 DURACION_INICIAL = {"programa": 90, "mejora": 180, "experimento": 300, "juego_realista": 420, "imagen": 60,
-                    "pdf": 40, "estudio": 120, "diseno": 60}
+                    "pdf": 40, "estudio": 120, "diseno": 60, "apk": 1500}
 NOMBRES = {"programa": "escribir un programa", "mejora": "programar una mejora", "experimento": "un experimento",
            "juego_realista": "hacer un juego realista", "imagen": "pintar una imagen", "pdf": "un PDF",
-           "estudio": "estudiar", "diseno": "un diseño"}
+           "estudio": "estudiar", "diseno": "un diseño", "apk": "hacer la app de un juego"}
 
 
 def tiempo(seg):

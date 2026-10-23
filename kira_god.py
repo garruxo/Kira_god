@@ -1368,6 +1368,13 @@ class KiraGodCore:
         r = cerebro_ia_kira.limpiar_respuesta(r).strip()
         return (r or "[x] El cerebro no ha respondido.") + f"\n\n(Fuentes: {fuentes})"
 
+    def clave_github(self):
+        try:
+            with open(os.path.join(self.dir, "github_token.txt"), encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+
     def exportar_a_descargas(self, ruta, nombre, tipo="application/pdf"):
         """Copia un archivo a la carpeta Descargas del móvil (para abrirlo con otras apps). (ok, mensaje)."""
         try:
@@ -1835,6 +1842,28 @@ class KiraGodCore:
                 pass
             logger.info("Clave de API actualizada (valor no registrado).")
             return "[OK] Clave guardada. Ya puedes usar: mejorar <lo que quieres>"
+
+        if cmd_lower.startswith("config github:"):         # la clave de GitHub (apps de verdad de tus juegos)
+            import apk_juegos_kira as apk
+            clave = command.split(":", 1)[1].strip()
+            if not apk.es_token(clave):
+                return "[x] Esa clave de GitHub no tiene buena pinta: empieza por «ghp_» (o «github_pat_»)."
+            ruta = os.path.join(self.dir, "github_token.txt")
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write(clave)
+            try:
+                os.chmod(ruta, 0o600)
+            except Exception:
+                pass
+            logger.info("Clave de GitHub guardada (valor no registrado).")
+            return ("[OK] Clave de GitHub guardada. Juega un juego y dime «conviértelo en una app de verdad». "
+                    "Para quitarla: «olvida mi clave de github».")
+        if cmd_lower.strip(" .") in ("olvida mi clave de github", "borra mi clave de github", "quita mi clave de github"):
+            try:
+                os.remove(os.path.join(self.dir, "github_token.txt"))
+                return "[OK] He borrado tu clave de GitHub."
+            except OSError:
+                return "[i] No tenía ninguna clave de GitHub."
 
         # el código del laboratorio (si Kira lo está esperando) no pasa por el búfer ni por el log
         enlace = getattr(self, "enlace", None)
