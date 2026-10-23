@@ -23,6 +23,7 @@ ok(dk.pedido_diseno("hazme una maqueta de app de tareas")[0] == "app", "maqueta 
 ok(dk.pedido_diseno("crea un videoclip de la playa al atardecer")[0] == "clip", "videoclip")
 ok(dk.pedido_diseno("diseña algo bonito para la boda") == ("web", "algo bonito para la boda"), "«diséñame…» sin decir qué: web")
 ok(dk.pedido_diseno("hazme un juego de naves") is None, "un juego no es un diseño")
+ok(pk.pedido_programa("crea un juego realista de carreras de coches para jugar en android") == "juego realista de carreras de coches", "«para jugar en android» no entra en el juego")
 ok(ik.pedido_mejora("aprende a convertir euros a dólares") == "convertir euros a dólares", "«aprende a…» sigue siendo mejora")
 ok(pk.pedido_programa("programa un juego de naves") is None and ik.pedido_mejora("programa un juego de naves"),
    "«programa un juego…» es una MEJORA (se instala en Juegos con tus dos toques)")

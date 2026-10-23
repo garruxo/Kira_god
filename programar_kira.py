@@ -45,6 +45,11 @@ _PIDE = re.compile(
     r"(?:un|el|otro)\s+(?P<que>programa|script|c[oó]digo|juego|jueguito)\b\s*(?P<resto>.*)$", re.I | re.S)
 
 
+_DONDE = re.compile(r"[\s,]*(?:para|que\s+se\s+pueda|y\s+que\s+se\s+pueda)\s+(?:jugar(?:lo)?|usar(?:lo)?|ejecutar(?:lo)?)"
+                    r"\s+(?:en|con|desde)\s+(?:el\s+|mi\s+|un\s+|tu\s+)?(?:android|m[oó]vil|tel[eé]fono|celular|"
+                    r"smartphone)\b", re.I)
+
+
 def pedido_programa(texto):
     """Si la frase pide un PROGRAMA o un JUEGO para el editor, devuelve el pedido ('juego de naves', 'programa que…');
     si no, None. («programa un juego…» sigue siendo una MEJORA de Kira: se instala en Juegos con tus dos toques.)"""
@@ -52,7 +57,7 @@ def pedido_programa(texto):
     m = _PIDE.match(t)
     if not m:
         return None
-    resto = m.group("resto").strip(" ,.:")
+    resto = _DONDE.sub("", m.group("resto")).strip(" ,.:")    # «para jugar en Android» no es parte del juego
     if len(resto) < 3:
         return None
     que = m.group("que").lower()
