@@ -280,9 +280,10 @@ def montar_codigo(sm, p):
     fila_j = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
     fila_j.add_widget(boton("Pausa", lambda: vista.juego and vista.juego.pausar(), GRIS, alto=46))
     fila_j.add_widget(boton("Reiniciar", lambda: vista.juego and vista.juego.reiniciar(), GRIS, alto=46))
+    fila_j.add_widget(boton("Como app", lambda: p.get("como_app", lambda: None)(), VERDE, alto=46))
     fila_j.add_widget(boton("Salir", lambda: salir_juego(), ROJO, alto=46))
     c_jug.add_widget(fila_j)
-    est = {"reloj": None, "volver": "juegos"}
+    est = {"reloj": None, "volver": "juegos", "codigo": ""}
 
     def fotograma(dt):
         g = vista.juego
@@ -319,6 +320,7 @@ def montar_codigo(sm, p):
         parar()
         vista.juego = juego
         est["volver"] = volver
+        est["codigo"] = codigo_juego or ""           # para «conviértelo en una app»
         marcador.text = juego.instrucciones or juego.titulo
         ir("jugar")
         est["reloj"] = Clock.schedule_interval(fotograma, 1 / 60.0)
@@ -331,4 +333,5 @@ def montar_codigo(sm, p):
     ganchos["jugar"] = lambda: None
     return {"cargar_en_editor": cargar_en_editor, "empezar_juego": empezar_juego, "parar_juego": parar,
             "codigo_actual": lambda: (codigo.text, campo_nombre.text),
+            "juego_actual": lambda: est["codigo"],
             "abrir_lista": abrir_lista, "vista": vista, "programas": programas}

@@ -1,0 +1,3 @@
+Brython 3.14.3 (https://brython.info) - Python en el navegador. Licencia BSD-3-Clause, (c) Pierre Quentel.
+Lo usa web_juegos_kira.py para que los juegos de Kira funcionen en una página web.
+Se genera con: python herramientas_pc/preparar_brython.py <brython>/www/src

@@ -18,7 +18,7 @@ package.domain = org.kira
 source.dir = .
 
 # (list) Source files to include (leave empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,png,jpg,kv,atlas,js
 
 # (list) List of inclusions using pattern matching
 #source.include_patterns = assets/*,images/*.png
@@ -34,7 +34,7 @@ source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tes
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.33
+version = 2.34
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]

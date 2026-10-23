@@ -370,6 +370,11 @@ def construir_interfaz(core, consola=None):
             else:
                 mejora_por_voz(re.sub(r"^Mejora para [^:]{1,60}:\s*", "", t["pedido"]))
             return
+        import web_juegos_kira as wj_
+        que_app = wj_.pedido_app(orden)
+        if que_app is not None:                         # «conviértelo en una app», «pon el juego en el inicio»…
+            app_por_voz(que_app)
+            return
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
         if exp is not None:                             # «experimenta con…», «inventa un algoritmo nuevo…»
@@ -740,6 +745,95 @@ def construir_interfaz(core, consola=None):
             decir("¡Listo! " + ("" if not r["aviso"] else r["aviso"] + " ")
                   + f"Mueve a {r['plan']['protagonista']} con el dedo. El programa está en el editor por si quieres cambiarlo.")
         en_hilo(lambda: core.crear_juego_realista(pedido, al_progreso=prog), fin)
+
+    def app_por_voz(que="app"):
+        """Tu juego como app: «inicio» = icono en la pantalla de inicio (abre Kira en ese juego); «web» = página de un
+        solo archivo en Descargas/Kira que se abre en el navegador (sin internet); «app» = las dos cosas."""
+        import web_juegos_kira as wj_
+        import juegos_kira as jk_
+        import sprites_kira as spk_
+        cod = codigo_ui["juego_actual"]() if "juego_actual" in codigo_ui else ""
+        if not cod or "Juego" not in cod:
+            cod = (codigo_ui["codigo_actual"]() if "codigo_actual" in codigo_ui else ("", ""))[0]
+        if not cod or "Juego" not in cod:
+            decir("Primero juega (o abre en el editor) el juego que quieres convertir, y luego dime «conviértelo en "
+                  "una app».")
+            return
+        if que == "apk":
+            decir("La app de verdad (un APK compilado en GitHub) aún no está lista: es el siguiente paso. De momento "
+                  "te lo pongo en la pantalla de inicio y como página web.")
+            que = "app"
+        juego, error = jk_.cargar(cod)
+        if error:
+            decir(f"[x] Ese juego no arranca, así que no lo convierto todavía: {error}")
+            return
+        titulo = getattr(juego, "titulo", "") or wj_.titulo_de(cod)
+        partes = []
+
+        def al_inicio():
+            nombre = "app_" + (ej_nombre(titulo) or "juego")
+            try:
+                codigo_ui["programas"].guardar(nombre, cod)
+            except (ValueError, OSError) as e:
+                return f"no he podido guardarlo ({e})"
+            if platform != "android":
+                return f"guardado como «{nombre}» (el icono solo se puede poner en el móvil)"
+            try:
+                from jnius import autoclass
+                act = autoclass("org.kivy.android.PythonActivity").mActivity
+                paleta = [0xFF2563EB, 0xFFDB2777, 0xFF059669, 0xFFD97706, 0xFF7C3AED, 0xFFDC2626, 0xFF0891B2]
+                col = paleta[sum(map(ord, titulo)) % len(paleta)]
+                r = str(autoclass("org.kira.servicio.AppsKira").ponerEnInicio(act, nombre, titulo, col - 2 ** 32))
+            except Exception as e:
+                return f"no he podido poner el icono ({type(e).__name__})"
+            return {"ok": "te pido permiso para poner el icono en la pantalla de inicio: acéptalo",
+                    "viejo": "tu Android es anterior al 8 y no deja poner el icono desde la app",
+                    }.get(r, "tu pantalla de inicio no deja poner iconos desde las apps")
+
+        def web():
+            carpeta, _d = spk_.dibujos_de(cod)
+            dibujos = wj_.dibujos_png(os.path.dirname(spk_.ruta(carpeta or "juego", "x"))) if carpeta else {}
+            pagina = wj_.html_juego(cod, dibujos, titulo)
+            dest = os.path.join(core.dir, "web")
+            os.makedirs(dest, exist_ok=True)
+            ruta = os.path.join(dest, wj_.nombre_archivo(titulo))
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write(pagina)
+            return ruta
+
+        def tras_web(r):
+            if isinstance(r, Exception):
+                partes.append(f"la versión web no ha salido: {r}")
+            elif platform == "android":
+                try:
+                    from jnius import autoclass
+                    act = autoclass("org.kivy.android.PythonActivity").mActivity
+                    hecho = str(autoclass("org.kira.servicio.AppsKira").abrirHtml(act, r, os.path.basename(r)))
+                except Exception:
+                    hecho = ""
+                partes.append({"abierto": f"la página web está en Descargas/Kira/{os.path.basename(r)} y te la abro "
+                                          "en el navegador (funciona sin internet y la puedes pasar a quien quieras)",
+                               "guardado": f"la página web está en Descargas/Kira/{os.path.basename(r)}: ábrela desde "
+                                           "Archivos con el navegador"}.get(hecho, "no he podido guardar la página "
+                                                                                   "web en Descargas"))
+            else:
+                partes.append(f"la página web está en {r}")
+            terminar()
+
+        def terminar():
+            decir(f"«{titulo}» como app: " + "; ".join(partes) + ".")
+
+        if que in ("inicio", "app"):
+            partes.append(al_inicio())
+        if que in ("web", "app"):
+            decir(f"Preparo «{titulo}» como página web…", hablar=False)
+            en_hilo(web, tras_web)
+        else:
+            terminar()
+
+    def ej_nombre(texto):
+        import ejecutor_kira as ej__
+        return ej__.nombre_valido(texto)
 
     def dibujos_del_juego():
         """Pinta (o repinta) los dibujos que pide el juego del editor (atributos «sprites» y «dibujos»)."""
@@ -1614,7 +1708,7 @@ def construir_interfaz(core, consola=None):
         "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
         "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
         "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO, "dir_datos": dir_datos, "ganchos": ganchos,
-        "juegos_extra": juegos_de_mejoras})
+        "juegos_extra": juegos_de_mejoras, "como_app": lambda: app_por_voz("app")})
 
     # =================================================================================
     #  CEREBRO Y OÍDO PROPIOS
@@ -1680,6 +1774,15 @@ def construir_interfaz(core, consola=None):
             from jnius import autoclass
             act = autoclass("org.kivy.android.PythonActivity").mActivity
             intent = intent or act.getIntent()
+            juego_id = intent.getStringExtra("kira_juego") if intent is not None else None
+            if juego_id:                                       # el icono de un juego en la pantalla de inicio
+                act.setIntent(autoclass("android.content.Intent")())
+                cod = codigo_ui["programas"].abrir(str(juego_id))
+                if cod:
+                    codigo_ui["empezar_juego"](cod, volver="juegos")
+                else:
+                    decir("Ese juego ya no está entre tus programas (¿lo borraste?).")
+                return
             s = str(autoclass("org.kira.servicio.ArchivosKira").leerIntent(act, intent, os.path.join(core.dir, "pdf")) or "")
             act.setIntent(autoclass("android.content.Intent")())   # que no se vuelva a recibir al volver a la app
         except Exception:
