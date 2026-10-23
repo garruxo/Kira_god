@@ -136,14 +136,24 @@ def dibujos_png(carpeta_sprites):
     return sal
 
 
+def fuente_motor():
+    """El texto del motor de juegos. En el APK los .py van compilados (.pyc) y el original no está: entonces sale
+    de motor_fuente_kira.py (generado por herramientas_pc/generar_motor_fuente.py)."""
+    try:
+        with open(os.path.join(AQUI, "motor_juegos_kira.py"), encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        import motor_fuente_kira
+        return motor_fuente_kira.MOTOR
+
+
 def html_juego(codigo, dibujos=None, titulo=None):
     """La página completa (un solo archivo .html, sin internet) que juega a ESTE juego."""
     if "Juego" not in codigo or "class " not in codigo:
         raise WebError("Eso no es un juego de Kira (una clase que herede de Juego).")
     lib = biblioteca_para(codigo)
     titulo = titulo or titulo_de(codigo)
-    with open(os.path.join(AQUI, "motor_juegos_kira.py"), encoding="utf-8") as f:
-        motor = f.read()
+    motor = fuente_motor()
     modulos = {"$timestamp": 1, "motor_juegos_kira": [".py", motor, ["math", "random"]],
                "juego_kira": [".py", codigo, sorted(importaciones(codigo))]}
     imgs = {n: "data:image/png;base64," + base64.b64encode(b).decode("ascii") for n, b in (dibujos or {}).items()}

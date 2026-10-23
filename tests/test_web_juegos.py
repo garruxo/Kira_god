@@ -64,6 +64,16 @@ with tempfile.TemporaryDirectory() as d:
     open(os.path.join(d, "notas.txt"), "w").write("x")
     ok(list(w.dibujos_png(d)) == ["heroe"] and w.dibujos_png(os.path.join(d, "no")) == {}, "dibujos de la carpeta")
 
+import motor_fuente_kira
+with open(os.path.join(w.AQUI, "motor_juegos_kira.py"), encoding="utf-8") as f_:
+    ok(motor_fuente_kira.MOTOR == f_.read(), "motor_fuente_kira está al día (si no: python herramientas_pc/generar_motor_fuente.py)")
+_aqui = w.AQUI
+w.AQUI = tempfile.mkdtemp()                       # como en el APK: sin motor_juegos_kira.py a la vista
+try:
+    ok(w.fuente_motor() == motor_fuente_kira.MOTOR, "sin el .py (APK) el motor sale de motor_fuente_kira")
+finally:
+    w.AQUI = _aqui
+
 # ---------- jugar de verdad en Chromium (si está) ----------
 try:
     from playwright.sync_api import sync_playwright

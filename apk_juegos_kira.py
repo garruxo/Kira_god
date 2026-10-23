@@ -398,8 +398,8 @@ def icono_png(titulo, lado=192):
 def proyecto(codigo, titulo, n=1, dibujos=None, build_dir="/home/runner/.kira_build"):
     """{ruta en el repositorio: bytes} del juego (carpeta juegos/<id>/)."""
     jid = id_de(titulo)
-    with open(os.path.join(AQUI, "motor_juegos_kira.py"), "rb") as f:
-        motor = f.read()
+    import web_juegos_kira
+    motor = web_juegos_kira.fuente_motor().encode("utf-8")
     base = f"juegos/{jid}/"
     tit = re.sub(r"[\r\n=]", " ", titulo).strip()[:40] or "Juego de Kira"
     archivos = {base + "main.py": REPRODUCTOR.encode("utf-8"), base + "motor_juegos_kira.py": motor,

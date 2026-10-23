@@ -44,6 +44,9 @@ jobs:
       - name: Incluir pypdf (lector de PDF) dentro del proyecto
         run: python herramientas_pc/incluir_pypdf.py
 
+      - name: Texto del motor de juegos (en el APK los .py van compilados)
+        run: python herramientas_pc/generar_motor_fuente.py
+
       - name: Revisión previa (falla en segundos en vez de tras una hora)
         run: python herramientas_pc/comprobar_antes_de_compilar.py
 
