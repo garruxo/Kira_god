@@ -176,6 +176,23 @@ StandardOutput=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
+  # La guardiana de tu red: vigila sola cada 10 min y solo AVISA (nada automático; solo defensa).
+  $SUDO tee /etc/systemd/system/kira-vigilancia.service >/dev/null <<EOF
+[Unit]
+Description=Guardiana de la red de Kira (vigila TU red y avisa; solo defensa)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$USER
+ExecStart=/usr/bin/python3 $AQUI/vigilancia_kira.py --vigilar --cada 10
+Restart=always
+RestartSec=20
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF
   $SUDO tee /usr/local/bin/kira-codigo >/dev/null <<'EOF'
 #!/usr/bin/env bash
 # Enseña el último código de 6 cifras para emparejar el móvil con Kira.
@@ -248,7 +265,7 @@ AUTO
   fi
 
   $SUDO systemctl daemon-reload
-  $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service
+  $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service kira-vigilancia.service
   if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
     for red in 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12; do
       for p in 8765/tcp 8766/udp 8767/udp 8770/tcp; do

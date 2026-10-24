@@ -131,6 +131,43 @@ def formato_defensa(r):
     return json.dumps(r, ensure_ascii=False)
 
 
+def formato_avisos(r):
+    """Los avisos de la guardiana (revisar/alertas)."""
+    if not r.get("ok", True):
+        return "[x] " + r.get("error", "no se pudo")
+    avisos = r.get("avisos", r.get("pendientes", []))
+    if not avisos:
+        return "Todo normal en tu red (o estoy aún aprendiendo cómo es)."
+    return "Novedades en tu red:\n" + "\n".join(f"  [{a.get('nivel','aviso')}] {a.get('detalle','')}" for a in avisos)
+
+
+def formato_mapa(r):
+    """Lo que Kira sabe de tu red."""
+    if not r.get("ok", True):
+        return "[x] " + r.get("error", "no se pudo")
+    aps = r.get("aparatos", [])
+    lin = [f"Tu red: {len(aps)} aparatos ({r.get('confirmados', 0)} de confianza), "
+           f"{r.get('pendientes', 0)} aviso(s) sin ver."]
+    for a in aps[:20]:
+        marca = "✓" if a.get("confirmado") else " "
+        lin.append(f"  {marca} {a.get('ip',''):16} {a.get('nombre') or ''} {a.get('fabricante') or ''}".rstrip())
+    return "\n".join(lin)
+
+
+def formato_clave(r):
+    """Una clave generada o el resultado de auditar una."""
+    if not r.get("ok", True):
+        return "[x] " + r.get("error", "no se pudo")
+    if "clave" in r:
+        return "Clave fuerte (cópiala y guárdala bien): " + r["clave"]
+    if "nivel" in r:
+        txt = f"Fuerza: {r['nivel']} (≈{r.get('bits',0)} bits, {r.get('largo',0)} caracteres)."
+        if r.get("consejos"):
+            txt += "\nPara mejorarla:\n" + "\n".join("  - " + c for c in r["consejos"])
+        return txt
+    return json.dumps(r, ensure_ascii=False)
+
+
 def una_vez(cli, pregunta):
     print("Kira: ", end="", flush=True)
     print(cli.charla(pregunta, al_trozo=lambda t: print(t, end="", flush=True)))
@@ -175,6 +212,25 @@ def bucle(cli):
                 seg = int(partes[1]) if len(partes) > 1 and partes[1].isdigit() else 20
                 print(f"Mirando el tráfico {seg} s…")
                 print(formato_defensa(cli.defensa("trafico", segundos=seg)))
+                continue
+            if bajo in ("/guardiana", "/vigila", "/revisa"):
+                print("Revisando tu red…")
+                print(formato_avisos(cli.defensa("revisa")))
+                continue
+            if bajo in ("/alertas", "/novedades"):
+                print(formato_avisos(cli.defensa("alertas")))
+                continue
+            if bajo == "/mapa":
+                print(formato_mapa(cli.defensa("mapa")))
+                continue
+            if bajo in ("/clave", "/clave-frase"):
+                print(formato_clave(cli.defensa("clave")))
+                continue
+            if bajo in ("/clave-fuerte", "/clavefuerte"):
+                print(formato_clave(cli.defensa("clave", tipo="fuerte")))
+                continue
+            if bajo.startswith("/mira "):
+                print(formato_clave(cli.defensa("fuerza", clave=tu.split(" ", 1)[1])))
                 continue
             print("Kira: ", end="", flush=True)
             cli.charla(tu, al_trozo=lambda t: print(t, end="", flush=True))

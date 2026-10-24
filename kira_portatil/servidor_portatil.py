@@ -372,6 +372,38 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                     return self._json(200, {"ok": True, **rd.trafico(d.get("segundos", 20))})
                 if accion == "estado":
                     return self._json(200, {"ok": True, **rd.disponibles()})
+                # --- la guardiana que aprende la red (solo avisa) ---
+                if accion in ("revisa", "vigila"):
+                    import vigilancia_kira as vg
+                    est = vg.cargar()
+                    avisos = vg.revisar(est)
+                    vg.guardar(est)
+                    return self._json(200, {"ok": True, "avisos": avisos})
+                if accion == "mapa":
+                    import vigilancia_kira as vg
+                    return self._json(200, {"ok": True, **vg.mapa(vg.cargar())})
+                if accion == "alertas":
+                    import vigilancia_kira as vg
+                    est = vg.cargar()
+                    pend = vg.pendientes(est)
+                    vg.marcar_vistos(est)
+                    vg.guardar(est)
+                    return self._json(200, {"ok": True, "pendientes": pend})
+                if accion in ("confirma", "olvida"):
+                    import vigilancia_kira as vg
+                    est = vg.cargar()
+                    hecho = (vg.confirmar if accion == "confirma" else vg.olvidar)(est, d.get("host", ""))
+                    vg.guardar(est)
+                    return self._json(200, {"ok": hecho})
+                # --- claves fuertes ---
+                if accion == "clave":
+                    import claves_kira as ck
+                    if d.get("tipo") == "fuerte":
+                        return self._json(200, {"ok": True, "clave": ck.generar_fuerte(int(d.get("largo", 20)))})
+                    return self._json(200, {"ok": True, "clave": ck.generar_frase(int(d.get("palabras", 5)))})
+                if accion == "fuerza":
+                    import claves_kira as ck
+                    return self._json(200, {"ok": True, **ck.fuerza(d.get("clave", ""))})
                 return self._json(400, {"ok": False, "error": "acción de defensa desconocida"})
             except rd.DefensaError as e:
                 return self._json(400, {"ok": False, "error": str(e)})

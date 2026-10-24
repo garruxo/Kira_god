@@ -76,6 +76,17 @@ class Falso(BaseHTTPRequestHandler):
             if d["accion"] == "trafico":
                 return self._j(200, {"ok": True, "conversaciones": [{"a": "192.168.1.5", "b": "192.168.1.1", "paquetes": 9}],
                                      "protocolos": [{"protocolo": "tls", "paquetes": 7}]})
+            if d["accion"] in ("revisa", "vigila"):
+                return self._j(200, {"ok": True, "avisos": [{"tipo": "aparato_nuevo", "detalle": "Aparato NUEVO: 192.168.1.9", "nivel": "importante"}]})
+            if d["accion"] == "alertas":
+                return self._j(200, {"ok": True, "pendientes": []})
+            if d["accion"] == "mapa":
+                return self._j(200, {"ok": True, "aparatos": [{"ip": "192.168.1.1", "nombre": "router", "confirmado": True}],
+                                     "confirmados": 1, "pendientes": 0, "trafico_normal": {}, "ultimos": []})
+            if d["accion"] == "clave":
+                return self._j(200, {"ok": True, "clave": "faro-tigre-nube-remo-sal-42"})
+            if d["accion"] == "fuerza":
+                return self._j(200, {"ok": True, "nivel": "floja", "bits": 10, "largo": 6, "consejos": ["Hazla más larga."]})
         self._j(404, {})
 
 
@@ -100,6 +111,13 @@ ok("router" in kc.formato_defensa(cli.defensa("inventario")) and "Movistar" in k
 ok("80" in kc.formato_defensa(cli.defensa("puertos", host="192.168.1.1")), "/puertos: puertos abiertos")
 ok("192.168.1.5" in kc.formato_defensa(cli.defensa("trafico", segundos=5)), "/trafico: resumen")
 ok("[x]" in kc.formato_defensa({"ok": False, "error": "fuera de tu red"}), "un error se muestra claro")
+
+# la guardiana y las claves (nuevas en v2.47)
+ok("192.168.1.9" in kc.formato_avisos(cli.defensa("revisa")), "la guardiana avisa de un aparato nuevo")
+ok("normal" in kc.formato_avisos(cli.defensa("alertas")), "sin novedades, lo dice")
+ok("router" in kc.formato_mapa(cli.defensa("mapa")), "el mapa de la red lista los aparatos")
+ok("faro-tigre" in kc.formato_clave(cli.defensa("clave")), "genera una clave fuerte")
+ok("floja" in kc.formato_clave(cli.defensa("fuerza", clave="123456")), "audita una clave floja y aconseja")
 
 # una sola pregunta (modo -p, el que usa la prueba de GitHub)
 import io
