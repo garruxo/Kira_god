@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Instala el «cerebro de casa» de Kira en un portátil con Ubuntu 24.04 y tarjeta NVIDIA (probado para RTX serie 50).
 #
-#   bash instalar_portatil.sh                  todo: drivers, CUDA, cerebro, pintor, modelos (~38 GB) y arranque solo
+#   bash instalar_portatil.sh                  todo: drivers, CUDA, cerebro, pintor, modelos (~38 GB) y que al ENCENDER aparezca Kira sola (orbe + PIN)
 #   bash instalar_portatil.sh --sin-grande     sin el cerebro grande (ahorra 23 GB de descarga)
 #   bash instalar_portatil.sh --sin-escritorio además, que el portátil arranque SIN escritorio (todo para Kira)
 #   bash instalar_portatil.sh --prueba         sin gráfica y con modelos pequeños (para comprobarlo en otro equipo)
@@ -209,6 +209,44 @@ Terminal=false
 Type=Application
 Categories=Utility;
 KIRADESK
+
+  # --- Que al ENCENDER el portátil aparezca Kira directamente (como Windows), sin escribir comandos ---
+  if [ "$SIN_ESCRITORIO" = "0" ] && [ "$PRUEBA" = "0" ]; then
+    paso "7b. Al encender, arrancar Kira sola (orbe + PIN), sin comandos"
+    $SUDO systemctl set-default graphical.target >/dev/null 2>&1 || true
+    # 1) Entrar en la sesión sin pedir la contraseña de Linux (el candado de verdad es el PIN de Kira)
+    if systemctl list-unit-files 2>/dev/null | grep -q '^gdm3\?\.service'; then
+      $SUDO mkdir -p /etc/gdm3
+      $SUDO tee /etc/gdm3/custom.conf >/dev/null <<GDM
+# Kira: entrar directo en la sesión al encender (el candado es el PIN de Kira).
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=$USER
+GDM
+    elif systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
+      $SUDO mkdir -p /etc/lightdm/lightdm.conf.d
+      $SUDO tee /etc/lightdm/lightdm.conf.d/50-kira.conf >/dev/null <<LDM
+[Seat:*]
+autologin-user=$USER
+autologin-user-timeout=0
+LDM
+    else
+      echo "  (aviso: no reconozco el gestor de sesión; si pide contraseña al encender, actívale el inicio automático a mano)"
+    fi
+    # 2) Lanzar KiraOS a pantalla completa en cuanto se abre la sesión
+    mkdir -p "$HOME/.config/autostart"
+    cat > "$HOME/.config/autostart/kira-arranque.desktop" <<AUTO
+[Desktop Entry]
+Type=Application
+Name=KiraOS
+Comment=Arranca Kira a pantalla completa al encender
+Exec=/usr/local/bin/kiraos
+X-GNOME-Autostart-enabled=true
+Terminal=false
+AUTO
+    echo "  Al encender el portátil aparecerá Kira (orbe + PIN). No hay que escribir nada."
+  fi
+
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service
   if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
@@ -228,7 +266,8 @@ fi
 paso "Listo"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "El cerebro de casa de Kira está en este portátil (${IP:-sin red})."
-echo "Abre la app «Kira» del menú (o escribe  kiraos ) para el inicio con el orbe y el PIN."
-echo "Para ir directo a la charla sin candado:  kira-ventana  (ventana) o  kira  (terminal)."
+echo "REINICIA el portátil: al encender aparecerá Kira sola (el orbe y el PIN), sin escribir nada."
+echo "La primera vez te pedirá crear tu PIN de 4 cifras."
+echo "Si quieres abrirla a mano:  kiraos  (inicio con orbe + PIN)  ·  kira-ventana / kira  (directo a la charla)."
 echo "Si además quieres usarla desde el móvil: dile «Kira, conéctate al ordenador» y escríbele el código."
 echo "Para ver el código aquí:  kira-codigo     ·  para ver cómo va:  journalctl -u kira-portatil -f"
