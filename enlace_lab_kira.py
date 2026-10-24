@@ -281,7 +281,8 @@ class Enlace:
                         pc.guardar_config(lab["url"], token, nombre=h.get("nombre") or lab["nombre"], id=h.get("id"))
                         self.pendiente = None
                         return (f"[OK] Conectada al laboratorio de {h.get('nombre') or lab['nombre']}"
-                                f"{' (estaba en otra dirección: ya la he cambiado)' if url and lab['url'] != url else ''}.")
+                                f"{' (estaba en otra dirección: ya la he cambiado)' if url and lab['url'] != url else ''}."
+                                + self._enganchar_portatil())
             if not labs:
                 return ("[x] No encuentro el laboratorio en tu WiFi. En el ordenador, haz doble clic en «Arrancar "
                         "laboratorio» (carpeta kira_laboratorio) y, si Windows lo pregunta, pulsa «Permitir». El móvil "
@@ -296,6 +297,21 @@ class Enlace:
             otros = f" (hay {len(labs)}: uso el de {nombre})" if len(labs) > 1 else ""
             return (f"He encontrado el laboratorio en «{nombre}»{otros}. Dime el código de {CIFRAS} cifras que sale en "
                     "la pantalla del ordenador.")
+
+    def _enganchar_portatil(self):
+        """Tras conectarse al laboratorio, busca TAMBIÉN el cerebro de casa (portátil) y lo guarda. Devuelve un texto
+        para añadir al mensaje, o ''."""
+        try:
+            import casa_kira
+            c = casa_kira.Casa()
+            if c.reubicar():
+                info = c.info() or {}
+                cerebros = ", ".join((info.get("cerebros") or {}).values()) or "cerebro grande"
+                return (f" Y he encontrado tu cerebro de casa: cuando estemos en la WiFi usaré su {cerebros}"
+                        + (" y su pintor" if info.get("pintor") else "") + ".")
+        except Exception:
+            pass
+        return ""
 
     def con_codigo(self, texto):
         """Si estaba esperando el código y la frase lo trae, empareja. Devuelve lo que dice Kira, o None si la frase
@@ -313,7 +329,8 @@ class Enlace:
             pc.guardar_config(p["url"], r["token"], nombre=r.get("nombre") or p["nombre"], id=r.get("id"))
             self.pendiente = None
             return (f"[OK] ¡Conectada al laboratorio de {r.get('nombre') or p['nombre']}! Ya no hace falta nada más: "
-                    "a partir de ahora me conecto sola cuando lo necesite, aunque cambie la dirección del ordenador.")
+                    "a partir de ahora me conecto sola cuando lo necesite, aunque cambie la dirección del ordenador."
+                    + self._enganchar_portatil())
         if estado == 0:
             return f"[x] El laboratorio ha dejado de contestar ({r.get('error')}). ¿Sigue encendido?"
         error = r.get("error") or "no me ha aceptado"

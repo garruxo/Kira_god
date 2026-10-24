@@ -1548,12 +1548,15 @@ class KiraGodCore:
         [(nombre, nota)]. Lanza PintorError si no hay pincel."""
         import pintor_kira as pk
         import sprites_kira as spk
+        import tempfile
         pin = self.pintor
+        casa = self.cerebro_ia.casa() if self.cerebro_ia.casa_disponible() else None   # pinta en el portátil si está
         modelo = "realista" if pin.instalado("realista") else next((k for k in pk.MODELOS if pin.instalado(k)), None)
-        if modelo is None:
-            raise pk.PintorError("Para dibujar los personajes necesito un pincel: descárgalo una vez en Menú › «Pintor».")
+        if modelo is None and casa is None:
+            raise pk.PintorError("Para dibujar los personajes necesito un pincel: descárgalo una vez en Menú › «Pintor» "
+                                 "(o enciende tu portátil, que trae un pintor mejor).")
         cer, apartado = getattr(self, "cerebro_propio", None), False
-        if not pin.memoria_suficiente(modelo) and cer is not None and cer.encendido():
+        if casa is None and not pin.memoria_suficiente(modelo) and cer is not None and cer.encendido():
             cer.apagar()
             apartado = True
         hechos, lista = [], list(dibujos.items())
@@ -1569,8 +1572,18 @@ class KiraGodCore:
                 def prog(f, t, i_=i, n_=nombre):
                     if al_progreso:
                         al_progreso((i_ + f) / len(lista), f"Pintando «{n_}» ({i_ + 1} de {len(lista)})… {t}")
-                r = pin.pintar(desc, modelo, "vertical" if fondo else "cuadrada", None,
-                               "text, watermark, frame, border, cropped", prog)
+                if casa is not None:                        # el pintor del portátil (mejor): devuelve el PNG
+                    if al_progreso:
+                        al_progreso(i / len(lista), f"Pintando «{nombre}» en el portátil ({i + 1} de {len(lista)})…")
+                    png = casa.pintar(desc, negativo="text, watermark, frame, border, cropped",
+                                      ancho=768, alto=1024 if fondo else 768)
+                    tmp_png = tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=self.dir)
+                    tmp_png.write(png)
+                    tmp_png.close()
+                    r = {"ruta": tmp_png.name}
+                else:
+                    r = pin.pintar(desc, modelo, "vertical" if fondo else "cuadrada", None,
+                                   "text, watermark, frame, border, cropped", prog)
                 try:
                     nota = spk.preparar_sprite(r["ruta"], destino, fondo=fondo)
                 finally:

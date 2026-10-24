@@ -142,6 +142,7 @@ class Cerebro:
         # para PROGRAMAR mejoras: en «auto» se prefiere Claude (escribe mejor código) si hay clave; si no, el local
         self.codigo = d.get("codigo") if d.get("codigo") in MOTORES else "auto"
         self.url = d.get("url") if isinstance(d.get("url"), str) and _URL_OK.match(d.get("url", "")) else URL_DEFECTO
+        self._casa = None                          # el cerebro de casa (el portátil), si está en la WiFi
 
     def _guardar(self):
         tmp = self.ruta + ".tmp"
@@ -169,8 +170,27 @@ class Cerebro:
         self._cache = (0.0, None)
         self._guardar()
 
-    # ---- ¿está encendido el modelo local? ----
+    def casa(self):
+        """El cliente del cerebro de casa (portátil). None si no se puede crear."""
+        if self._casa is None:
+            try:
+                import casa_kira
+                self._casa = casa_kira.Casa()
+            except Exception:
+                self._casa = False
+        return self._casa or None
+
+    def casa_disponible(self, forzar=False):
+        c = self.casa()
+        try:
+            return bool(c and c.disponible(forzar))
+        except Exception:
+            return False
+
+    # ---- ¿está encendido el modelo local? (el del móvil o el de casa) ----
     def local_disponible(self, forzar=False):
+        if self.casa_disponible(forzar):
+            return True
         t, ok = self._cache
         if not forzar and ok is not None and self._reloj() - t < 20:
             return ok
@@ -187,6 +207,17 @@ class Cerebro:
                 continue
         self._cache = (self._reloj(), ok)
         return ok
+
+    def _local_encendido(self):
+        """Solo el cerebro del MÓVIL (sin contar el de casa): para saber si hay con qué seguir si casa falla."""
+        for ruta in ("/health", "/v1/models"):
+            try:
+                with self._abrir(urllib.request.Request(self.url + ruta, method="GET"), timeout=2) as r:
+                    if 200 <= getattr(r, "status", 200) < 300:
+                        return True
+            except Exception:
+                continue
+        return False
 
     def elegir(self, clave_api, tarea="general"):
         """'local' | 'claude' | None según el motor configurado, la tarea, lo que esté encendido y si hay clave.
@@ -227,6 +258,19 @@ class Cerebro:
             al_trozo = lambda _t: None                                  # a trozos, para poder cortarla
         if parar is not None and parar():
             raise Cancelada("Cancelado.")
+        if self.casa_disponible():                 # el portátil está en casa: que lo haga su cerebro grande
+            c = self.casa()
+            try:
+                return c.chat(system, mensajes, grande=max_tokens >= 800, max_tokens=max_tokens,
+                              timeout=max(timeout, 900), al_trozo=al_trozo, parar=parar)
+            except Cancelada:
+                raise
+            except __import__("casa_kira").Cancelada:
+                raise Cancelada("Cancelado.")
+            except Exception as e:                 # el portátil falló: sigo con el cerebro del móvil si lo hay
+                self._cache = (0.0, None)
+                if not self._local_encendido():
+                    raise CerebroError(f"El cerebro de casa falló y el del móvil está apagado: {e}")
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
             {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
             for m in mensajes]
@@ -301,13 +345,22 @@ class Cerebro:
                                al_trozo=al_trozo)
 
     def estado_texto(self, clave_api):
-        local = self.local_disponible(forzar=True)
+        casa = self.casa_disponible(forzar=True)
+        local = self._local_encendido()
         uso = self.elegir(clave_api)
+        linea_casa = ""
+        if casa:
+            info = self.casa().info() or {}
+            cual = (info.get("cargado") and (info.get("cerebros") or {}).get(info["cargado"])) or "cerebro grande"
+            linea_casa = (f"  CEREBRO DE CASA (portátil, {info.get('nombre', '')}): CONECTADO — lo uso para todo "
+                          f"({cual}" + (", y su pintor" if info.get("pintor") else "") + ").\n")
         return (f"Cerebro de IA: modo «{self.motor}».\n"
+                + linea_casa +
                 f"  Modelo local ({self.url}): {'ENCENDIDO' if local else 'apagado'}\n"
                 f"  API de Claude: {'clave guardada' if clave_api else 'sin clave'}\n"
                 f"  Ahora mismo respondería: {({'local': 'el modelo local (sin internet)', 'claude': 'Claude (API)'}).get(uso, 'nadie')}\n"
                 f"  Para programar mejoras: {({'local': 'el modelo local', 'claude': 'Claude (API)'}).get(self.elegir(clave_api, 'codigo'), 'nadie')} "
                 f"(preferencia «{self.codigo}»)\n"
                 "Órdenes: «cerebro local», «cerebro claude», «cerebro auto», «cerebro url: http://IP:8080», "
-                "«cerebro mejoras auto|local|claude».")
+                "«cerebro mejoras auto|local|claude». El cerebro de casa (portátil) se usa solo cuando está en la WiFi; "
+                "para conectarlo: «conéctate al ordenador».")
