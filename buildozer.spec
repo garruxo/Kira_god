@@ -34,7 +34,7 @@ source.exclude_dirs = .vscode, bin, .buildozer, __pycache__, extras, legacy, tes
 source.exclude_patterns = *.log, *.md
 
 # (str) Application versioning (method 1)
-version = 2.38
+version = 2.39
 
 # (str) Application versioning (method 2)
 # version.regex = __version__ = ['"](.*)['"]

@@ -428,7 +428,8 @@ class KiraGodCore:
         clave = self._leer_clave()
         if not clave:
             raise RuntimeError(self._sin_cerebro())
-        system = ("Eres Kira, la asistente de esta app. Responde en español, en 1 a 3 frases cortas, sin markdown ni listas, "
+        system = ("Eres Kira, la asistente de esta app. Hablas TÚ como Kira: no empieces con «Kira» ni repitas lo que te "
+                  "dicen. Responde en español, en 1 a 3 frases cortas, sin markdown ni listas, "
                   "porque tu respuesta se lee en voz alta. No ves los archivos del usuario. Internet e imágenes los hace "
                   "la app al oír «Kira, busca en internet …», «busca código de …», «estudia en internet …» (lee páginas y "
                   "lo guarda) o «Kira, pinta …» / «hazme una foto de …» (imágenes con tu propia IA): si te piden algo "
@@ -456,7 +457,8 @@ class KiraGodCore:
         # El modelo del móvil guarda lo ya leído (instrucciones + charla) y solo lee lo nuevo; si los recuerdos fueran
         # en las instrucciones, cambiarían en cada pregunta y tendría que releerlo TODO (segundos de espera). Por eso,
         # en local van pegados a la última pregunta y se recuerdan menos turnos.
-        mensajes = self.armar_mensajes(historial, texto, turnos=6 if local else 8, largo=300 if local else 400)
+        pregunta = re.sub(r"^\s*kira\s*[,:]+\s*", "", texto, flags=re.I) or texto   # sin «Kira,»: así no lo imita
+        mensajes = self.armar_mensajes(historial, pregunta, turnos=6 if local else 8, largo=300 if local else 400)
         if ctx and local:
             mensajes[-1]["content"] = ctx + "\n\nPregunta: " + mensajes[-1]["content"]
         elif ctx:
@@ -464,7 +466,14 @@ class KiraGodCore:
         extra = {"al_trozo": al_trozo} if al_trozo is not None else {}
         r = self._llamar_api(clave, system, "", max_tokens=220 if local else 300, mensajes=mensajes, **extra)
         r = " ".join(cerebro_ia_kira.limpiar_respuesta(r).split())[:1200] or "…"
-        if clave != cerebro_ia_kira.LOCAL:
+        import respuesta_kira
+        r, cambiada = respuesta_kira.arreglar(r, texto)     # ni tu frase repetida ni «no puedo» lo que sí sabe hacer
+        if cambiada and al_trozo is not None:
+            try:
+                al_trozo(r)                                # lo que ya iba saliendo en pantalla se corrige
+            except Exception:
+                pass
+        if clave != cerebro_ia_kira.LOCAL and not cambiada:
             self.aprender_de_ia(texto, r)
         return r
 
