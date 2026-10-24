@@ -32,7 +32,12 @@ mkdir -p "$BIN" "$MOD" "$OBRA"
 
 paso "1. Herramientas para compilar"
 $SUDO apt-get update -qq
-$SUDO apt-get install -y -qq build-essential cmake git curl python3 python3-tk pkg-config ca-certificates libcurl4-openssl-dev libssl-dev >/dev/null
+$SUDO apt-get install -y -qq build-essential cmake git curl python3 python3-tk python3-pip pkg-config ca-certificates libcurl4-openssl-dev libssl-dev >/dev/null
+# Para la pantalla de arranque de KiraOS (el orbe): el motor que ya trae el escritorio de Ubuntu (WebKitGTK) y su
+# puente de Python (pywebview). Y el lector de voz para «Sistema Kira activado». Todo local, nada de internet.
+$SUDO apt-get install -y -qq python3-gi gir1.2-gtk-3.0 speech-dispatcher >/dev/null
+$SUDO apt-get install -y -qq gir1.2-webkit2-4.1 >/dev/null 2>&1 || $SUDO apt-get install -y -qq gir1.2-webkit2-4.0 >/dev/null 2>&1 || true
+python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || echo "  (aviso: no pude instalar pywebview; KiraOS entrará con un PIN sencillo hasta que se instale)"
 
 GPU=0
 if [ "$PRUEBA" = "0" ]; then
@@ -185,15 +190,21 @@ KIRACLI
   $SUDO chmod +x /usr/local/bin/kira
   $SUDO tee /usr/local/bin/kira-ventana >/dev/null <<KIRAWIN
 #!/usr/bin/env bash
-# La ventana de Kira (gráfica).
+# La ventana de Kira (la charla, sin el candado).
 exec /usr/bin/python3 "$AQUI/kira_escritorio.py" "\$@"
 KIRAWIN
   $SUDO chmod +x /usr/local/bin/kira-ventana
+  $SUDO tee /usr/local/bin/kiraos >/dev/null <<KIRAOS
+#!/usr/bin/env bash
+# KiraOS: pantalla de inicio (orbe que late) + PIN y, al entrar, la ventana de Kira.
+exec /usr/bin/python3 "$AQUI/kiraos.py" --pantalla "\$@"
+KIRAOS
+  $SUDO chmod +x /usr/local/bin/kiraos
   $SUDO tee /usr/share/applications/kira.desktop >/dev/null <<KIRADESK
 [Desktop Entry]
 Name=Kira
 Comment=Tu asistente Kira
-Exec=/usr/local/bin/kira-ventana
+Exec=/usr/local/bin/kiraos
 Terminal=false
 Type=Application
 Categories=Utility;
@@ -217,6 +228,7 @@ fi
 paso "Listo"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "El cerebro de casa de Kira está en este portátil (${IP:-sin red})."
-echo "Para HABLAR con Kira aquí mismo: abre la app «Kira» del menú, o escribe  kira-ventana  (ventana) o  kira  (terminal)."
+echo "Abre la app «Kira» del menú (o escribe  kiraos ) para el inicio con el orbe y el PIN."
+echo "Para ir directo a la charla sin candado:  kira-ventana  (ventana) o  kira  (terminal)."
 echo "Si además quieres usarla desde el móvil: dile «Kira, conéctate al ordenador» y escríbele el código."
 echo "Para ver el código aquí:  kira-codigo     ·  para ver cómo va:  journalctl -u kira-portatil -f"

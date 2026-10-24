@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiraOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  -webkit-user-select:none;user-select:none;cursor:default}
+html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf5}
+.scene{position:fixed;inset:0;display:grid;place-items:center;
+  background:radial-gradient(900px 640px at 50% 48%,#0a1020 0%,#05070f 56%,#03040a 100%)}
+
+/* ---------- el orbe ---------- */
+.stage{position:relative;display:flex;flex-direction:column;align-items:center;transition:none}
+.stage.boom{animation:boom .6s cubic-bezier(.3,.6,.2,1) forwards}
+@keyframes boom{0%{transform:scale(1);opacity:1}60%{opacity:1}100%{transform:scale(7);opacity:0}}
+
+.halo{position:relative;width:min(44vmin,340px);height:min(44vmin,340px);display:grid;place-items:center;margin-bottom:7vmin}
+.ring{position:absolute;border-radius:50%;width:88%;height:88%}
+.r1{background:conic-gradient(from 0deg,#22d3ee 0deg,#38bdf8 70deg,rgba(34,211,238,.15) 150deg,transparent 170deg,transparent 360deg);
+  filter:blur(1.4px) brightness(1.3) saturate(1.35);animation:gira1 7s linear infinite;
+  -webkit-mask:radial-gradient(circle,transparent 0 47.5%,#000 48.6% 49.4%,transparent 50.5%);
+          mask:radial-gradient(circle,transparent 0 47.5%,#000 48.6% 49.4%,transparent 50.5%)}
+.r2{background:conic-gradient(from 0deg,#f472d0 0deg,#fb7185 70deg,rgba(244,114,208,.15) 150deg,transparent 170deg,transparent 360deg);
+  filter:blur(1.4px) brightness(1.3) saturate(1.35);animation:gira2 7s linear infinite;
+  -webkit-mask:radial-gradient(circle,transparent 0 47.5%,#000 48.6% 49.4%,transparent 50.5%);
+          mask:radial-gradient(circle,transparent 0 47.5%,#000 48.6% 49.4%,transparent 50.5%)}
+@keyframes gira1{to{transform:rotate(360deg)}}
+@keyframes gira2{to{transform:rotate(-360deg)}}
+.guide{width:74%;height:74%;border:1px dashed rgba(148,180,220,.13);background:none}
+
+.core{position:absolute;width:49%;height:49%;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 40%,#16243f 0%,#0a1020 72%);
+  box-shadow:0 0 0 2px rgba(34,211,238,.4),0 0 34px rgba(34,211,238,.26),0 0 48px rgba(244,114,208,.2),inset 0 0 20px rgba(244,114,208,.24);
+  animation:latido 5s ease-in-out infinite}
+.core b{font-size:min(5.6vmin,34px);font-weight:800;letter-spacing:2px;
+  background:linear-gradient(100deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* reposo: pulso muy leve, como que está encendido */
+@keyframes latido{0%,100%{transform:scale(1);box-shadow:0 0 0 2px rgba(34,211,238,.38),0 0 30px rgba(34,211,238,.22),inset 0 0 20px rgba(244,114,208,.22)}
+  50%{transform:scale(1.016);box-shadow:0 0 0 2px rgba(34,211,238,.5),0 0 46px rgba(34,211,238,.36),inset 0 0 26px rgba(244,114,208,.3)}}
+/* cuenta atrás: la luz crece en cada pulso (pum.. pum.. PUM!) hasta estallar */
+.core.carga{animation:carga 2.3s cubic-bezier(.4,0,.6,1) forwards}
+@keyframes carga{
+  0%{transform:scale(1)}
+  12%{transform:scale(1.03);box-shadow:0 0 0 2px rgba(34,211,238,.5),0 0 44px rgba(34,211,238,.4),inset 0 0 24px rgba(244,114,208,.3)}
+  22%{transform:scale(1)}
+  36%{transform:scale(1.05);box-shadow:0 0 0 2px rgba(34,211,238,.6),0 0 70px rgba(34,211,238,.55),0 0 60px rgba(244,114,208,.35),inset 0 0 30px rgba(244,114,208,.4)}
+  46%{transform:scale(1.01)}
+  60%{transform:scale(1.08);box-shadow:0 0 0 2px rgba(130,230,255,.75),0 0 100px rgba(34,211,238,.7),0 0 90px rgba(244,114,208,.5),inset 0 0 36px rgba(244,114,208,.5)}
+  70%{transform:scale(1.03)}
+  84%{transform:scale(1.12);box-shadow:0 0 0 3px rgba(150,235,255,.9),0 0 140px rgba(34,211,238,.85),0 0 130px rgba(244,114,208,.65),inset 0 0 44px rgba(244,114,208,.6)}
+  100%{transform:scale(1.2);box-shadow:0 0 0 4px rgba(200,245,255,1),0 0 190px rgba(130,230,255,.95),0 0 170px rgba(244,114,208,.8),inset 0 0 60px rgba(244,114,208,.7)}}
+
+/* el destello del estallido */
+.flash{position:fixed;left:50%;top:50%;width:160vmax;height:160vmax;transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(circle,rgba(170,240,255,.95),rgba(244,114,208,.45) 30%,transparent 55%);opacity:0;pointer-events:none}
+.flash.on{animation:destello .6s ease-out forwards}
+@keyframes destello{0%{opacity:0}30%{opacity:.95}100%{opacity:0}}
+
+/* texto "pulsa cualquier tecla" */
+.tap{font-size:min(2.6vmin,16px);letter-spacing:4px;font-weight:400;text-transform:uppercase;color:rgba(170,190,220,.92);
+  text-shadow:0 0 10px rgba(34,211,238,.5),0 0 18px rgba(244,114,208,.3);animation:parpadeo 2.6s ease-in-out infinite}
+@keyframes parpadeo{0%,100%{opacity:.28}50%{opacity:1}}
+.stage.carga .tap{opacity:0;animation:none;transition:opacity .25s}
+
+/* ---------- pantalla de acceso (PIN) ---------- */
+.acceso{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .5s ease;
+  background:radial-gradient(820px 600px at 50% 44%,#0a1020 0%,#05070f 58%,#03040a 100%)}
+.acceso.on{opacity:1;pointer-events:auto}
+.mini{position:relative;width:132px;height:132px;display:grid;place-items:center;margin-bottom:22px}
+.mini .ring{width:88%;height:88%;animation-duration:9s}
+.mini .core{width:66%;height:66%;animation:latido 5s ease-in-out infinite}
+.mini .core b{font-size:22px}
+.hi{font-size:22px;font-weight:300;color:#cdd7ea}
+.hi b{font-weight:700;background:linear-gradient(90deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-size:13.5px;color:#6c7fa3;margin-top:7px;margin-bottom:22px;min-height:18px}
+.dots{display:flex;gap:18px;margin-bottom:30px}
+.dot{width:15px;height:15px;border-radius:50%;border:1.6px solid #2b3a5c;transition:.15s}
+.dot.on{background:linear-gradient(135deg,#22d3ee,#f472d0);border-color:transparent;box-shadow:0 0 12px rgba(34,211,238,.6)}
+.dots.mal{animation:sacude .4s}
+@keyframes sacude{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(4px)}}
+.pad{display:grid;grid-template-columns:repeat(3,84px);gap:16px}
+.key{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;font-size:27px;font-weight:500;color:#e7ecf5;cursor:pointer;
+  background:radial-gradient(circle at 50% 35%,#131d33,#0b1120);border:1px solid #1d2a46;
+  box-shadow:0 4px 16px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.04);transition:.12s}
+.key:hover{border-color:#2a3c63}
+.key:active{transform:scale(.94);background:radial-gradient(circle at 50% 35%,#1a2744,#0c1322)}
+.key small{font-size:8.5px;letter-spacing:1.5px;color:#64759a;margin-top:-4px}
+.key.ghost{background:none;border:none;box-shadow:none;color:#7b8aa8}
+.key.ghost:active{transform:scale(.9)}
+.key.ghost svg{width:30px;height:30px;stroke:currentColor;stroke-width:1.7;fill:none}
+.key.bio{color:#22d3ee}
+.foot{position:fixed;bottom:26px;font-size:12px;color:#44557a;letter-spacing:.4px;text-align:center;width:100%}
+</style></head>
+<body>
+<div class="flash" id="flash"></div>
+
+<div class="scene" id="arranque">
+  <div class="stage" id="stage">
+    <div class="halo">
+      <div class="ring guide"></div>
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <div class="core" id="core"><b>KIRA</b></div>
+    </div>
+    <div class="tap" id="tap">Pulsa cualquier tecla para entrar</div>
+  </div>
+</div>
+
+<div class="acceso" id="acceso">
+  <div class="mini">
+    <div class="ring guide"></div>
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="core"><b>K</b></div>
+  </div>
+  <div class="hi">Hola, soy <b>Kira</b></div>
+  <div class="sub" id="sub">Introduce tu PIN para entrar</div>
+  <div class="dots" id="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  <div class="pad" id="pad"></div>
+  <div class="foot" id="foot">Todo se queda en tu portátil</div>
+</div>
+
+<script>
+// ---- puente con Python (pywebview). Si no está (prueba en navegador), usa uno de mentira con PIN 1234 ----
+var FAKE = {
+  info: function(){ return Promise.resolve({hay_pin:true, nombre:"tu portátil", cerebro:"Qwen 35B", demo:true}); },
+  comprobar: function(p){ return Promise.resolve(p === "1234"); },
+  crear: function(p){ return Promise.resolve(true); },
+  biometria: function(){ return Promise.resolve(false); },
+  voz: function(t){ return Promise.resolve(); },
+  entrar: function(){ document.body.setAttribute("data-entrado","1"); return Promise.resolve(); }
+};
+function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : FAKE; }
+
+var stage=document.getElementById("stage"), core=document.getElementById("core"),
+    tap=document.getElementById("tap"), flash=document.getElementById("flash"),
+    acceso=document.getElementById("acceso"), dots=document.getElementById("dots"),
+    sub=document.getElementById("sub"), pad=document.getElementById("pad"), foot=document.getElementById("foot");
+
+var fase="reposo", pin="", crear=false, primero="", bloqueado=false;
+
+// teclado en pantalla
+var filas=[["1",""],["2","A B C"],["3","D E F"],["4","G H I"],["5","J K L"],["6","M N O"],
+           ["7","P Q R S"],["8","T U V"],["9","W X Y Z"]];
+filas.forEach(function(f){
+  var k=document.createElement("div"); k.className="key";
+  k.innerHTML=f[0]+"<small>"+(f[1]||"&nbsp;")+"</small>";
+  k.onclick=function(){ meter(f[0]); }; pad.appendChild(k);
+});
+var kb=document.createElement("div"); kb.className="key ghost bio"; kb.title="Huella o cara";
+kb.innerHTML='<svg viewBox="0 0 24 24"><path d="M12 11c0 3-.4 5-1.2 6.8M8 7.6A6.5 6.5 0 0 1 18.5 12v1M5.5 13v-1a6.5 6.5 0 0 1 1.2-3.8M12 12v2c0 2-.5 3.8-1.4 5.2M15.5 12.5c0 3-.6 5.6-1.8 7.8M9 21c1.4-2 2-4.6 2-7.5V12a1 1 0 0 1 2 0"/></svg>';
+kb.onclick=biometria; pad.appendChild(kb);
+var k0=document.createElement("div"); k0.className="key"; k0.innerHTML="0<small>&nbsp;</small>";
+k0.onclick=function(){ meter("0"); }; pad.appendChild(k0);
+var kd=document.createElement("div"); kd.className="key ghost"; kd.title="Borrar";
+kd.innerHTML='<svg viewBox="0 0 24 24"><path d="M20 6H9L3 12l6 6h11a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z"/><path d="M12 10l4 4M16 10l-4 4"/></svg>';
+kd.onclick=borrar; pad.appendChild(kd);
+
+// ---- reposo: cualquier tecla o clic empieza la cuenta atrás ----
+function empezar(){
+  if(fase!=="reposo") return;
+  fase="carga";
+  stage.classList.add("carga");
+  core.classList.add("carga");
+  api().voz("Sistema Kira activado");
+}
+document.addEventListener("keydown", function(e){
+  if(fase==="reposo"){ empezar(); return; }
+  if(fase==="pin"){
+    if(e.key>="0" && e.key<="9") meter(e.key);
+    else if(e.key==="Backspace") borrar();
+  }
+});
+document.getElementById("arranque").addEventListener("click", function(){ if(fase==="reposo") empezar(); });
+
+// al terminar la cuenta atrás: estalla y abre el PIN
+core.addEventListener("animationend", function(e){
+  if(e.animationName==="carga" && fase==="carga"){ explotar(); }
+});
+function explotar(){
+  fase="abrir";
+  stage.classList.add("boom");
+  flash.classList.add("on");
+  setTimeout(function(){ acceso.classList.add("on"); fase="pin"; }, 420);
+}
+
+// ---- PIN ----
+function pintar(){
+  var ds=dots.children;
+  for(var i=0;i<ds.length;i++) ds[i].className = "dot" + (i<pin.length ? " on" : "");
+}
+function sacude(){ dots.classList.remove("mal"); void dots.offsetWidth; dots.classList.add("mal"); }
+function meter(n){
+  if(fase!=="pin" || bloqueado) return;
+  if(pin.length>=4) return;
+  pin+=n; pintar();
+  if(pin.length===4) setTimeout(validar, 120);
+}
+function borrar(){ if(fase!=="pin") return; pin=pin.slice(0,-1); pintar(); }
+
+function validar(){
+  if(crear){
+    if(!primero){ primero=pin; pin=""; pintar(); sub.textContent="Repite el PIN"; return; }
+    if(pin!==primero){ primero=""; pin=""; pintar(); sacude(); sub.textContent="No coincide, vuelve a empezar"; return; }
+    Promise.resolve(api().crear(primero)).then(function(){ entrar(); });
+    return;
+  }
+  Promise.resolve(api().comprobar(pin)).then(function(ok){
+    if(ok){ entrar(); }
+    else{ pin=""; pintar(); sacude(); sub.textContent="PIN incorrecto"; }
+  });
+}
+function biometria(){
+  if(fase!=="pin") return;
+  Promise.resolve(api().biometria()).then(function(ok){
+    if(ok){ entrar(); } else { sub.textContent="Usa el PIN (la huella/cara aún no está puesta)"; }
+  });
+}
+function entrar(){
+  document.body.setAttribute("data-entrado","1");
+  api().entrar();
+}
+
+// ---- al cargar: pide la info (nombre, cerebro, si hay PIN o hay que crearlo) ----
+function arrancarInfo(){
+  Promise.resolve(api().info()).then(function(d){
+    d = d || {};
+    if(d.hay_pin===false){ crear=true; sub.textContent="Crea tu PIN de 4 cifras"; }
+    if(d.cerebro){ foot.textContent="Cerebro de Kira · " + d.cerebro + " · todo se queda en tu portátil"; }
+  }).catch(function(){});
+}
+if(window.pywebview && window.pywebview.api){ arrancarInfo(); }
+else{ window.addEventListener("pywebviewready", arrancarInfo); setTimeout(arrancarInfo, 400); }
+</script>
+</body></html>
