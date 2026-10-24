@@ -51,3 +51,15 @@ El portátil trae `red_defensa_kira.py`, para que Kira vigile y proteja **tu pro
 Candado real en el código (`en_mi_red`): todo se limita a tu red local privada; cualquier objetivo de fuera se
 rechaza. Nmap se usa solo para descubrir y ver puertos (sin exploits) y tshark solo para mirar. No se incluye ninguna
 herramienta de ataque.
+
+## Hablar con Kira en el propio portátil (sin móvil)
+
+Tras instalar, escribe en una terminal:
+
+```
+kira
+```
+
+Se abre la consola de Kira: escribes y te responde con el cerebro grande, en el mismo portátil. Dentro:
+`/rapido` · `/grande` (cambiar de cerebro), `/red` (aparatos de tu red), `/puertos <ip>`, `/trafico`, `/estado`, `/salir`.
+Una sola pregunta: `kira -p "tu pregunta"`.

@@ -34,7 +34,9 @@ jobs:
             -d '{"prompt":"a red apple on a wooden table","semilla":1}' -o manzana.png
           python3 -c "d=open('manzana.png','rb').read();print('PNG', len(d), 'bytes');assert d[:8]==b'\x89PNG\r\n\x1a\n' and len(d)>10000"
           curl -s -o /dev/null -w "sin token: %{http_code}\n" localhost:8770/hola | grep 401
-          echo "::notice title=Cerebro de casa::charla y dibujo OK"
+          KIRA_LAB_TOKEN="$TOKEN" python3 kira_portatil/kira_consola.py --url http://localhost:8770 -p "Di hola corto" | tee consola.txt
+          test -s consola.txt
+          echo "::notice title=Cerebro de casa::charla, dibujo y consola OK"
       - name: Registro
         if: always()
         run: cat servidor.log || true
@@ -47,3 +49,4 @@ jobs:
             charla.json
             hola.json
             servidor.log
+            consola.txt

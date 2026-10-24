@@ -177,6 +177,12 @@ EOF
 journalctl -u kira-laboratorio --no-pager -n 300 | grep -A1 "CÓDIGO PARA CONECTAR" | tail -n 2
 EOF
   $SUDO chmod +x /usr/local/bin/kira-codigo
+  $SUDO tee /usr/local/bin/kira >/dev/null <<KIRACLI
+#!/usr/bin/env bash
+# Hablar con Kira en el portátil, sin móvil.
+exec /usr/bin/python3 "$AQUI/kira_consola.py" "\$@"
+KIRACLI
+  $SUDO chmod +x /usr/local/bin/kira
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service
   if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
@@ -196,5 +202,6 @@ fi
 paso "Listo"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "El cerebro de casa de Kira está en este portátil (${IP:-sin red})."
-echo "En el móvil dile «Kira, conéctate al ordenador» y escríbele el código de 6 cifras."
+echo "Para HABLAR con Kira aquí mismo (sin móvil), escribe:  kira"
+echo "Si además quieres usarla desde el móvil: dile «Kira, conéctate al ordenador» y escríbele el código."
 echo "Para ver el código aquí:  kira-codigo     ·  para ver cómo va:  journalctl -u kira-portatil -f"
