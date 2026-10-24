@@ -1,0 +1,49 @@
+# Prueba de verdad del «cerebro de casa» (kira_portatil/): instala con el MISMO instalador en modo prueba (sin
+# gráfica, modelos pequeños), arranca el servidor y le pide una charla y un dibujo. Artefacto «prueba-portatil».
+name: Probar cerebro de casa
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - kira_portatil/**
+      - .github/workflows/probar_portatil.yml
+
+jobs:
+  portatil:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar (modo prueba, el mismo instalador que en el portátil)
+        run: bash kira_portatil/instalar_portatil.sh --prueba --sin-servicios
+      - name: Arrancar el cerebro de casa y probarlo
+        run: |
+          set -e
+          python3 kira_portatil/servidor_portatil.py --prueba --puerto 8770 --sin-faro > servidor.log 2>&1 &
+          TOKEN=$(cat kira_laboratorio/token_lab.txt)
+          for i in $(seq 1 60); do curl -sf localhost:8770/salud >/dev/null && break; sleep 2; done
+          curl -sf -H "X-Kira-Token: $TOKEN" localhost:8770/hola | tee hola.json
+          echo
+          curl -sf -H "X-Kira-Token: $TOKEN" -H "Content-Type: application/json" localhost:8770/v1/chat/completions \
+            -d '{"messages":[{"role":"user","content":"Di hola en una frase corta."}],"max_tokens":40}' | tee charla.json
+          echo
+          python3 -c "import json;t=json.load(open('charla.json'))['choices'][0]['message']['content'];print('RESPUESTA:',t);assert t.strip()"
+          curl -sf -H "X-Kira-Token: $TOKEN" -H "Content-Type: application/json" localhost:8770/pintar \
+            -d '{"prompt":"a red apple on a wooden table","semilla":1}' -o manzana.png
+          python3 -c "d=open('manzana.png','rb').read();print('PNG', len(d), 'bytes');assert d[:8]==b'\x89PNG\r\n\x1a\n' and len(d)>10000"
+          curl -s -o /dev/null -w "sin token: %{http_code}\n" localhost:8770/hola | grep 401
+          echo "::notice title=Cerebro de casa::charla y dibujo OK"
+      - name: Registro
+        if: always()
+        run: cat servidor.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-portatil
+          path: |
+            manzana.png
+            charla.json
+            hola.json
+            servidor.log
