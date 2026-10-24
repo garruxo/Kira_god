@@ -120,6 +120,16 @@ python3 "$AQUI/servidor_portatil.py" --lista-descargas "${OPC[@]}" | while read 
   mv "$destino.parte" "$destino"
 done
 
+paso "6b. Herramientas de defensa de red (Nmap y Wireshark, para vigilar TU red)"
+if [ "$PRUEBA" = "0" ]; then
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq nmap tshark >/dev/null 2>&1 || \
+    echo "  (no pude instalar nmap/tshark ahora; Kira te dirá cómo cuando los necesite)"
+  if getent group wireshark >/dev/null; then
+    $SUDO usermod -aG wireshark "$USER" || true          # para capturar tráfico sin ser administrador
+    echo "  Nmap y Wireshark listos (solo se usan sobre TU red). Para capturar tráfico, vuelve a iniciar sesión una vez."
+  fi
+fi
+
 paso "6. La llave (token) del laboratorio: la misma para el laboratorio y el cerebro de casa"
 ( cd "$RAIZ/kira_laboratorio" && python3 -c "import iniciar_laboratorio as i; i.token()" )
 chmod 600 "$RAIZ/kira_laboratorio/token_lab.txt"

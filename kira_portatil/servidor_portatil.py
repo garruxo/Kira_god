@@ -269,6 +269,14 @@ class Faro(threading.Thread):
 # =====================================================================================
 #  EL SERVIDOR
 # =====================================================================================
+def _defensa_estado():
+    try:
+        import red_defensa_kira as rd
+        return rd.disponibles()
+    except Exception:
+        return {}
+
+
 def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
     nombre = nombre or nombre_equipo()
     info_gpu = {"v": None}
@@ -315,7 +323,8 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                                         "gpu": info_gpu["v"], "cerebros": {k: c["nombre"] for k, c in
                                                                           cerebro.cerebros.items()},
                                         "instalados": cerebro.disponibles(), "cargado": cerebro.actual,
-                                        "estado": cerebro.estado, "pintor": pintor.listo()})
+                                        "estado": cerebro.estado, "pintor": pintor.listo(),
+                                        "defensa": _defensa_estado()})
             return self._json(404, {"ok": False, "error": "no encontrado"})
 
         def do_POST(self):
@@ -346,7 +355,26 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                 return
             if ruta == "/v1/chat/completions":
                 return self._charla(d)
+            if ruta == "/defensa":
+                return self._defensa(d)
             return self._json(404, {"ok": False, "error": "no encontrado"})
+
+        def _defensa(self, d):
+            """Vigilancia DEFENSIVA de TU red (Nmap/Wireshark), solo dentro de tu red local."""
+            import red_defensa_kira as rd
+            accion = str(d.get("accion", ""))
+            try:
+                if accion == "inventario":
+                    return self._json(200, {"ok": True, "aparatos": rd.inventario()})
+                if accion == "puertos":
+                    return self._json(200, {"ok": True, **rd.puertos(d.get("host", ""))})
+                if accion == "trafico":
+                    return self._json(200, {"ok": True, **rd.trafico(d.get("segundos", 20))})
+                if accion == "estado":
+                    return self._json(200, {"ok": True, **rd.disponibles()})
+                return self._json(400, {"ok": False, "error": "acción de defensa desconocida"})
+            except rd.DefensaError as e:
+                return self._json(400, {"ok": False, "error": str(e)})
 
         def _charla(self, d):
             quiero = str(d.pop("kira_cerebro", "rapido"))

@@ -40,3 +40,14 @@ Opcional: `bash instalar_portatil.sh --sin-escritorio` hace que el portátil arr
 Se ha probado con modelos pequeños en un ordenador sin gráfica (GitHub, `probar_portatil.yml`) y con un cerebro de
 mentira (`tests/test_portatil.py`). En el portátil real falta comprobar: el driver y CUDA con la RTX 5060, la velocidad
 de cada cerebro y del pintor, y que la gráfica (8 GB) aguante los tamaños elegidos.
+
+## Defensa de tu red (Nmap y Wireshark)
+
+El portátil trae `red_defensa_kira.py`, para que Kira vigile y proteja **tu propia red de casa** (SOLO defensa):
+- **inventario:** qué aparatos hay conectados (por si aparece uno que no reconoces).
+- **puertos:** qué puertos tiene abiertos uno de tus aparatos (puertas que podrían sobrar).
+- **tráfico:** un resumen de quién habla con quién en tu red (para detectar algo raro).
+
+Candado real en el código (`en_mi_red`): todo se limita a tu red local privada; cualquier objetivo de fuera se
+rechaza. Nmap se usa solo para descubrir y ver puertos (sin exploits) y tshark solo para mirar. No se incluye ninguna
+herramienta de ataque.
