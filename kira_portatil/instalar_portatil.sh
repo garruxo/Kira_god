@@ -32,7 +32,7 @@ mkdir -p "$BIN" "$MOD" "$OBRA"
 
 paso "1. Herramientas para compilar"
 $SUDO apt-get update -qq
-$SUDO apt-get install -y -qq build-essential cmake git curl python3 pkg-config ca-certificates libcurl4-openssl-dev libssl-dev >/dev/null
+$SUDO apt-get install -y -qq build-essential cmake git curl python3 python3-tk pkg-config ca-certificates libcurl4-openssl-dev libssl-dev >/dev/null
 
 GPU=0
 if [ "$PRUEBA" = "0" ]; then
@@ -183,6 +183,21 @@ EOF
 exec /usr/bin/python3 "$AQUI/kira_consola.py" "\$@"
 KIRACLI
   $SUDO chmod +x /usr/local/bin/kira
+  $SUDO tee /usr/local/bin/kira-ventana >/dev/null <<KIRAWIN
+#!/usr/bin/env bash
+# La ventana de Kira (gráfica).
+exec /usr/bin/python3 "$AQUI/kira_escritorio.py" "\$@"
+KIRAWIN
+  $SUDO chmod +x /usr/local/bin/kira-ventana
+  $SUDO tee /usr/share/applications/kira.desktop >/dev/null <<KIRADESK
+[Desktop Entry]
+Name=Kira
+Comment=Tu asistente Kira
+Exec=/usr/local/bin/kira-ventana
+Terminal=false
+Type=Application
+Categories=Utility;
+KIRADESK
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service
   if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
@@ -202,6 +217,6 @@ fi
 paso "Listo"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "El cerebro de casa de Kira está en este portátil (${IP:-sin red})."
-echo "Para HABLAR con Kira aquí mismo (sin móvil), escribe:  kira"
+echo "Para HABLAR con Kira aquí mismo: abre la app «Kira» del menú, o escribe  kira-ventana  (ventana) o  kira  (terminal)."
 echo "Si además quieres usarla desde el móvil: dile «Kira, conéctate al ordenador» y escríbele el código."
 echo "Para ver el código aquí:  kira-codigo     ·  para ver cómo va:  journalctl -u kira-portatil -f"

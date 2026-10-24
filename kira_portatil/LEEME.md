@@ -63,3 +63,9 @@ kira
 Se abre la consola de Kira: escribes y te responde con el cerebro grande, en el mismo portátil. Dentro:
 `/rapido` · `/grande` (cambiar de cerebro), `/red` (aparatos de tu red), `/puertos <ip>`, `/trafico`, `/estado`, `/salir`.
 Una sola pregunta: `kira -p "tu pregunta"`.
+
+## La ventana de Kira (modo escritorio)
+
+Tras instalar, abre la app **Kira** desde el menú de aplicaciones, o escribe `kira-ventana`. Es una ventana donde
+escribes y Kira responde con el cerebro grande. Botones para cambiar de cerebro y ver tu red. A pantalla completa
+(modo «KiraOS»): `kira-ventana --pantalla` (sales con Escape). La terminal sigue estando: `kira`.

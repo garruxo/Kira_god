@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Instalar (modo prueba, el mismo instalador que en el portátil)
         run: bash kira_portatil/instalar_portatil.sh --prueba --sin-servicios
+      - name: Tkinter y pantalla virtual (para probar la ventana)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-tk xvfb
       - name: Arrancar el cerebro de casa y probarlo
         run: |
           set -e
@@ -36,6 +38,7 @@ jobs:
           curl -s -o /dev/null -w "sin token: %{http_code}\n" localhost:8770/hola | grep 401
           KIRA_LAB_TOKEN="$TOKEN" python3 kira_portatil/kira_consola.py --url http://localhost:8770 -p "Di hola corto" | tee consola.txt
           test -s consola.txt
+          TOKEN="$TOKEN" xvfb-run -a python3 kira_portatil/_smoke_ventana.py
           echo "::notice title=Cerebro de casa::charla, dibujo y consola OK"
       - name: Registro
         if: always()
