@@ -129,6 +129,9 @@ paso "6b. Herramientas de defensa de red (Nmap y Wireshark, para vigilar TU red)
 if [ "$PRUEBA" = "0" ]; then
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq nmap tshark >/dev/null 2>&1 || \
     echo "  (no pude instalar nmap/tshark ahora; Kira te dirá cómo cuando los necesite)"
+  # Aislamiento de verdad para el ESPACIO AISLADO de Kira (experimenta sin tocar nada): firejail (y bubblewrap).
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq firejail bubblewrap >/dev/null 2>&1 || \
+    echo "  (sin firejail/bubblewrap el espacio aislado funcionará con límites, pero no como caja fuerte)"
   if getent group wireshark >/dev/null; then
     $SUDO usermod -aG wireshark "$USER" || true          # para capturar tráfico sin ser administrador
     echo "  Nmap y Wireshark listos (solo se usan sobre TU red). Para capturar tráfico, vuelve a iniciar sesión una vez."
@@ -230,6 +233,13 @@ KIRAOS
 exec /usr/bin/python3 "$AQUI/kiraos.py" --mapa "\$@"
 KIRAMAPA
   $SUDO chmod +x /usr/local/bin/kira-mapa
+  $SUDO tee /usr/local/bin/kira-espacio >/dev/null <<KIRAESP
+#!/usr/bin/env bash
+# El espacio aislado de Kira (experimentar sin tocar nada). Sin argumentos: enseña su estado.
+exec /usr/bin/python3 "$AQUI/espacio_kira.py" "\$@"
+KIRAESP
+  $SUDO chmod +x /usr/local/bin/kira-espacio
+  mkdir -p "$DATOS/espacio"
   $SUDO tee /usr/share/applications/kira-mapa.desktop >/dev/null <<MAPADESK
 [Desktop Entry]
 Name=Mapa de ataques (Kira)
