@@ -133,6 +133,13 @@ if [ "$PRUEBA" = "0" ]; then
     $SUDO usermod -aG wireshark "$USER" || true          # para capturar tráfico sin ser administrador
     echo "  Nmap y Wireshark listos (solo se usan sobre TU red). Para capturar tráfico, vuelve a iniciar sesión una vez."
   fi
+  # Base de IPs para el MAPA DE ATAQUES (de dónde vienen): IP -> país/dueño. Gratuita (iptoasn.com). Se baja UNA vez
+  # y luego Kira ubica los ataques SIN internet. Se puede volver a lanzar para actualizarla.
+  echo "  Bajando la base de IPs para el mapa de ataques (una vez)…"
+  curl -fL --retry 6 --retry-delay 4 -C - -o "$HOME/.kira_ip2asn.tsv.gz" \
+    "https://iptoasn.com/data/ip2asn-v4.tsv.gz" 2>/dev/null \
+    && echo "  Base de IPs lista (el mapa ya puede ubicar y atribuir ataques, sin internet)." \
+    || echo "  (no pude bajar la base de IPs ahora; el mapa funcionará igual pero sin país/dueño hasta volver a instalar con internet)"
 fi
 
 paso "6. La llave (token) del laboratorio: la misma para el laboratorio y el cerebro de casa"
@@ -217,6 +224,21 @@ KIRAWIN
 exec /usr/bin/python3 "$AQUI/kiraos.py" --pantalla "\$@"
 KIRAOS
   $SUDO chmod +x /usr/local/bin/kiraos
+  $SUDO tee /usr/local/bin/kira-mapa >/dev/null <<KIRAMAPA
+#!/usr/bin/env bash
+# El mapa del mundo de ataques (de dónde intentan atacarte).
+exec /usr/bin/python3 "$AQUI/kiraos.py" --mapa "\$@"
+KIRAMAPA
+  $SUDO chmod +x /usr/local/bin/kira-mapa
+  $SUDO tee /usr/share/applications/kira-mapa.desktop >/dev/null <<MAPADESK
+[Desktop Entry]
+Name=Mapa de ataques (Kira)
+Comment=De dónde intentan atacarte
+Exec=/usr/local/bin/kira-mapa
+Terminal=false
+Type=Application
+Categories=Utility;Security;
+MAPADESK
   $SUDO tee /usr/share/applications/kira.desktop >/dev/null <<KIRADESK
 [Desktop Entry]
 Name=Kira

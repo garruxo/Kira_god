@@ -29,6 +29,7 @@ import bloqueo_kira as bl
 import kira_consola as kc
 
 ARRANQUE = os.path.join(AQUI, "kiraos_web", "arranque.html")
+MAPA = os.path.join(AQUI, "kiraos_web", "mapa.html")
 CEREBRO_NOMBRE = "Qwen 35B"          # un solo cerebro
 
 
@@ -82,6 +83,11 @@ class Api:
 
     def biometria(self):
         return bl.biometria_disponible()
+
+    def mapa_ataques(self):
+        """Los datos para el mapa del mundo: de dónde intentan atacarte (país, dueño, tipo)."""
+        import ataques_kira as at
+        return at.mapa_datos(at.cargar())
 
     def voz(self, texto):
         threading.Thread(target=self._hablar, args=(texto,), daemon=True).start()
@@ -160,11 +166,28 @@ def _reserva_consola(api):
     return False
 
 
+def abrir_mapa(pantalla=True):
+    """Abre el mapa del mundo de ataques (ventana propia). Solo mira, no toca nada."""
+    try:
+        import webview
+    except Exception:
+        print("Falta pywebview para ver el mapa (instálalo en el portátil).")
+        return
+    webview.create_window("Mapa de ataques · KiraOS", MAPA, js_api=Api(), fullscreen=pantalla,
+                          background_color="#04050a", min_size=(900, 600))
+    webview.start()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="El arranque de KiraOS en el portátil")
     ap.add_argument("--url", default="http://127.0.0.1:8770")
     ap.add_argument("--pantalla", action="store_true", help="a pantalla completa (modo KiraOS)")
+    ap.add_argument("--mapa", action="store_true", help="abre el mapa de ataques y sale")
     a = ap.parse_args(argv)
+
+    if a.mapa:
+        abrir_mapa(pantalla=a.pantalla)
+        return
 
     token = kc.leer_token()
     cli = kc.Cliente(a.url, token) if len(token) >= 16 else None

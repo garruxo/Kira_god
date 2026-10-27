@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de ataques · KiraOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif}
+html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf5}
+.wrap{position:fixed;inset:0;display:flex;flex-direction:column;background:radial-gradient(1000px 700px at 50% 30%,#0a1020,#05070f 60%,#03040a)}
+.top{display:flex;align-items:center;gap:14px;padding:16px 26px;border-bottom:1px solid #1a2742}
+.orb{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#16243f,#0a1020);
+  box-shadow:0 0 0 2px rgba(34,211,238,.5),0 0 16px rgba(34,211,238,.4);display:grid;place-items:center}
+.orb b{font-size:11px;font-weight:800;background:linear-gradient(90deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.top h1{font-size:18px;font-weight:700}.top h1 i{color:#7b8aa8;font-style:normal;font-weight:500;font-size:13px}
+.spacer{flex:1}
+.chip{font-size:12.5px;color:#9fb0cc;background:#0e1730;border:1px solid #1d2b49;border-radius:999px;padding:6px 13px}
+.main{flex:1;display:flex;min-height:0}
+.mapbox{flex:1;position:relative;display:grid;place-items:center;padding:14px}
+svg{width:100%;height:100%;max-height:100%}
+.land{fill:#132038;stroke:#20304f;stroke-width:.6}
+.grid{stroke:rgba(90,120,170,.10);stroke-width:.5}
+.dot{cursor:pointer}
+.panel{width:330px;border-left:1px solid #1a2742;padding:18px;overflow:auto;background:rgba(10,16,30,.5)}
+.panel h2{font-size:14px;color:#8fa6cf;font-weight:600;letter-spacing:.5px;margin-bottom:12px}
+.card{background:#0e1730;border:1px solid #1d2b49;border-radius:12px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:.12s}
+.card:hover{border-color:#2a3c63}
+.card.sel{border-color:rgba(34,211,238,.6);box-shadow:0 0 0 1px rgba(34,211,238,.3)}
+.card .ip{font-size:14.5px;font-weight:700}
+.card .pais{font-size:12.5px;color:#9fb0cc;margin-top:2px}
+.tag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:999px;margin-top:8px;margin-right:5px}
+.tag.hosting{background:rgba(244,114,208,.16);color:#f7a8df;border:1px solid rgba(244,114,208,.3)}
+.tag.isp{background:rgba(34,211,238,.16);color:#8fe6ff;border:1px solid rgba(34,211,238,.3)}
+.tag.desconocido{background:#1a2742;color:#9fb0cc}
+.card .veces{float:right;font-size:12px;color:#f472d0;font-weight:700}
+.det{font-size:12.5px;color:#aab8d4;line-height:1.5;margin-top:6px}
+.vacio{color:#6c7fa3;font-size:13px;text-align:center;margin-top:40px;line-height:1.6}
+.aviso{font-size:11px;color:#55668a;padding:8px 26px;border-top:1px solid #1a2742}
+.leyenda{position:absolute;left:18px;bottom:14px;font-size:11px;color:#7b8aa8;background:rgba(10,16,30,.6);padding:6px 10px;border-radius:8px}
+.leyenda span{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 10px;vertical-align:middle}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="orb"><b>K</b></div>
+    <h1>Mapa de ataques <i>· de dónde intentan atacarte</i></h1>
+    <div class="spacer"></div>
+    <div class="chip" id="resumen">—</div>
+  </div>
+  <div class="main">
+    <div class="mapbox">
+      <svg id="mapa" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="leyenda"><span style="background:#22d3ee"></span>particular (ISP)
+        <span style="background:#f472d0"></span>empresa/hosting</div>
+    </div>
+    <div class="panel">
+      <h2>ATAQUES DETECTADOS</h2>
+      <div id="lista"></div>
+    </div>
+  </div>
+  <div class="aviso" id="aviso">El origen es APARENTE: con VPN, proxy o equipos infectados (botnet) la IP puede no ser la del atacante real. Ubicación a nivel de país.</div>
+</div>
+
+<script>
+var W=1000, H=500;
+function proj(lon,lat){ return [ (lon+180)/360*W, (90-lat)/180*H ]; }
+
+// Mundo esquemático (contornos aproximados, en [lon,lat]). No es un mapa exacto: sitúa el país, no la calle.
+var CONT = {
+ norteamerica:[[-168,66],[-156,71],[-128,70],[-95,72],[-82,73],[-61,66],[-56,53],[-66,49],[-70,43],[-74,40],[-81,31],[-80,26],[-97,26],[-98,19],[-105,20],[-114,31],[-124,40],[-124,48],[-130,55],[-146,60],[-168,66]],
+ centroamerica:[[-92,18],[-87,16],[-83,10],[-77,8],[-83,14],[-90,16],[-92,18]],
+ sudamerica:[[-77,8],[-70,12],[-60,11],[-50,0],[-35,-6],[-39,-14],[-48,-25],[-53,-34],[-62,-40],[-66,-50],[-74,-52],[-73,-44],[-71,-33],[-70,-18],[-76,-14],[-81,-6],[-80,1],[-77,8]],
+ africa:[[-17,15],[-16,21],[-9,32],[0,37],[11,37],[11,33],[20,32],[32,31],[35,24],[43,12],[51,12],[42,-1],[40,-15],[33,-26],[20,-35],[14,-23],[9,-1],[5,5],[-8,5],[-13,8],[-17,15]],
+ europa:[[-10,37],[-9,43],[-2,49],[2,51],[8,54],[10,58],[20,56],[24,66],[14,65],[5,61],[-5,58],[-10,50],[-10,37]],
+ asia:[[26,41],[30,46],[40,48],[50,45],[60,55],[70,66],[100,72],[140,72],[160,68],[170,66],[160,60],[140,58],[145,50],[135,43],[122,40],[122,31],[120,23],[108,21],[100,13],[95,16],[90,22],[80,8],[77,8],[73,20],[67,24],[57,25],[48,30],[44,38],[36,36],[27,41],[26,41]],
+ oceania:[[114,-22],[122,-18],[131,-12],[142,-11],[146,-18],[153,-25],[150,-37],[141,-38],[129,-32],[115,-34],[114,-22]],
+ groenlandia:[[-45,60],[-20,70],[-20,82],[-45,83],[-58,76],[-54,66],[-45,60]]
+};
+
+function dibujaMundo(){
+  var svg=document.getElementById("mapa"), ns="http://www.w3.org/2000/svg", frag="";
+  // rejilla (meridianos/paralelos)
+  for(var lon=-180;lon<=180;lon+=30){var a=proj(lon,90),b=proj(lon,-90);frag+='<line class="grid" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>';}
+  for(var lat=-60;lat<=80;lat+=30){var a2=proj(-180,lat),b2=proj(180,lat);frag+='<line class="grid" x1="'+a2[0]+'" y1="'+a2[1]+'" x2="'+b2[0]+'" y2="'+b2[1]+'"/>';}
+  for(var k in CONT){
+    var pts=CONT[k].map(function(p){var q=proj(p[0],p[1]);return q[0].toFixed(1)+","+q[1].toFixed(1);}).join(" ");
+    frag+='<polygon class="land" points="'+pts+'"/>';
+  }
+  svg.innerHTML=frag;
+}
+
+var DATOS=[], sel=null;
+function color(c){ return c==="isp"?"#22d3ee":(c==="hosting"?"#f472d0":"#9fb0cc"); }
+
+function pinta(){
+  var svg=document.getElementById("mapa");
+  // quitar puntos viejos
+  svg.querySelectorAll(".dot,.halo").forEach(function(e){e.remove();});
+  var maxv=Math.max(1,...DATOS.map(function(d){return d.veces||1;}));
+  DATOS.forEach(function(d,i){
+    if(d.lat==null||d.lon==null) return;
+    var q=proj(d.lon,d.lat), r=4+6*Math.sqrt((d.veces||1)/maxv), c=color(d.infra_clase);
+    var halo='<circle class="halo" cx="'+q[0]+'" cy="'+q[1]+'" r="'+(r+5)+'" fill="'+c+'" opacity="0.18"/>';
+    var dot='<circle class="dot" data-i="'+i+'" cx="'+q[0]+'" cy="'+q[1]+'" r="'+r+'" fill="'+c+'" opacity="0.9" stroke="#04050a" stroke-width="1"><title>'+d.ip+' · '+(d.pais_nombre||'?')+'</title></circle>';
+    svg.insertAdjacentHTML("beforeend", halo+dot);
+  });
+  svg.querySelectorAll(".dot").forEach(function(e){ e.onclick=function(){ selecciona(+e.getAttribute("data-i")); }; });
+}
+
+function lista(){
+  var cont=document.getElementById("lista");
+  if(!DATOS.length){ cont.innerHTML='<div class="vacio">Aún no hay ataques detectados.<br>Kira está vigilando. 🛡️</div>'; return; }
+  cont.innerHTML=DATOS.map(function(d,i){
+    var cls=d.infra_clase||"desconocido";
+    return '<div class="card" data-i="'+i+'"><span class="veces">'+(d.veces||1)+'×</span>'
+      +'<div class="ip">'+d.ip+'</div>'
+      +'<div class="pais">'+(d.pais_nombre||"país desconocido")+(d.org?(" · "+d.org):"")+'</div>'
+      +'<span class="tag '+cls+'">'+(cls==="isp"?"posible particular":(cls==="hosting"?"empresa / hosting":"sin clasificar"))+'</span>'
+      +'<div class="det">'+( (d.tipos||[]).join(" · ") )+'</div></div>';
+  }).join("");
+  cont.querySelectorAll(".card").forEach(function(e){ e.onclick=function(){ selecciona(+e.getAttribute("data-i")); }; });
+}
+
+function selecciona(i){
+  sel=i;
+  document.querySelectorAll(".card").forEach(function(e){ e.classList.toggle("sel", +e.getAttribute("data-i")===i); });
+  var card=document.querySelector('.card[data-i="'+i+'"]');
+  if(card) card.scrollIntoView({block:"nearest"});
+}
+
+function resumen(){
+  var n=DATOS.length, m=DATOS.filter(function(d){return d.lat!=null;}).length;
+  document.getElementById("resumen").textContent = n ? (n+" IP(s) · "+m+" en el mapa") : "sin ataques";
+}
+
+function cargar(datos){ DATOS=(datos&&datos.ataques)||[]; dibujaMundo(); pinta(); lista(); resumen(); }
+
+// ---- datos: de Python (pywebview) o, en prueba, de mentira ----
+var FAKE={ataques:[
+  {ip:"5.188.0.5",pais_nombre:"Rusia",org:"SELECTEL hosting",infra_clase:"hosting",lat:61.5,lon:105.3,veces:42,tipos:["Intento de entrar por SSH (fuerza bruta)"]},
+  {ip:"1.0.0.1",pais_nombre:"Estados Unidos",org:"CLOUDFLARENET",infra_clase:"hosting",lat:39.0,lon:-98.0,veces:12,tipos:["Conexión bloqueada / escaneo de puertos"]},
+  {ip:"80.58.0.1",pais_nombre:"España",org:"Telefonica broadband",infra_clase:"isp",lat:40.2,lon:-3.7,veces:3,tipos:["Intento de entrar por SSH (fuerza bruta)"]}
+]};
+function pide(){
+  if(window.pywebview && window.pywebview.api && window.pywebview.api.mapa_ataques){
+    Promise.resolve(window.pywebview.api.mapa_ataques()).then(cargar).catch(function(){cargar({ataques:[]});});
+  } else { cargar(FAKE); }
+}
+if(window.pywebview && window.pywebview.api){ pide(); }
+else { window.addEventListener("pywebviewready", pide); setTimeout(pide, 400); }
+</script>
+</body></html>

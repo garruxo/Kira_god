@@ -199,9 +199,10 @@ def mapa(estado):
 # =====================================================================================
 #  Vigilar sola cada cierto tiempo (lo que arranca el portátil)
 # =====================================================================================
-def vigilar(cada_min=10, ruta=None, defensa=None, avisar=None, parar=None, dormir=time.sleep):
+def vigilar(cada_min=10, ruta=None, defensa=None, avisar=None, parar=None, dormir=time.sleep, al_vigilar=None):
     """Da una pasada cada `cada_min` minutos, para siempre (hasta que `parar()` diga que no). Cada aviso nuevo se
-    pasa a `avisar(aviso)`. Solo mira y avisa; nunca toca la red."""
+    pasa a `avisar(aviso)`. `al_vigilar()` (opcional) se llama en cada pasada (p. ej. recoger los ataques para el
+    mapa). Solo mira y avisa; nunca toca la red."""
     avisar = avisar or (lambda a: print(f"[Kira·red] {a['detalle']}"))
     cada = max(1, int(cada_min)) * 60
     while True:
@@ -212,6 +213,11 @@ def vigilar(cada_min=10, ruta=None, defensa=None, avisar=None, parar=None, dormi
             if a.get("nivel") != "info":
                 avisar(a)
         guardar(estado, ruta)
+        if al_vigilar:
+            try:
+                al_vigilar()
+            except Exception:
+                pass
         if parar and parar():
             return
         dormir(cada)
@@ -230,8 +236,17 @@ def main(argv=None):
         return
     if a.vigilar:
         print(f"Vigilando tu red cada {a.cada} min (solo aviso, nada automático). Ctrl+C para parar.")
+        # en cada pasada, además, recoge los ataques de fuera para el mapa (solo lee los registros)
+        def recoge_ataques():
+            try:
+                import ataques_kira as at
+                for nueva in at.paso():
+                    print(f"[Kira·ataque] desde {nueva['ip']} ({nueva.get('pais_nombre','?')}): "
+                          f"{', '.join(nueva.get('tipos', [])) or 'intento'}")
+            except Exception:
+                pass
         try:
-            vigilar(a.cada, ruta=a.ruta)
+            vigilar(a.cada, ruta=a.ruta, al_vigilar=recoge_ataques)
         except KeyboardInterrupt:
             print("\nFin de la vigilancia.")
         return

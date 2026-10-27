@@ -404,6 +404,10 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                 if accion == "fuerza":
                     import claves_kira as ck
                     return self._json(200, {"ok": True, **ck.fuerza(d.get("clave", ""))})
+                # --- mapa de ataques: de dónde intentan atacarte ---
+                if accion == "ataques":
+                    import ataques_kira as at
+                    return self._json(200, {"ok": True, **at.mapa_datos(at.cargar())})
                 return self._json(400, {"ok": False, "error": "acción de defensa desconocida"})
             except rd.DefensaError as e:
                 return self._json(400, {"ok": False, "error": str(e)})

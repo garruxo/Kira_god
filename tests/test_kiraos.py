@@ -60,6 +60,12 @@ try:
 finally:
     kiraos.shutil.which = _which
 
+# el mapa de ataques: el puente devuelve los datos aunque no haya ataques aún
+m = api.mapa_ataques()
+ok(isinstance(m, dict) and "ataques" in m and m["total"] == 0, "el puente del mapa responde (vacío si no hay ataques)")
+mapa_html = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "mapa.html"), encoding="utf-8").read()
+ok("mapa_ataques" in mapa_html and "APARENTE" in mapa_html, "el mapa pide los datos y avisa de que el origen es aparente")
+
 # la pantalla HTML existe y tiene lo esencial
 html = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "arranque.html"), encoding="utf-8").read()
 ok("pulsa cualquier tecla" in html.lower(), "la pantalla trae el «pulsa cualquier tecla»")
