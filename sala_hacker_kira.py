@@ -31,6 +31,7 @@ def montar_sala_hacker(sm, ctx):
     import inicio_kira as ik
     import programacion_kira as pk
     import curso_avanzado_kira as ca
+    import explicacion_codigo_kira as exc
 
     boton, entrada, texto_largo, en_hilo = ctx["boton"], ctx["entrada"], ctx["texto_largo"], ctx["en_hilo"]
     TXT, NEON, TENUE, GRIS, VERDE, ROJO = (ctx[k] for k in ("TXT", "NEON", "TENUE", "GRIS", "VERDE", "ROJO"))
@@ -308,6 +309,19 @@ def montar_sala_hacker(sm, ctx):
         confirmacion["reloj"] = None
         btn_aplicar.text = "Aplicar"
 
+    def mostrar_codigo_explicado():
+        """Enseña el CÓDIGO que Kira escribió y lo explica línea por línea (técnico, para aprender)."""
+        pend = getattr(ctl, "pendiente", None)
+        cod = getattr(pend, "codigo", "") if pend is not None else ""
+        if not cod:
+            return
+        try:
+            expl = exc.texto_plano(cod)
+        except Exception:
+            expl = ""
+        res.text += ("\n\n——— EL CÓDIGO QUE ESCRIBIÓ ———\n" + cod.rstrip() +
+                     ("\n\n——— CÓMO FUNCIONA (técnico) ———\n" + expl if expl else ""))
+
     def enviar_mejora(al_terminar=None, codigo=None):
         pedido = ik.limpiar_entrada(campo_mej.text)
         if not pedido or btn_env.disabled:
@@ -328,6 +342,7 @@ def montar_sala_hacker(sm, ctx):
                     al_terminar({"ok": False, "aprobable": False, "texto": f"[x] {r}"})
                 return
             res.text = r["texto"] + (f"\n\n(Intentos: {r['intentos']})" if r.get("intentos") else "")
+            mostrar_codigo_explicado()
             decision(bool(r.get("aprobable")))
             if al_terminar is not None:
                 al_terminar(r)

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kira programando · KiraOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"JetBrains Mono","DejaVu Sans Mono","Consolas",monospace}
+html,body{width:100%;height:100%;overflow:hidden;background:#060d09;color:#cfeeda}
+.wrap{position:fixed;inset:0;display:flex;flex-direction:column;background:radial-gradient(900px 600px at 50% 20%,#0a1a10,#060d09 60%)}
+.top{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid #16351f}
+.orb{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#16243f,#0a1020);box-shadow:0 0 0 2px rgba(40,224,122,.5),0 0 14px rgba(40,224,122,.5);display:grid;place-items:center}
+.orb b{font-size:10px;font-weight:800;color:#28e07a}
+.top h1{font-size:17px;font-weight:700;color:#28e07a;letter-spacing:1px;text-shadow:0 0 8px rgba(40,224,122,.5)}
+.estado{margin-left:auto;font-size:12px;color:#2ee6a0;background:#0e2416;border:1px solid #1f5030;border-radius:999px;padding:5px 12px}
+.estado .p{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2ee6a0;box-shadow:0 0 8px #2ee6a0;margin-right:6px}
+.pide{padding:10px 22px;color:#9fd9b2;font-size:13px;border-bottom:1px solid #12301c;background:#081209}
+.pide b{color:#28e07a}
+.main{flex:1;display:flex;min-height:0}
+.codewrap{flex:1.3;display:flex;flex-direction:column;min-width:0;padding:14px}
+.cab{color:#6f9079;font-size:12px;margin-bottom:6px}
+.cab .f{color:#8fe0a8}
+.code{flex:1;background:#030a06;border:1px solid #163020;border-radius:12px;padding:14px 16px;overflow:auto;font-size:14px;line-height:1.6;white-space:pre}
+.row{display:block}
+.ln{color:#3f6a4c;display:inline-block;width:30px;text-align:right;margin-right:16px;user-select:none}
+.kw{color:#ff7ad9}.fn{color:#5fd0ff}.st{color:#e0c23a}.cm{color:#5f8f6c;font-style:italic}.nu{color:#c4a0ff}
+.cur{display:inline-block;width:9px;height:17px;background:#28e07a;vertical-align:-3px;box-shadow:0 0 8px #28e07a;animation:p .9s steps(1) infinite}
+@keyframes p{50%{opacity:0}}
+.exp{flex:1;border-left:1px solid #16351f;display:flex;flex-direction:column;min-width:0;background:rgba(8,20,13,.4)}
+.exp h2{color:#28e07a;font-size:13px;padding:14px 16px 8px;letter-spacing:.5px}
+.exp .lista{flex:1;overflow:auto;padding:0 16px 14px}
+.nota{background:#081811;border:1px solid #1c4a2c;border-radius:9px;padding:9px 11px;margin-bottom:8px;opacity:0;transform:translateY(6px);transition:.25s}
+.nota.on{opacity:1;transform:none}
+.nota .l{color:#28e07a;font-weight:700;font-size:11.5px}
+.nota .t{color:#bfe6cb;font-size:12.5px;line-height:1.45;margin-top:2px}
+.resumen{color:#9fd9b2;font-size:12.5px;padding:10px 16px;border-top:1px solid #16351f;min-height:20px}
+.pie{display:flex;gap:10px;padding:12px 22px;border-top:1px solid #16351f;align-items:center}
+.ap{background:#145a2c;color:#d8ffe6;padding:11px 26px;border-radius:9px;font-weight:700;font-size:13px;box-shadow:0 0 12px rgba(40,224,122,.25)}
+.rc{background:#3a1414;color:#ffbfbf;padding:11px 20px;border-radius:9px;font-weight:700;font-size:13px}
+.aviso{margin-left:auto;color:#5f8f6c;font-size:11.5px;text-align:right}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="orb"><b>K</b></div><h1>KIRA PROGRAMANDO</h1>
+    <div class="estado" id="estado"><span class="p"></span>Escribiendo…</div></div>
+  <div class="pide" id="pide">Le pediste: <b>…</b></div>
+  <div class="main">
+    <div class="codewrap">
+      <div class="cab">📄 <span class="f" id="archivo">modulo.py</span> · lo que Kira está escribiendo</div>
+      <div class="code" id="code"></div>
+    </div>
+    <div class="exp">
+      <h2>EXPLICACIÓN (técnica, para aprender) 🧠</h2>
+      <div class="lista" id="exp"></div>
+      <div class="resumen" id="resumen"></div>
+    </div>
+  </div>
+  <div class="pie">
+    <div class="ap">Aplicar</div><div class="rc">Rechazar</div>
+    <div class="aviso">Al terminar, Kira lo prueba en su laboratorio.<br>Para instalar hacen falta tus dos toques.</div>
+  </div>
+</div>
+<script>
+var KW=["def","class","return","for","while","if","elif","else","try","except","finally","with","import","from","as","in","not","and","or","is","lambda","yield","raise","pass","break","continue","None","True","False"];
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function colCode(s){
+  // s ya viene escapado y SIN cadenas de texto. Un solo pase: números, palabras clave y nombres de función.
+  return s.replace(/(\b\d+\b)|([A-Za-z_]\w*)(\s*\()?/g, function(m,num,word,paren){
+    if(num){ return '<span class="nu">'+num+'</span>'; }
+    if(word){
+      var inner = KW.indexOf(word)>=0 ? '<span class="kw">'+word+'</span>'
+                : (paren ? '<span class="fn">'+word+'</span>' : word);
+      return inner + (paren||"");
+    }
+    return m;
+  });
+}
+function pinta(linea){
+  if(/^\s*#/.test(linea)) return '<span class="cm">'+esc(linea)+'</span>';
+  // separa las cadenas de texto ("..." / '...') del resto, para no colorearlas por dentro
+  var trozos=linea.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/);
+  var out="";
+  for(var i=0;i<trozos.length;i++){
+    if(i%2===1){ out+='<span class="st">'+esc(trozos[i])+'</span>'; }
+    else { out+=colCode(esc(trozos[i])); }
+  }
+  return out;
+}
+function espera(ms){return new Promise(function(r){setTimeout(r,ms);});}
+
+var DATOS=null;
+async function reproducir(d){
+  DATOS=d;
+  document.getElementById("pide").innerHTML = "Le pediste: <b>"+(d.pedido||"…")+"</b>";
+  if(d.archivo) document.getElementById("archivo").textContent=d.archivo;
+  var code=document.getElementById("code"), exp=document.getElementById("exp");
+  code.innerHTML=""; exp.innerHTML="";
+  var lineas=d.lineas||[];
+  for(var i=0;i<lineas.length;i++){
+    var L=lineas[i];
+    var row=document.createElement("span"); row.className="row";
+    row.innerHTML='<span class="ln">'+L.n+'</span>';
+    var span=document.createElement("span"); row.appendChild(span); code.appendChild(row);
+    // escribe la línea carácter a carácter
+    var txt=L.codigo||"";
+    for(var c=0;c<txt.length;c++){
+      span.innerHTML=pinta(txt.slice(0,c+1))+'<span class="cur"></span>';
+      code.scrollTop=code.scrollHeight;
+      await espera(txt.length>40?8:18);
+    }
+    span.innerHTML=pinta(txt);
+    // muestra la explicación de esa línea (si tiene)
+    if(L.nota){
+      var n=document.createElement("div"); n.className="nota";
+      n.innerHTML='<div class="l">Línea '+L.n+'</div><div class="t">'+L.nota+'</div>';
+      exp.appendChild(n); exp.scrollTop=exp.scrollHeight;
+      await espera(30); n.classList.add("on");
+    }
+    await espera(60);
+  }
+  document.getElementById("estado").innerHTML='<span class="p" style="background:#2ee6a0"></span>Listo ✓';
+  document.getElementById("resumen").textContent=d.resumen||"";
+}
+
+var FAKE={pedido:"que me avise cuando una app gaste mucha batería", archivo:"aviso_bateria.py",
+ resumen:"Este código define 2 función(es): registrar, revisar.",
+ lineas:[
+  {n:1,codigo:"# Avisa si una app consume mucha batería",nota:"comentario: una nota para las personas; Python la ignora."},
+  {n:2,codigo:"def registrar(nucleo):",nota:"def: define la función «registrar» con argumentos (nucleo). Es un bloque reutilizable; no se ejecuta hasta que se la llama."},
+  {n:3,codigo:"    nucleo.anadir_orden(\"batería\", revisar)",nota:"llamada: ejecuta nucleo.anadir_orden(…) (usa una función)."},
+  {n:4,codigo:"",nota:""},
+  {n:5,codigo:"def revisar(nucleo, texto):",nota:"def: define la función «revisar» con argumentos (nucleo, texto)."},
+  {n:6,codigo:"    apps = nucleo.consumo()",nota:"variable: guarda en «apps» el valor nucleo.consumo()."},
+  {n:7,codigo:"    altas = [a for a in apps if a.pct > 20]",nota:"variable: guarda en «altas» una lista con las apps que cumplen la condición."},
+  {n:8,codigo:"    if not altas:",nota:"if: condición. Ejecuta el bloque solo si not altas."},
+  {n:9,codigo:"        return \"Ninguna gasta de más.\"",nota:"return: la función termina y devuelve el texto."},
+  {n:10,codigo:"    return \"Gastan mucho: \" + \", \".join(a.nombre for a in altas)",nota:"return: la función termina y devuelve el texto con los nombres."}
+ ]};
+function arranca(){
+  if(window.pywebview && window.pywebview.api && window.pywebview.api.programando_datos){
+    Promise.resolve(window.pywebview.api.programando_datos()).then(reproducir).catch(function(){reproducir(FAKE);});
+  } else { reproducir(FAKE); }
+}
+if(window.pywebview && window.pywebview.api){ arranca(); }
+else { window.addEventListener("pywebviewready", arranca); setTimeout(arranca, 400); }
+</script>
+</body></html>

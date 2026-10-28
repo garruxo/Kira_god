@@ -63,6 +63,13 @@ finally:
 # el mapa de ataques: el puente devuelve los datos aunque no haya ataques aún
 m = api.mapa_ataques()
 ok(isinstance(m, dict) and "ataques" in m and m["total"] == 0, "el puente del mapa responde (vacío si no hay ataques)")
+
+# «Kira programando»: explica un código y la pantalla existe
+expl = api.explicar_codigo("def hola(n):\n    return n+1")
+ok("lineas" in expl and any("función «hola»" in l["nota"] for l in expl["lineas"]), "el puente explica el código (técnico)")
+ok(api.programando_datos() == {}, "sin programa cargado, la pantalla de programar no trae nada")
+prog_html = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "programando.html"), encoding="utf-8").read()
+ok("programando_datos" in prog_html and "EXPLICACIÓN" in prog_html, "la pantalla de programar pide los datos y muestra la explicación")
 mapa_html = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "mapa.html"), encoding="utf-8").read()
 ok("mapa_ataques" in mapa_html and "APARENTE" in mapa_html, "el mapa pide los datos y avisa de que el origen es aparente")
 

@@ -30,6 +30,8 @@ import kira_consola as kc
 
 ARRANQUE = os.path.join(AQUI, "kiraos_web", "arranque.html")
 MAPA = os.path.join(AQUI, "kiraos_web", "mapa.html")
+PROGRAMANDO = os.path.join(AQUI, "kiraos_web", "programando.html")
+sys.path.insert(0, os.path.dirname(AQUI))   # para la pieza compartida con el móvil
 CEREBRO_NOMBRE = "Qwen 35B"          # un solo cerebro
 
 
@@ -88,6 +90,15 @@ class Api:
         """Los datos para el mapa del mundo: de dónde intentan atacarte (país, dueño, tipo)."""
         import ataques_kira as at
         return at.mapa_datos(at.cargar())
+
+    def explicar_codigo(self, codigo):
+        """Explica un código línea por línea (técnico, para aprender). Lo usa la pantalla «Kira programando»."""
+        import explicacion_codigo_kira as ex
+        return ex.explicar(codigo)
+
+    def programando_datos(self):
+        """Lo que enseña la pantalla «Kira programando»: el programa y su explicación."""
+        return getattr(self, "programa", None) or {}
 
     def voz(self, texto):
         threading.Thread(target=self._hablar, args=(texto,), daemon=True).start()
@@ -178,15 +189,40 @@ def abrir_mapa(pantalla=True):
     webview.start()
 
 
+def abrir_programando(archivo=None, pedido="", pantalla=False):
+    """Abre la pantalla «Kira programando»: escribe el código en vivo y lo explica línea a línea. Si se da un
+    archivo (.py), explica ese; si no, la pantalla enseña su ejemplo."""
+    try:
+        import webview
+    except Exception:
+        print("Falta pywebview para esta pantalla.")
+        return
+    api = Api()
+    if archivo and os.path.isfile(archivo):
+        import explicacion_codigo_kira as ex
+        codigo = open(archivo, encoding="utf-8", errors="replace").read()
+        r = ex.explicar(codigo)
+        api.programa = {"pedido": pedido or os.path.basename(archivo), "archivo": os.path.basename(archivo),
+                        "lineas": r["lineas"], "resumen": r["resumen"]}
+    webview.create_window("Kira programando · KiraOS", PROGRAMANDO, js_api=api, fullscreen=pantalla,
+                          background_color="#060d09", min_size=(900, 600))
+    webview.start()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="El arranque de KiraOS en el portátil")
     ap.add_argument("--url", default="http://127.0.0.1:8770")
     ap.add_argument("--pantalla", action="store_true", help="a pantalla completa (modo KiraOS)")
     ap.add_argument("--mapa", action="store_true", help="abre el mapa de ataques y sale")
+    ap.add_argument("--programando", nargs="?", const="", metavar="ARCHIVO",
+                    help="abre la pantalla «Kira programando» (opcional: un archivo .py que explicar)")
     a = ap.parse_args(argv)
 
     if a.mapa:
         abrir_mapa(pantalla=a.pantalla)
+        return
+    if a.programando is not None:
+        abrir_programando(archivo=a.programando or None, pantalla=a.pantalla)
         return
 
     token = kc.leer_token()
