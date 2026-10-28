@@ -44,16 +44,16 @@ def anotar_error(origen, texto):
 
 
 def ultimo_cierre():
-    """Si la vez anterior la app se cerró de golpe, el motivo (últimas líneas); si no, ''."""
+    """Si la vez anterior la app se cerró de golpe, un aviso CORTO y claro (sin el churro técnico); si no, ''.
+    El log entero se queda en kira_cierre.log; aquí solo sale un resumen amable (cierres_kira.resumen_cierre)."""
     try:
+        import cierres_kira
         with open(RUTA_CIERRE, encoding="utf-8", errors="replace") as f:
             bloques = f.read().split("=== arranque ")
         anterior = bloques[-2] if len(bloques) >= 2 else ""
-        if "Fatal Python error" in anterior or "Segmentation fault" in anterior or "File " in anterior:
-            return "\n".join(anterior.strip().splitlines()[-12:])
+        return cierres_kira.resumen_cierre(anterior)
     except Exception:
-        pass
-    return ""
+        return ""
 
 
 # 1. Cargar el Núcleo Kira God, mostrando el error real si falla

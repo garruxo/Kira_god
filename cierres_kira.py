@@ -73,6 +73,28 @@ def motivo_android(cadena, visto_ms=0):
     return texto, instante
 
 
+def resumen_cierre(anterior):
+    """Aviso CORTO y claro si la vez anterior la app se cerró de golpe (un fallo grave/nativo). Devuelve '' si no
+    hubo cierre así. NO enseña el registro técnico entero (esa lista de módulos de Kivy, rutas, etc.): eso se queda
+    en kira_cierre.log. Como mucho, saca UNA línea con el motivo de verdad (el error), si la encuentra."""
+    texto = str(anterior or "")
+    if "Fatal Python error" not in texto and "Segmentation fault" not in texto:
+        return ""
+    motivo = ""
+    _SALTA = ("File ", "Current thread", "Thread ", "Extension modules", "Stack ", "  ")
+    for linea in reversed(texto.splitlines()):
+        l = linea.strip()
+        if not l or l.startswith(_SALTA) or "kivy" in l.lower() or l.lower().startswith("0x"):
+            continue
+        if re.search(r"(Fatal Python error|Segmentation fault|[A-Za-z_]+Error\b|[A-Za-z_]+Exception\b|Killed)", l):
+            motivo = l[:140]
+            break
+    aviso = "La vez anterior me cerré sola de golpe, pero ya he vuelto. Si te vuelve a pasar, dímelo."
+    if motivo:
+        aviso += f"\n(motivo técnico: {motivo})"
+    return aviso
+
+
 class Visto:
     """Hasta qué cierre ya se avisó (para no repetirlo en cada arranque)."""
 
