@@ -440,7 +440,8 @@ class KiraGodCore:
                   "programa que…» o «hazme un juego de…» (te queda en el editor), «diséñame una web / una app / un "
                   "videoclip de…», «experimenta con …» / «inventa un algoritmo nuevo para …» (código experimental: pruebas "
                   "varias ideas en modo seguro y te quedas con la mejor) «descarga este PDF: enlace», «resume el pdf 2», «qué dice el pdf 2 "
-                  "sobre …» (tu biblioteca de PDF) y «estudia …» (también «estudia diseño», «estudia programación "
+                  "sobre …» (tu biblioteca de PDF), «aprende de este vídeo: ‹enlace de YouTube›» (lee sus subtítulos, lo "
+                  "resume y lo guarda en el baúl) y «estudia …» (también «estudia diseño», «estudia programación "
                   "avanzada» y «estudia redes neuronales»): si lo pide con otras palabras, dile cómo pedirlo así. "
                   "SÍ puedes moverte por la app y abrir otras apps, pero lo hace la app al oír órdenes como «Kira, abre la "
                   "sala hacker», «ve a los juegos», «abre WhatsApp», «ajustes del wifi» o «conéctate al ordenador»: si te "
@@ -1463,6 +1464,25 @@ class KiraGodCore:
                 f"guardado {guardadas} ficha(s) nuevas en mi baúl" + (", y Claude las ha repasado" if repaso else "") +
                 ". Pregúntame cuando quieras.")
 
+    def aprender_de_video(self, command):
+        """«aprende de este vídeo: ‹enlace de YouTube›» -> saca lo que dice (subtítulos; si no hay, el oído), lo
+        resume y lo guarda en el baúl. La voz puede pedirlo; no instala nada."""
+        import video_kira as vk
+        r = vk.aprender(command, transcribir=getattr(self, "_oido_video", None))
+        if not r.get("ok"):
+            return "[x] " + r.get("error", "No pude aprender de ese vídeo.")
+        pag = {"titulo": r["titulo"], "url": "https://youtu.be/" + vk.id_de(command), "texto": r["texto"]}
+        try:
+            self.guardar_pagina(pag, tema=r["titulo"])
+        except Exception:
+            pass
+        resumen, con = self.resumir_pagina(pag, tema=r["titulo"])
+        fuente = "sus subtítulos" if r.get("fuente") == "subtitulos" else "mi oído"
+        cab = f"He aprendido del vídeo «{r['titulo']}» (de {fuente}) y lo he guardado en mi baúl.\n\n"
+        if con:
+            return cab + resumen
+        return cab + "(Sin cerebro encendido no sé resumir, pero he guardado el texto del vídeo tal cual en el baúl.)"
+
     def _orden_internet(self, command):
         import internet_kira as ik_
         p = ik_.interpretar(command)
@@ -1995,6 +2015,8 @@ class KiraGodCore:
         elif cmd_lower in ("recuerdos", "baul", "baúl", "baúl de recuerdos", "baul de recuerdos") or \
                 re.match(r"^(?:guarda recuerdo|qu[eé] recuerdas de|recuerdos de|busca en tus recuerdos|olvida recuerdo|parecido)\b", cmd_lower):
             return self._orden_recuerdos(command, cmd_lower)
+        elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
+            return self.aprender_de_video(command)
         elif getattr(self, "internet", None) is not None and self.internet.es_orden(command):
             return self._orden_internet(command)
         elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):
