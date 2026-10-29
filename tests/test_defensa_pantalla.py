@@ -78,15 +78,17 @@ d["abrir"]()
 ok(sm.current == "defensa", "al abrir va a la pantalla de defensa")
 ok(botones.get("COMBATIR") and botones.get("dejar pasar"), "están los botones COMBATIR / dejar pasar")
 
-# juega la partida: dejamos que corra el reloj (decisiones automáticas) y además pulsamos a veces
-for i in range(140):
+# juega la partida: corre el reloj (decisiones automáticas) y, a ratos, decidimos nosotros (abre la ventana de
+# código) y la cerramos con «Saltar» / «Comprobar» (no debe petar ni quedarse atascada)
+for i in range(240):
     Clock.correr(1, dt=1.0)
-    if i % 7 == 0:
-        try:
-            botones["COMBATIR"]()
-        except Exception as e:
-            ok(False, "pulsar COMBATIR no debe petar: " + repr(e))
-            break
+    for b in ("COMBATIR", "Saltar", "Comprobar"):
+        if botones.get(b):
+            try:
+                botones[b]()
+            except Exception as e:
+                ok(False, f"pulsar «{b}» no debe petar: " + repr(e))
+                raise SystemExit(1)
 
 # al terminar las rondas, Kira ha guardado sus umbrales (los datos que aprende)
 ruta = os.path.join(ctx["core"].dir, "defensa.json")

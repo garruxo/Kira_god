@@ -90,6 +90,15 @@ ok(valido and "def es_amenaza" in cod, "el detector sale como código Python vá
 ok("import socket" not in cod and "subprocess" not in cod and "def es_amenaza" in cod,
    "el detector es solo defensa: no abre red ni ejecuta nada")
 
+# --- lección de código defensivo (la ventana para escribir y aprender) ---
+lec = dj.leccion_codigo("fuerza_bruta")
+ok(len(lec) >= 1 and all("codigo" in p and "explica" in p for p in lec), "la lección trae líneas de código con su explicación")
+ok(dj.comprobar_codigo("    bloquear(evento['origen'])", "bloquear(evento['origen'])"), "acepta aunque no pongas la sangría")
+ok(dj.comprobar_codigo("if evento['enlace']:", 'if evento["enlace"]:'), "acepta comillas dobles o simples")
+ok(not dj.comprobar_codigo("if evento['logins'] >= 18:", "otra cosa"), "rechaza si escribes otra cosa")
+ok(not dj.comprobar_codigo("dejar_pasar(evento)", ""), "vacío no cuenta como correcto")
+ok(dj.leccion_codigo("loquesea"), "un tipo desconocido cae a una lección por defecto (no vacía)")
+
 # --- reconocedor de la orden ---
 ok(dj.es_orden("Kira, entrena tus defensas"), "reconoce «entrena tus defensas»")
 ok(dj.es_orden("juega al laberinto de defensa"), "reconoce «juega al laberinto de defensa»")

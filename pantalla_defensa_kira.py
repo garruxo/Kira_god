@@ -22,6 +22,7 @@ def montar_defensa(sm, ctx):
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.label import Label
     from kivy.uix.widget import Widget
+    from kivy.uix.textinput import TextInput
     from kivy.graphics import Color, Line, Rectangle
     from kivy.metrics import dp
     import defensa_juego_kira as dj
@@ -144,9 +145,139 @@ def montar_defensa(sm, ctx):
     fila.add_widget(btn_pasar)
     hud.add_widget(fila)
 
+    # ---- ventana emergente: escribe el código de defensa para aprenderlo ----
+    modal = FloatLayout(opacity=0, disabled=True)
+    raiz.add_widget(modal)
+    with modal.canvas.before:
+        Color(0, 0, 0, 0.78)
+        mrect = Rectangle(pos=(0, 0), size=(10, 10))
+    modal.bind(pos=lambda *_: setattr(mrect, "pos", modal.pos), size=lambda *_: setattr(mrect, "size", modal.size))
+    caja = BoxLayout(orientation="vertical", size_hint=(0.94, None), height=dp(360), spacing=dp(6),
+                     padding=dp(12), pos_hint={"center_x": 0.5, "center_y": 0.5})
+    with caja.canvas.before:
+        Color(0.03, 0.08, 0.10, 1)
+        crect = Rectangle(pos=(0, 0), size=(10, 10))
+        Color(*CY)
+        cline = Line(width=1.4)
+
+    def _caja_bg(*_):
+        crect.pos, crect.size = caja.pos, caja.size
+        cline.rectangle = [caja.x, caja.y, caja.width, caja.height]
+    caja.bind(pos=_caja_bg, size=_caja_bg)
+    lec_tit = Label(text="EL CÓDIGO QUE LO COMBATE", color=CY, font_size=tam(14), bold=True,
+                    size_hint_y=None, height=dp(26), halign="center", **MONO)
+    lec_prog = Label(text="", color=TENUE, font_size=tam(11), size_hint_y=None, height=dp(20), halign="center", **MONO)
+    lec_expl = Label(text="", color=(1, 1, 1, 1), font_size=tam(12.5), size_hint_y=None, height=dp(56),
+                     halign="center", valign="middle", **FUENTE)
+    lec_expl.bind(size=lambda w, v: setattr(w, "text_size", (w.width - dp(8), w.height)))
+    lec_cod = Label(text="", color=VD, font_size=tam(13), size_hint_y=None, height=dp(44), halign="center",
+                    valign="middle", **MONO)
+    lec_cod.bind(size=lambda w, v: setattr(w, "text_size", (w.width - dp(8), w.height)))
+    lec_in = TextInput(text="", hint_text="escribe aquí el código, igual que arriba…", multiline=False,
+                       size_hint_y=None, height=dp(44), font_size=tam(13))
+    lec_fb = Label(text="", color=TENUE, font_size=tam(12), size_hint_y=None, height=dp(26), halign="center", **MONO)
+    fila_lec = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+    btn_lec1 = boton("Comprobar", lambda: lec_primario(), VERDE)
+    btn_lec2 = boton("Saltar", lambda: lec_secundario(), GRIS)
+    fila_lec.add_widget(btn_lec1)
+    fila_lec.add_widget(btn_lec2)
+    for w in (lec_tit, lec_prog, lec_expl, lec_cod, lec_in, lec_fb, fila_lec):
+        caja.add_widget(w)
+    modal.add_widget(caja)
+    try:
+        lec_in.bind(on_text_validate=lambda *_: comprobar_leccion())
+    except Exception:
+        pass
+
     # ---- estado del juego ----
     est = {"i": 0, "esc": None, "esperando": False, "resultados": [], "ac": 0, "fa": 0, "fl": 0,
-           "defensa": None, "reloj_auto": None, "activo": False}
+           "defensa": None, "reloj_auto": None, "activo": False, "lec": [], "lec_i": 0, "lec_cerrar": None,
+           "modal": False, "lec_modo": "escribe", "lec_reloj": None}
+
+    def _cancel_lec_reloj():
+        if est["lec_reloj"] is not None:
+            try:
+                est["lec_reloj"].cancel()
+            except Exception:
+                pass
+            est["lec_reloj"] = None
+
+    def abrir_leccion(tipo, al_cerrar, modo="escribe"):
+        """modo 'escribe': lo decidiste tú, escribes el código para aprenderlo. modo 'mira': lo hizo Kira, te enseña
+        sus procedimientos en código (tú solo miras; va pasando sola)."""
+        est["lec"] = dj.leccion_codigo(tipo)
+        est["lec_i"] = 0
+        est["lec_cerrar"] = al_cerrar
+        est["lec_modo"] = modo
+        est["modal"] = True
+        modal.opacity, modal.disabled = 1, False
+        render_leccion()
+
+    def render_leccion():
+        _cancel_lec_reloj()
+        i, lec = est["lec_i"], est["lec"]
+        if i >= len(lec):
+            cerrar_leccion()
+            return
+        paso = lec[i]
+        lec_cod.text = paso["codigo"]
+        lec_expl.text = paso["explica"]
+        lec_in.text = ""
+        if est["lec_modo"] == "escribe":
+            lec_tit.text = "EL CÓDIGO QUE LO COMBATE"
+            lec_prog.text = f"Código {i + 1} de {len(lec)}  ·  escríbelo igual para aprenderlo"
+            lec_in.disabled, lec_in.opacity, lec_in.height = False, 1, dp(44)
+            lec_fb.text = ""
+            btn_lec1.text, btn_lec2.text = "Comprobar", "Saltar"
+        else:                                   # mira: lo hizo Kira, va pasando sola
+            lec_tit.text = "LO QUE HIZO KIRA (su código)"
+            lec_prog.text = f"Procedimiento {i + 1} de {len(lec)}"
+            lec_in.disabled, lec_in.opacity, lec_in.height = True, 0, dp(1)
+            lec_fb.text = "Kira lo combate así ✓"
+            btn_lec1.text, btn_lec2.text = "Siguiente", "Cerrar"
+            est["lec_reloj"] = Clock.schedule_once(lambda _d: avanzar_leccion(), 2.4)
+
+    def avanzar_leccion():
+        if not est["modal"]:
+            return
+        _cancel_lec_reloj()
+        est["lec_i"] += 1
+        render_leccion()
+
+    def comprobar_leccion():
+        i, lec = est["lec_i"], est["lec"]
+        if not est["modal"] or i >= len(lec):
+            return
+        if dj.comprobar_codigo(lec[i]["codigo"], lec_in.text):
+            lec_fb.text = "✓ ¡correcto! ese es el código"
+            est["lec_i"] += 1
+            Clock.schedule_once(lambda _d: render_leccion(), 0.6)
+        else:
+            lec_fb.text = "✗ casi; cópialo tal cual (arriba)"
+
+    def lec_primario():
+        if est["lec_modo"] == "escribe":
+            comprobar_leccion()
+        else:
+            avanzar_leccion()
+
+    def lec_secundario():
+        if not est["modal"]:
+            return
+        if est["lec_modo"] == "escribe":
+            est["lec_i"] += 1          # Saltar
+            render_leccion()
+        else:
+            cerrar_leccion()           # Cerrar (deja de mirar los procedimientos)
+
+    def cerrar_leccion():
+        _cancel_lec_reloj()
+        est["modal"] = False
+        modal.opacity, modal.disabled = 0, True
+        cb = est["lec_cerrar"]
+        est["lec_cerrar"] = None
+        if cb:
+            cb()
 
     def _mostrar_panel(color_borde, fondo_rgba):
         pcol.rgba = fondo_rgba
@@ -225,7 +356,9 @@ def montar_defensa(sm, ctx):
             _con(f"✓ tráfico sano, bien hecho ({quien})")
         est["resultados"].append({"esc": esc, "decision": d, "resultado": res})
         _marcador()
-        Clock.schedule_once(nueva_ronda, 1.8)
+        modo_lec = "escribe" if quien == "Tú decides" else "mira"
+        Clock.schedule_once(lambda _d: abrir_leccion(esc["tipo"], lambda: Clock.schedule_once(nueva_ronda, 0.3),
+                                                     modo=modo_lec), 1.4)
 
     def terminar():
         est["activo"] = False

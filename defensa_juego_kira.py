@@ -207,6 +207,46 @@ def codigo_detector(defensa):
         "    return False\n")
 
 
+# Temario: el CÓDIGO DEFENSIVO que combate cada amenaza, línea a línea con su explicación (para que el dueño lo
+# escriba y aprenda cuáles son los correctos). Es pseudocódigo de DEFENSA (cerrar/bloquear/marcar/dejar pasar), no
+# hace nada real ni ofensivo: es para aprender la FORMA de defenderse.
+LECCION_CODIGO = {
+    "puerta_trasera": [
+        ("if evento['oculto']:", "Si detecto una conexión oculta intentando entrar al núcleo…"),
+        ("    cerrar_puerto(evento['puerto'])", "…cierro el puerto por el que se cuela."),
+        ("    avisar('puerta trasera')", "…y te aviso de que lo he parado."),
+    ],
+    "fuerza_bruta": [
+        ("if evento['logins'] >= 18:", "Si hay muchísimos intentos de contraseña seguidos…"),
+        ("    bloquear(evento['origen'])", "…bloqueo ese origen un rato para que pare."),
+    ],
+    "escaneo_puertos": [
+        ("if evento['puertos'] >= 15:", "Si alguien toca muchos puertos buscando una rendija…"),
+        ("    no_responder(evento)", "…no contesto a los puertos que no uso."),
+    ],
+    "enlace_trampa": [
+        ("if evento['enlace']:", "Si el enlace parece un engaño (phishing)…"),
+        ("    marcar_peligroso(evento['enlace'])", "…lo marco como peligroso y no lo abro."),
+    ],
+    "trafico_sano": [
+        ("dejar_pasar(evento)", "Es tráfico de confianza: lo dejo pasar, no es amenaza."),
+    ],
+}
+
+
+def leccion_codigo(tipo):
+    """Las líneas de código defensivo (con explicación) que combaten esa amenaza, para escribirlas y aprenderlas."""
+    pasos = LECCION_CODIGO.get(tipo, LECCION_CODIGO["trafico_sano"])
+    return [{"codigo": c, "explica": e} for c, e in pasos]
+
+
+def comprobar_codigo(esperado, escrito):
+    """¿Lo que escribió el dueño coincide con el código correcto? Perdona espacios/sangría y las comillas (' o ")."""
+    def norm(s):
+        return " ".join(str(s or "").replace('"', "'").split())
+    return bool(norm(escrito)) and norm(esperado) == norm(escrito)
+
+
 _PAL = ("defensa", "defender", "defiende", "defenderse", "defiéndete", "amenaza", "amenazas", "laberinto",
         "intruso", "intrusos", "ataque", "ataques")
 
