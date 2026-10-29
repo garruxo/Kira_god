@@ -47,6 +47,7 @@ def construir_interfaz(core, consola=None):
     from sala_diseno_kira import montar_sala_diseno
     from taller_kira import montar_taller
     from sala_ciber_kira import montar_sala_ciber
+    from pantalla_defensa_kira import montar_defensa
     from pantalla_bitacora_kira import montar_bitacora
     from pantallas_codigo_kira import montar_codigo
     from pantalla_cerebro_kira import montar_cerebro
@@ -1049,8 +1050,12 @@ def construir_interfaz(core, consola=None):
         en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t, f)), terminado)
 
     def defensa_por_voz(pedido=""):
-        """«entrena tus defensas» / «juega al laberinto de defensa»: Kira juega situaciones inventadas (solo defensa,
-        sin tocar tu red), lo ves en vivo en la consola y afina sus datos para mejorar."""
+        """«entrena tus defensas» / «juega al laberinto de defensa»: abre el JUEGO en 1ª persona (laberinto Matrix).
+        Si por lo que sea la pantalla no está, cae al entrenamiento en la consola de texto."""
+        if defensa_pant is not None:
+            decir("¡Vamos al laberinto! Combate las amenazas o déjalas pasar; si no decides, decido yo.", hablar=True)
+            Clock.schedule_once(lambda _dt: defensa_pant["abrir"](), 0.4)
+            return
         tarea_empieza("defensa", pedido or "entrenar mis defensas",
                       lambda p_=pedido: defensa_por_voz(p_), {"pedido": pedido})
         decir("Vale, entreno mis defensas en el laberinto. Míralo en la consola: voy diciendo qué amenaza veo y cómo "
@@ -2029,6 +2034,16 @@ def construir_interfaz(core, consola=None):
         "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
 
     # =================================================================================
+    #  JUEGO DE DEFENSA (laberinto Matrix en 1ª persona)
+    # =================================================================================
+    try:
+        defensa_pant = montar_defensa(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo, "ir": lambda *a, **k: ir(*a, **k),
+            "core": core, "voz": voz, "ganchos": ganchos, "dir_datos": dir_datos, "consola": con_trab})
+    except Exception:
+        defensa_pant = None
+
+    # =================================================================================
     #  SALA DE CIBERSEGURIDAD (búnker de solo lectura y aprendizaje)
     # =================================================================================
     ciber = montar_sala_ciber(sm, {
@@ -2067,6 +2082,8 @@ def construir_interfaz(core, consola=None):
             hacker["detener"]()
         if nombre != "sala_ciber":
             ciber["detener"]()
+        if nombre != "defensa" and defensa_pant is not None:
+            defensa_pant["detener"]()
         if nombre != "jugar":
             codigo_ui["parar_juego"]()
         diseno["detener_si_sale"](nombre)
