@@ -88,7 +88,9 @@ core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None
     pedidos.append(1), "NOMBRE: roto\n```python\nimport os\nprint(os.listdir())\n```")[1]
 decir_a_kira("Kira, escríbeme un programa que liste mis archivos")
 ok(correr(6, lambda: "No he conseguido un programa" in burbuja()), "si no pasa el modo seguro, lo dice")
-ok(sm.current == "inicio" and len(pedidos) >= 2, "lo reintenta y no abre el editor con algo roto")
+# ahora, al pedir un programa, se abre SOLA la consola de trabajo (Sala Hacker): un programa roto NO abre el editor y
+# te deja viendo los intentos fallidos en la terminal (no en el editor)
+ok(sm.current != "editor_codigo" and len(pedidos) >= 2, "lo reintenta y no abre el editor con algo roto")
 
 # diseño por voz desde cualquier sitio (sin IA: plantillas)
 core._leer_clave = lambda *a: ""
