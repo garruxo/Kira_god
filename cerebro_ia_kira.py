@@ -125,6 +125,24 @@ def limpiar_respuesta(texto):
     return t.strip()
 
 
+def sin_repeticiones(texto):
+    """Rompe los bucles del cerebro: si una misma secuencia de 1 a 10 palabras aparece pegada a sí misma una y otra
+    vez («no sé no sé no sé…», «y por eso. y por eso. y por eso.»), deja solo una. No toca repeticiones legítimas que
+    estén separadas, solo las que van seguidas."""
+    palabras = str(texto or "").split()
+    if len(palabras) < 6:
+        return str(texto or "").strip()
+    salida = []
+    for w in palabras:
+        salida.append(w)
+        n = len(salida)
+        for L in range(1, 11):                     # ¿el último bloque de L palabras es igual al bloque anterior?
+            if n >= 2 * L and salida[-L:] == salida[-2 * L:-L]:
+                del salida[-L:]
+                break
+    return " ".join(salida).strip()
+
+
 class Cerebro:
     def __init__(self, dir_datos, abrir=None, reloj=time.monotonic):
         self.ruta = os.path.join(dir_datos, "cerebro.json")
@@ -290,6 +308,8 @@ class Cerebro:
         cuerpo = json.dumps({"messages": msgs, "max_tokens": int(max_tokens),
                              "temperature": 0.6, "stream": bool(al_trozo),
                              "cache_prompt": True,                               # reutiliza lo ya leído: responde antes
+                             "repeat_penalty": 1.18, "repeat_last_n": 256,       # que no se quede repitiendo la misma frase
+                             "frequency_penalty": 0.4, "presence_penalty": 0.2,  # (sobre todo al resumir textos largos)
                              "chat_template_kwargs": {"enable_thinking": False}  # sin «pensar en voz baja» (Qwen)
                              }).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",

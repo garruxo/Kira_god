@@ -119,11 +119,28 @@ def elegir(lista, idioma="es"):
     return sorted(lista, key=punt)[0]
 
 
+def sin_repeticiones(texto, mínimo=2):
+    """Quita los solapes de los subtítulos automáticos: si una secuencia de `mínimo` a 10 palabras va pegada a sí misma,
+    deja solo una. (Los subtítulos auto de YouTube repiten el final de cada línea al principio de la siguiente.)"""
+    palabras = str(texto or "").split()
+    if len(palabras) < 6:
+        return str(texto or "").strip()
+    salida = []
+    for w in palabras:
+        salida.append(w)
+        n = len(salida)
+        for L in range(mínimo, 11):
+            if n >= 2 * L and salida[-L:] == salida[-2 * L:-L]:
+                del salida[-L:]
+                break
+    return " ".join(salida).strip()
+
+
 def texto_de_subtitulos(xml):
-    """El texto corrido de un subtítulo en formato timedtext (XML) de YouTube."""
+    """El texto corrido de un subtítulo en formato timedtext (XML) de YouTube, sin los solapes de los automáticos."""
     partes = re.findall(r"<text[^>]*>(.*?)</text>", str(xml or ""), re.S)
     limpio = " ".join(_html.unescape(re.sub(r"<[^>]+>", "", p)).replace("\n", " ") for p in partes)
-    return re.sub(r"\s+", " ", limpio).strip()
+    return sin_repeticiones(re.sub(r"\s+", " ", limpio).strip())
 
 
 def _titulo(pagina):

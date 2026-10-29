@@ -51,6 +51,17 @@ XML = '''<?xml version="1.0"?><transcript>
 t = vk.texto_de_subtitulos(XML)
 ok("Hola, en este tutorial" in t and "variables" in t and "<text" not in t, "lee el texto del subtítulo (sin etiquetas)")
 
+# --- subtítulos automáticos con solape (se repite el final de cada línea) ---
+XML_SOLAPE = ('<transcript>'
+              '<text>vamos a crear una función</text>'
+              '<text>crear una función en Python</text>'
+              '<text>en Python que sume dos números</text></transcript>')
+ts = vk.texto_de_subtitulos(XML_SOLAPE)
+ok(ts.count("crear una función") == 1 and ts.count("en Python") == 1 and "sume dos números" in ts,
+   "quita el solape de los subtítulos automáticos (cada trozo se queda una vez)")
+ok(vk.sin_repeticiones("sí sí sí sí sí sí vale", mínimo=1) == "sí vale", "rompe un bucle de una sola palabra")
+ok(vk.sin_repeticiones("hola que tal") == "hola que tal", "no toca un texto normal sin repeticiones")
+
 # --- aprender() entero con un bajar de mentira ---
 def bajar_falso(url):
     if "watch?v=" in url:

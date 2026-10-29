@@ -1409,6 +1409,7 @@ class KiraGodCore:
                                      f"Tema: {tema or pag.get('titulo', '')}\n\nTexto de {pag.get('url', '')}:\n"
                                      + texto[:tope], max_tokens=400)
                 r = " ".join(cerebro_ia_kira.limpiar_respuesta(r).split())
+                r = cerebro_ia_kira.sin_repeticiones(r)   # por si el cerebro se quedó repitiendo la misma frase
                 if len(r) > 40:
                     return r[:2000], True
             except Exception:
