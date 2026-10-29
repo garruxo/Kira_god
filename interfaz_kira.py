@@ -1859,8 +1859,15 @@ def construir_interfaz(core, consola=None):
             en_hilo(lambda: core.pdfs.anadir_archivo(partes[1], nombre[:-4] if nombre.lower().endswith(".pdf") else nombre,
                                                      mover=True), fin)
         elif partes[0] == "texto" and len(partes) >= 2:
+            compartido = "\n".join(partes[1:])
+            import video_kira as vk
+            if vk.es_youtube(compartido):                      # te comparten un vídeo de YouTube: Kira aprende de él
+                ir("inicio")
+                decir("Me pongo a aprender de ese vídeo de YouTube…", hablar=True)
+                en_hilo(lambda: core.aprender_de_video(compartido), lambda r: decir(str(r)))
+                return
             import pdf_kira as pdk
-            url = pdk.url_de("\n".join(partes[1:]))
+            url = pdk.url_de(compartido)
             if url:
                 ir("pdf")
                 decir("Me has pasado un enlace: si es un PDF, me lo guardo.", hablar=False)
