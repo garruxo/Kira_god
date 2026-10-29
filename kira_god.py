@@ -746,10 +746,11 @@ class KiraGodCore:
             return None
         return ak.interpretar_revision(texto, extraer)
 
-    def generar_programa(self, pedido, quien=None, tema_saber=None, con_recetas=True):
+    def generar_programa(self, pedido, quien=None, tema_saber=None, con_recetas=True, al_trozo=None):
         """(nombre, codigo) de un programa para el EDITOR (no se instala nada). Usa recetas y lo estudiado.
         tema_saber: de qué buscar saber (por defecto, el pedido). con_recetas=False: solo lo estudiado (los
-        EXPERIMENTOS ya llevan las ideas de sus técnicas y no deben copiar su código)."""
+        EXPERIMENTOS ya llevan las ideas de sus técnicas y no deben copiar su código). al_trozo(texto): si se pasa,
+        el código va llegando poco a poco (para enseñarlo escribiéndose en la consola)."""
         import cerebro_ia_kira
         import programar_kira as pk
         import saber_mejoras_kira as sm_
@@ -771,30 +772,39 @@ class KiraGodCore:
         extra = self.texto_librerias_para_programar()
         usuario = f"Programa pedido: {pedido}" + (f"\n{extra}" if extra else "") + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, pk.SISTEMA_PROGRAMA_LOCAL if local else pk.SISTEMA_PROGRAMA, usuario,
-                                 max_tokens=1200 if local else 3000)
+                                 max_tokens=1200 if local else 3000, al_trozo=al_trozo)
         return pk.extraer_programa(texto)
 
     @_con_trabajo("programa")
-    def programa_acordado(self, pedido):
+    def programa_acordado(self, pedido, al_paso=None, al_codigo=None):
         """Escribe, prueba en modo seguro y (si están los dos) acuerda con Claude un programa para el editor.
-        Devuelve el resultado de acuerdo_kira.negociar(...) (+ 'texto' para enseñar)."""
+        Devuelve el resultado de acuerdo_kira.negociar(...) (+ 'texto' para enseñar).
+        al_paso(texto): cuenta cada paso (para la consola en vivo). al_codigo(texto): el código según se escribe y,
+        al cerrar un intento, (codigo, ok, motivo) para pintarlo con su resultado."""
         import acuerdo_kira as ak
         import programar_kira as pk
         autor, revisor = self.reparto("codigo")
         if autor is None:
             raise RuntimeError(self._sin_cerebro())
-        estado = {"objecion": ""}
+        paso = al_paso or (lambda _t: None)
 
         def proponer(aviso):
+            paso("Escribiendo el programa…" if not aviso else "Reescribiendo con lo aprendido…")
+            trozo = (lambda t: al_codigo(t, None, None)) if al_codigo else None
             try:
-                return self.generar_programa(pedido + (f"\n\n{aviso}" if aviso else ""), quien=autor if revisor else None)
+                return self.generar_programa(pedido + (f"\n\n{aviso}" if aviso else ""),
+                                             quien=autor if revisor else None, al_trozo=trozo)
             except ValueError as e:
                 raise ak.Reintentar(f"{e} Responde con NOMBRE: … y el programa en un bloque ```python.")
             except RuntimeError as e:
                 raise ak.Parar(str(e))
 
         def probar(nombre, codigo):
+            paso("Probando en modo seguro…")
             ok, motivo, dato = pk.probar_programa(codigo)
+            if al_codigo:
+                al_codigo(codigo, ok, motivo)
+            paso(("✓ pasó las pruebas" if ok else "✗ falló") + (f": {motivo}" if (motivo and not ok) else ""))
             return ok, motivo, dato
 
         def revisar(rol, nombre, codigo, dato, objecion):
@@ -813,6 +823,56 @@ class KiraGodCore:
             r["texto"] = ("[x] No he conseguido un programa que funcione. " + (r.get("error") or "")).strip() + \
                 (f"\n{hist}" if hist else "")
         return r
+
+    def recordar_correccion(self, pedido, correccion, malo=False):
+        """Guarda en el baúl lo que el dueño CORRIGE (o descarta) de un intento, para mejorar la próxima vez que pida
+        algo parecido (lo reusa `saber_mejoras`/`recuerdos.contexto`). No cambia código solo: es memoria. Devuelve
+        True si guardó algo."""
+        rec = getattr(self, "recuerdos", None)
+        correccion = " ".join(str(correccion or "").split())
+        if rec is None or len(correccion) < 3:
+            return False
+        tema = (" ".join(str(pedido or "").split())[:80]) or "correcciones"
+        nota = ("El dueño dice que esto NO vale: " if malo else "Corrección del dueño para la próxima vez: ") + correccion
+        try:
+            return bool(rec.guardar(nota, tema=tema, fuente="correccion-del-dueño"))
+        except Exception:
+            return False
+
+    @_con_trabajo("defensa")
+    def entrenar_defensa(self, rondas=8, al_paso=None, al_codigo=None):
+        """Juego de PRÁCTICA DE DEFENSA (solo defensa, datos inventados, sin red real): Kira juega `rondas`
+        situaciones, cuenta cada una en vivo y al final AFINA sus umbrales (datos) para mejorar. Devuelve un resumen
+        y su detector como código (para poder meterlo en sus juegos con los dos toques)."""
+        import random as _rnd
+        import defensa_juego_kira as dj
+        paso = al_paso or (lambda _t: None)
+        d = dj.Defensa(ruta=os.path.join(self.dir, "defensa.json"))
+        if al_codigo:
+            al_codigo(dj.codigo_detector(d), None, None)
+        paso(f"Entreno mis defensas ({rondas} situaciones inventadas, sin tocar tu red)")
+        resultados, totales = dj.jugar(d, rondas=rondas, semilla=_rnd.randint(1, 10 ** 9))
+        for r in resultados:
+            self.comprobar_cancelado()
+            esc, dec, res = r["esc"], r["decision"], r["resultado"]
+            if res == "acierto" and esc["ataque"]:
+                paso(f"Amenaza «{dec['nombre']}» ({dec['motivo']}) → la combato ✓")
+            elif res == "acierto":
+                paso("Tráfico sano → lo dejo pasar ✓")
+            elif res == "se_escapo":
+                paso(f"✗ Se me escapó una «{dj.AMENAZAS[esc['tipo']]['nombre']}»")
+            else:
+                paso("✗ Falsa alarma: paré tráfico sano")
+        for c in dj.aprender(d, resultados):
+            paso("⟳ Aprendí: " + c)
+        d.guardar()
+        if al_codigo:
+            al_codigo(dj.codigo_detector(d), None, None)
+        resumen = (f"Entrenamiento de defensa: {totales['aciertos']} aciertos, {totales['fallos']} se me escaparon y "
+                   f"{totales['falsas']} falsas alarmas (puntos {totales['puntos']}). He afinado mis defensas; "
+                   "para meter mi detector en tus juegos, dímelo y lo pruebo (tus dos toques).")
+        return {"ok": True, "totales": totales, "texto": resumen, "codigo": dj.codigo_detector(d),
+                "umbrales": dict(d.umbrales)}
 
     @_con_trabajo("experimento")
     def experimentar(self, tema, al_progreso=None):

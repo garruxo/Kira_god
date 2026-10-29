@@ -173,8 +173,10 @@ def montar_sala_hacker(sm, ctx):
     cuerpo = BoxLayout(orientation="vertical", spacing=dp(6))
     btn_apr = boton("APRENDER", lambda: modo("aprender"), VERDE)
     btn_mej = boton("MEJORAR", lambda: modo("mejorar"), GRIS)
+    btn_trab = boton("TRABAJO", lambda: modo("trabajo"), GRIS)
     pestanas.add_widget(btn_apr)
     pestanas.add_widget(btn_mej)
+    pestanas.add_widget(btn_trab)
     r_term.add_widget(pestanas)
     r_term.add_widget(cuerpo)
     p_term.add_widget(r_term)
@@ -389,11 +391,92 @@ def montar_sala_hacker(sm, ctx):
         res.text += "\n\n" + r["texto"]
         decision(False)
 
+    # ---- TRABAJO (la consola en vivo: código escribiéndose + pruebas, y Detener/Corregir/Borrar) ----
+    con_trab = ctx.get("consola")
+    c_trab = BoxLayout(orientation="vertical", spacing=dp(6))
+    c_trab.add_widget(etiqueta("Lo que Kira está haciendo en vivo: el código según lo escribe y sus pruebas (✓/✗). "
+                               "Puedes pararla, corregir (lo recuerda) o borrar el proceso.", alto=52))
+    sv_trab, res_trab = texto_largo("Aquí me verás trabajar cuando me des una orden: escribir un programa, un "
+                                    "experimento o entrenar mis defensas. Dímelo y empiezo.")
+    c_trab.add_widget(sv_trab)
+    campo_corr = entrada("Corrige algo para que lo recuerde la próxima vez…")
+    c_trab.add_widget(campo_corr)
+    fila_t = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+    fila_t.add_widget(boton("Detener", lambda: detener_trabajo(), ROJO))
+    fila_t.add_widget(boton("Corregir", lambda: corregir_trabajo(), VERDE))
+    fila_t.add_widget(boton("Borrar proceso", lambda: borrar_proceso(), GRIS))
+    c_trab.add_widget(fila_t)
+    estado_trab = {"v": -1, "cod": "", "expl": ""}
+
+    def detener_trabajo():
+        if con_trab is not None:
+            con_trab.pedir_detener()
+        try:
+            core.cancelar()
+        except Exception:
+            pass
+
+    def borrar_proceso():
+        detener_trabajo()
+        if con_trab is not None:
+            con_trab.terminar("Proceso borrado. Lista para otra cosa.")
+
+    def corregir_trabajo():
+        txt = ik.limpiar_entrada(campo_corr.text)
+        if not txt:
+            return
+        pedido = getattr(con_trab, "pedido", "") if con_trab is not None else ""
+        try:
+            guardado = core.recordar_correccion(pedido, txt)
+        except Exception:
+            guardado = False
+        campo_corr.text = ""
+        if con_trab is not None:
+            con_trab.linea(("✎ Corrección guardada: " + txt) if guardado else "✎ No pude guardar la corrección")
+
+    def refrescar_trabajo(_dt=None):
+        if con_trab is None or sm.current != "terminal" or estado.get("modo") != "trabajo":
+            return
+        v = con_trab.version()
+        if v == estado_trab["v"]:
+            return
+        estado_trab["v"] = v
+        cod = con_trab.ultimo_codigo()
+        expl = ""
+        if cod and not con_trab.codigo_vivo_txt:          # solo explico el bloque ya terminado
+            if cod != estado_trab["cod"]:
+                estado_trab["cod"] = cod
+                try:
+                    estado_trab["expl"] = exc.texto_plano(cod)
+                except Exception:
+                    estado_trab["expl"] = ""
+            expl = estado_trab["expl"]
+        try:
+            res_trab.text = con_trab.texto(expl)
+        except Exception:
+            res_trab.text = con_trab.texto()
+        try:
+            sv_trab.scroll_y = 0
+        except Exception:
+            pass
+    Clock.schedule_interval(refrescar_trabajo, 0.4)
+
+    def abrir_trabajo(*_):
+        estado["modo_siguiente"] = "trabajo"
+        ir("terminal")
+        modo("trabajo")
+        estado_trab["v"] = -1
+        refrescar_trabajo()
+
     def modo(nombre):
         cuerpo.clear_widgets()
-        cuerpo.add_widget(c_apr if nombre == "aprender" else c_mej)
+        cuerpo.add_widget(c_apr if nombre == "aprender" else c_trab if nombre == "trabajo" else c_mej)
         btn_apr.background_color = VERDE if nombre == "aprender" else GRIS
         btn_mej.background_color = VERDE if nombre == "mejorar" else GRIS
+        btn_trab.background_color = VERDE if nombre == "trabajo" else GRIS
+        estado["modo"] = nombre
+        if nombre == "trabajo":
+            refrescar_trabajo()
 
     def al_entrar_terminal():
         siguiente = estado.pop("modo_siguiente", None)
@@ -509,4 +592,5 @@ def montar_sala_hacker(sm, ctx):
     ganchos["biblioteca"] = lambda: elegir_estante(sel["estante"])
 
     return {"detener": detener, "volver_a_sala": volver_a_sala, "biblioteca": biblioteca, "habitacion": habitacion,
-            "preparar_mejora": preparar_mejora, "pedir_mejora": pedir_mejora}
+            "preparar_mejora": preparar_mejora, "pedir_mejora": pedir_mejora,
+            "trabajo_abrir": abrir_trabajo, "consola": con_trab}

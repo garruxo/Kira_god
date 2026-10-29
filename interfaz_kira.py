@@ -207,6 +207,9 @@ def construir_interfaz(core, consola=None):
     gestor = getattr(core, "tareas", None) or tk_.Gestor(os.path.join(getattr(core, "dir", "."), "tareas.json"))
     core.tareas = gestor                               # una tarea larga cada vez, con su barra de tiempo y %
     barra = {"w": None, "visible": False, "colocar": None}
+    import consola_kira as _ck
+    con_trab = _ck.Consola()                            # la consola de TRABAJO en vivo (Sala Hacker)
+    TRABAJO_VISIBLE = {"programa", "experimento", "defensa", "apk", "juego_realista"}  # tareas que abren la consola sola
 
     def ocultar_bocadillo(*_):
         w = boc["w"]
@@ -374,6 +377,10 @@ def construir_interfaz(core, consola=None):
         que_app = wj_.pedido_app(orden)
         if que_app is not None:                         # «conviértelo en una app», «pon el juego en el inicio»…
             app_por_voz(que_app)
+            return
+        import defensa_juego_kira as dfj_
+        if dfj_.es_orden(orden):                        # «entrena tus defensas», «juega al laberinto de defensa»
+            defensa_por_voz(orden)
             return
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
@@ -615,6 +622,11 @@ def construir_interfaz(core, consola=None):
 
     def avance(texto, fraccion=None):                   # progreso largo (llega desde un hilo): sin hablar
         gestor.progreso(fraccion, texto)               # la barra de la tarea (tiempo y % que queda)
+        try:
+            if con_trab.activa:                        # y también en la consola de trabajo, si está en marcha
+                con_trab.linea(texto)
+        except Exception:
+            pass
 
         def poner(_dt):
             burbuja.text = texto
@@ -625,6 +637,29 @@ def construir_interfaz(core, consola=None):
     def tarea_empieza(tipo, descripcion, relanzar, datos=None):
         gestor.empezar(tipo, descripcion, relanzar, datos)
         pintar_barra()
+        if tipo in TRABAJO_VISIBLE:                     # abre sola la consola de trabajo en la Sala Hacker
+            try:
+                con_trab.empezar(f"{tk_.NOMBRES.get(tipo, tipo)}: {descripcion}", pedido=descripcion)
+                hacker["trabajo_abrir"]()
+            except Exception:
+                pass
+
+    def _al_paso_consola(texto):
+        try:
+            if con_trab.activa:
+                con_trab.linea(texto)
+        except Exception:
+            pass
+
+    def _al_codigo_consola(texto, ok=None, motivo=""):
+        """ok=None: código escribiéndose (letra a letra). ok True/False: un intento ya probado."""
+        try:
+            if ok is None:
+                con_trab.codigo_vivo(texto)
+            else:
+                con_trab.intento(texto, ok, motivo or "")
+        except Exception:
+            pass
 
     def tarea_fin(ok=True):
         """La tarea terminó. Devuelve la Tarea: si estaba aparcada (la dejaste por otra cosa), no se anuncia."""
@@ -937,11 +972,23 @@ def construir_interfaz(core, consola=None):
             if t is not None and t.interrumpida:
                 return
             if isinstance(r, Exception):
+                try:
+                    con_trab.terminar(f"[x] No pude escribir el programa: {r}")
+                except Exception:
+                    pass
                 decir(f"[x] No pude escribir el programa: {r}", hablar=False)
                 return
             if not r.get("ok"):
+                try:
+                    con_trab.terminar(r["texto"].split("\n")[0])
+                except Exception:
+                    pass
                 decir(r["texto"].split("\n")[0], hablar=True)
                 return
+            try:
+                con_trab.terminar("Programa listo y probado. Te lo dejo en el editor.")
+            except Exception:
+                pass
             juego = "juego" in pedido.split(" ", 1)[0]
             aviso = (("Juego" if juego else "Programa") + " escrito por "
                      + ({"local": "Kira", "claude": "Claude"}.get(r.get("de"), "Kira"))
@@ -955,7 +1002,7 @@ def construir_interfaz(core, consola=None):
             codigo_ui["cargar_en_editor"](r["codigo"], r["nombre"] or "", aviso)
             decir(("Listo, y Claude y yo estamos de acuerdo. " if r.get("acuerdo") else "Listo. ")
                   + f"Te lo dejo en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
-        en_hilo(lambda: core.programa_acordado(pedido), terminado)
+        en_hilo(lambda: core.programa_acordado(pedido, al_paso=_al_paso_consola, al_codigo=_al_codigo_consola), terminado)
 
     def experimento_por_voz(tema):
         """«Kira, experimenta con…»: plantea 2-3 hipótesis, escribe y prueba cada una en modo seguro, se queda con
@@ -973,6 +1020,15 @@ def construir_interfaz(core, consola=None):
             t = tarea_fin(not isinstance(r, Exception) and bool(r.get("ok")))
             if t is not None and t.interrumpida:
                 return
+            try:
+                if isinstance(r, Exception):
+                    con_trab.terminar(f"[x] {r}")
+                elif not r.get("ok"):
+                    con_trab.terminar("Ninguna idea funcionó esta vez; lo apunté para aprender.")
+                else:
+                    con_trab.terminar("Experimento listo. Te dejo la mejor idea en el editor.")
+            except Exception:
+                pass
             if isinstance(r, Exception):
                 decir(f"[x] No pude experimentar: {r}", hablar=False)
                 return
@@ -991,6 +1047,36 @@ def construir_interfaz(core, consola=None):
                   (" y Claude y yo estamos de acuerdo con la mejor" if r.get("acuerdo") else "") +
                   f". Te dejo la mejor en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
         en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t, f)), terminado)
+
+    def defensa_por_voz(pedido=""):
+        """«entrena tus defensas» / «juega al laberinto de defensa»: Kira juega situaciones inventadas (solo defensa,
+        sin tocar tu red), lo ves en vivo en la consola y afina sus datos para mejorar."""
+        tarea_empieza("defensa", pedido or "entrenar mis defensas",
+                      lambda p_=pedido: defensa_por_voz(p_), {"pedido": pedido})
+        decir("Vale, entreno mis defensas en el laberinto. Míralo en la consola: voy diciendo qué amenaza veo y cómo "
+              "la combato.")
+
+        def terminado(r):
+            ok_ = isinstance(r, dict) and r.get("ok")
+            t = tarea_fin(not isinstance(r, Exception) and bool(ok_))
+            if t is not None and t.interrumpida:
+                return
+            try:
+                con_trab.terminar(r["texto"] if ok_ else (f"[x] {r}" if isinstance(r, Exception) else "[x] No pude entrenar."))
+            except Exception:
+                pass
+            if ok_:
+                try:
+                    codigo_ui["cargar_en_editor"](r.get("codigo", ""), "detector_defensa",
+                        "Este es mi detector de defensa (lo que he aprendido entrenando). Si quieres que sea parte de "
+                        "mí o de tus juegos, di «implementa este código»: lo pruebo en mi laboratorio y lo instalas con "
+                        "tus dos toques.")
+                except Exception:
+                    pass
+                voz.hablar(r["texto"])
+            else:
+                decir(f"[x] No pude entrenar mis defensas: {r}", hablar=False)
+        en_hilo(lambda: core.entrenar_defensa(rondas=8, al_paso=_al_paso_consola, al_codigo=_al_codigo_consola), terminado)
 
     def diseno_por_voz(tipo, descripcion):
         nombres = {"web": "la página", "app": "la maqueta", "clip": "el videoclip"}
@@ -1931,7 +2017,7 @@ def construir_interfaz(core, consola=None):
     hacker = montar_sala_hacker(sm, {
         **PIEZAS_SALA, "en_hilo": en_hilo,
         "ir": lambda *a, **k: ir(*a, **k), "ctl": ctl, "core": core, "cerebro": cerebro, "voz": voz,
-        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes,
+        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes, "consola": con_trab,
         "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
     # =================================================================================
