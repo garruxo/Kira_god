@@ -63,6 +63,26 @@ r = vk.aprender("https://youtu.be/dQw4w9WgXcQ", bajar=bajar_falso)
 ok(r["ok"] and r["fuente"] == "subtitulos" and "Python" in r["texto"] and r["titulo"].startswith("Curso"),
    "aprende del vídeo por los subtítulos (español)")
 
+# --- HTML «pelado» (muro de Europa) pero la API interna de YouTube sí trae los subtítulos ---
+PAGINA_PELADA = '<html><head><title>Curso de Python - YouTube</title></head><body>ver antes de aceptar cookies</body></html>'
+API_JSON = r'''{"videoDetails":{"title":"Curso de Python desde cero"},
+"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+{"baseUrl":"https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=es","name":{"simpleText":"Español"},"languageCode":"es"}
+]}}}'''
+
+def bajar_con_api(url, datos=None, cabeceras=None):
+    if datos is not None:          # POST a la API interna
+        return API_JSON.encode("utf-8")
+    if "watch?v=" in url:          # el HTML viene sin subtítulos
+        return PAGINA_PELADA.encode("utf-8")
+    if "timedtext" in url and "lang=es" in url:
+        return XML.encode("utf-8")
+    return b"<transcript></transcript>"
+
+r_api = vk.aprender("https://youtu.be/dQw4w9WgXcQ", bajar=bajar_con_api)
+ok(r_api["ok"] and r_api["fuente"] == "subtitulos" and "Python" in r_api["texto"],
+   "si el HTML viene sin subtítulos, los saca de la API interna de YouTube")
+
 # --- sin subtítulos: usa el oído si está; si no, lo dice claro ---
 PAGINA_SIN = '<html><head><title>Algo - YouTube</title></head><body><script>{"videoDetails":{"title":"Algo"}}</script></body></html>'
 def bajar_sin(url):

@@ -137,13 +137,48 @@ def _titulo(pagina):
     return _html.unescape(m.group(1)).replace(" - YouTube", "").strip() if m else ""
 
 
-def _bajar_defecto(url):
+def _bajar_defecto(url, datos=None, cabeceras=None):
+    """Baja una página (GET) o, si `datos` no es None, hace un POST (para la API interna de YouTube).
+    Mete la cookie de consentimiento para que YouTube no devuelva el muro de cookies de Europa (sin ella, desde España
+    el HTML viene «pelado» y sin subtítulos)."""
     import urllib.request
     import red_kira
     agente = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
-    req = urllib.request.Request(url, headers={"User-Agent": agente, "Accept-Language": "es-ES,es;q=0.9,en;q=0.5"})
+    cab = {"User-Agent": agente, "Accept-Language": "es-ES,es;q=0.9,en;q=0.5",
+           "Cookie": "CONSENT=YES+cb.20210328-17-p0.es+FX+000; SOCS=CAI"}
+    if cabeceras:
+        cab.update(cabeceras)
+    req = urllib.request.Request(url, data=datos, headers=cab)
     with red_kira.abrir(req, timeout=25) as r:
         return r.read(8 * 1024 * 1024)
+
+
+# La API interna de YouTube (InnerTube): devuelve los datos del vídeo —incluidos los subtítulos— aunque el HTML no los
+# traiga. Usamos el cliente ANDROID porque es el que menos pega con el muro de consentimiento de Europa.
+_PLAYER_URL = ("https://www.youtube.com/youtubei/v1/player"
+               "?key=AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w")
+_CLIENTE_ANDROID = {"clientName": "ANDROID", "clientVersion": "19.09.37", "androidSdkVersion": 30,
+                    "hl": "es", "gl": "ES"}
+
+
+def _player_api(vid, bajar):
+    """Pregunta a la API interna de YouTube por el vídeo y devuelve su JSON (texto), o '' si no se puede."""
+    cuerpo = json.dumps({"context": {"client": _CLIENTE_ANDROID}, "videoId": vid,
+                         "contentCheckOk": True, "racyCheckOk": True}).encode("utf-8")
+    cab = {"Content-Type": "application/json",
+           "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip",
+           "X-Goog-Api-Format-Version": "2"}
+    try:
+        raw = bajar(_PLAYER_URL, datos=cuerpo, cabeceras=cab)
+    except TypeError:
+        # El «bajar» inyectado no acepta POST (p. ej. una prueba antigua): no hay reserva por API.
+        return ""
+    except Exception:
+        return ""
+    try:
+        return raw.decode("utf-8", "replace")
+    except Exception:
+        return ""
 
 
 def aprender(texto, bajar=None, transcribir=None, idioma="es"):
@@ -158,7 +193,17 @@ def aprender(texto, bajar=None, transcribir=None, idioma="es"):
     except Exception as e:
         return {"ok": False, "error": f"No pude abrir el vídeo (¿hay internet?): {e}"}
     titulo = _titulo(pagina) or vid
-    pista = elegir(pistas(pagina), idioma)
+    lista = pistas(pagina)
+    if not lista:
+        # El HTML vino sin subtítulos (muro de Europa o YouTube los escondió): se los pedimos a su API interna.
+        api = _player_api(vid, bajar)
+        if api:
+            lista = pistas(api)
+            if (not titulo or titulo == vid):
+                t2 = _titulo(api)
+                if t2:
+                    titulo = t2
+    pista = elegir(lista, idioma)
     if pista and pista["url"]:
         try:
             xml = bajar(pista["url"]).decode("utf-8", "replace")
