@@ -151,6 +151,61 @@ def paginas_de(ruta):
                                                     "cifrado": False}
 
 
+MAX_PAGINAS_OCR = 20                 # OCR en el móvil va lento: por defecto las primeras 20 páginas
+
+
+def texto_ocr(ruta, leer_imagen, al_progreso=None, max_paginas=MAX_PAGINAS_OCR, cancelado=None):
+    """Para PDF ESCANEADOS (fotos, sin texto): saca la imagen de cada página con pypdf y la lee con OCR.
+    `leer_imagen(ruta_png) -> texto` se inyecta (en el móvil, el Tesseract de Kira). Devuelve [texto por página].
+    Va lento y pesa; por eso solo las primeras `max_paginas`. Lanza PdfError si no se puede ni empezar."""
+    import os as _os
+    import tempfile
+    try:
+        import pypdf
+    except ImportError:
+        raise PdfError("No puedo hacer OCR: falta pypdf.")
+    try:
+        lector = pypdf.PdfReader(ruta)
+        if lector.is_encrypted:
+            try:
+                lector.decrypt("")
+            except Exception:
+                pass
+        n_tot = min(len(lector.pages), int(max_paginas))
+    except Exception as e:
+        raise PdfError(f"No pude abrir el PDF para OCR: {e}")
+    textos = []
+    for i in range(n_tot):
+        if cancelado and cancelado():
+            break
+        if al_progreso:
+            al_progreso(i / max(1, n_tot), f"Leyendo con OCR la página {i + 1} de {n_tot}…")
+        try:
+            imgs = list(lector.pages[i].images)
+        except Exception:
+            imgs = []
+        trozos_pag = []
+        for j, img in enumerate(imgs[:4]):                  # como mucho 4 imágenes por página
+            ext = _os.path.splitext(getattr(img, "name", "") or "")[1].lower() or ".png"
+            tmp = _os.path.join(tempfile.gettempdir(), f"kira_ocr_{i}_{j}{ext}")
+            t = ""
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(img.data)
+                t = leer_imagen(tmp) or ""
+            except Exception:
+                t = ""
+            finally:
+                try:
+                    _os.remove(tmp)
+                except OSError:
+                    pass
+            if t.strip():
+                trozos_pag.append(t.strip())
+        textos.append(_limpiar("\n".join(trozos_pag)))
+    return textos
+
+
 def _limpiar(t):
     t = t.replace("\x00", "").replace("\r", "\n")
     t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)               # palabras partidas al final de línea
@@ -373,6 +428,19 @@ class Biblioteca:
         t, _info = paginas_de(self.ruta(e))
         self._guardar_textos(e, t)
         return t
+
+    def ocr(self, e, leer_imagen, al_progreso=None, cancelado=None):
+        """Lee con OCR un PDF escaneado y GUARDA el texto sacado (así la próxima vez ya está). Devuelve el texto por
+        página (o [] si no sacó nada)."""
+        textos = texto_ocr(self.ruta(e), leer_imagen, al_progreso=al_progreso, cancelado=cancelado)
+        if sum(len(t) for t in textos) > 40:
+            self._guardar_textos(e, textos)
+            e["con_texto"] = True
+            e["ocr"] = True
+            with self._lock:
+                self._guardar()
+            return textos
+        return []
 
     def pagina(self, e, n):
         t = self.textos(e)

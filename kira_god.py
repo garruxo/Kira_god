@@ -1304,6 +1304,26 @@ class KiraGodCore:
         return ("Además de la librería estándar, puedes importar: " + ", ".join(nombres) +
                 " (instaladas en este móvil).")
 
+    def _ocr_pdf(self, e, al_progreso=None):
+        """Si el PDF está ESCANEADO (sin texto) y tengo lector (Tesseract), lo leo con OCR y guardo lo sacado (así la
+        próxima vez ya está). Devuelve True si ahora hay texto. Honesto: va lento y solo las primeras páginas."""
+        if e.get("con_texto", True):
+            return True
+        lector = getattr(self, "lector", None)
+        try:
+            disp = lector is not None and lector.disponible()
+        except Exception:
+            disp = False
+        if not disp:
+            return False
+        if al_progreso:
+            al_progreso(0.0, "El PDF está escaneado; lo leo con OCR (va lento)…")
+        try:
+            textos = self.pdfs.ocr(e, lector.leer, al_progreso=al_progreso, cancelado=self.cancelado)
+            return bool(textos)
+        except Exception:
+            return False
+
     def orden_pdf(self, command, al_progreso=None):
         """Todas las órdenes de la biblioteca de PDF. Devuelve el texto para el usuario. Si la orden abre un PDF
         en pantalla, el texto empieza por «[OK] ABRIR_PDF n p»."""
@@ -1329,8 +1349,10 @@ class KiraGodCore:
                 e = bib.descargar(o["url"], progreso=prog, cancelado=self.cancelado)
                 if e.get("repetido"):
                     return f"[i] Ese PDF ya lo tenía: es el número {e['n']} («{e['nombre']}»)."
-                aviso = "" if e.get("con_texto", True) else (" Ojo: no tiene texto (parece escaneado); para leerlo, "
-                                                            "hazle una captura a la página y dime «lee la captura».")
+                aviso = "" if e.get("con_texto", True) else (" Ojo: no tiene texto (parece escaneado). Cuando lo leas o "
+                                                            "resumas lo paso por OCR con mi lector (va lento; hago las "
+                                                            "primeras páginas). Si no tengo el lector listo, hazle una "
+                                                            "captura y dime «lee la captura».")
                 return (f"[OK] He guardado el PDF {e['n']}: «{e['nombre']}» ({e['paginas']} páginas, "
                         f"{e['bytes'] / 1e6:.1f} MB).{aviso} Dime «lee el pdf {e['n']}», «resume el pdf {e['n']}» o "
                         f"«qué dice el pdf {e['n']} sobre …».")
@@ -1340,13 +1362,17 @@ class KiraGodCore:
             if e is None:
                 return ("[x] No tengo ese PDF. " + ("Di «mis pdf» para ver la lista." if bib.lista else
                                                      "Todavía no tengo ninguno: dime «descarga este PDF: » y el enlace."))
+            if not e.get("con_texto", True) and acc in ("leer", "abrir", "buscar", "resumir", "preguntar"):
+                self._ocr_pdf(e, al_progreso)              # escaneado: intento leerlo con OCR (Tesseract) y lo guardo
             if acc in ("leer", "abrir"):
                 p = o.get("pagina", 1)
                 txt = bib.pagina(e, p)
                 if self.lector is not None:
                     self.lector.ultimo = txt[:8000]
                 if not txt:
-                    return f"[x] La página {p} de «{e['nombre']}» no tiene texto (puede ser una imagen o estar escaneada)."
+                    return (f"[x] La página {p} de «{e['nombre']}» no tiene texto. Parece escaneada y no he podido "
+                            "leerla con OCR (puede que el móvil no tenga el lector listo: Menú › capturas). En el "
+                            "portátil lo leería mejor.")
                 return f"[OK] ABRIR_PDF {e['n']} {p}\n«{e['nombre']}», página {p} de {e['paginas']}:\n\n{txt[:3000]}"
             if acc == "buscar":
                 res = bib.buscar_en(e, o["consulta"])
