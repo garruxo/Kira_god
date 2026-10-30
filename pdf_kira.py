@@ -206,6 +206,22 @@ def texto_ocr(ruta, leer_imagen, al_progreso=None, max_paginas=MAX_PAGINAS_OCR, 
     return textos
 
 
+def texto_util(textos):
+    """¿El texto sacado del PDF sirve de verdad, o es basura de un escaneo con la capa de texto rota (por ejemplo
+    páginas llenas de «AAAAA» o símbolos sueltos)? True = texto bueno; False = tratarlo como escaneado (hacer OCR)."""
+    from collections import Counter
+    t = " ".join(textos or [])
+    letras = [c.lower() for c in t if c.isalpha()]
+    if len(letras) < 40:
+        return False
+    palabras = re.findall(r"[a-záéíóúñ]{3,}", t.lower())
+    if len(set(palabras)) < 8:                        # casi no hay palabras distintas: basura
+        return False
+    if Counter(letras).most_common(1)[0][1] > 0.6 * len(letras):   # dominado por una sola letra repetida
+        return False
+    return True
+
+
 def _limpiar(t):
     t = t.replace("\x00", "").replace("\r", "\n")
     t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)               # palabras partidas al final de línea
@@ -336,7 +352,7 @@ class Biblioteca:
         e = {"n": n, "nombre": (nombre or info["titulo"] or "documento")[:80], "titulo": info["titulo"],
              "autor": info["autor"], "archivo": archivo, "url": url, "paginas": info["paginas"],
              "bytes": os.path.getsize(destino), "fecha": time.strftime("%Y-%m-%d %H:%M"), "huella": huella,
-             "con_texto": sum(len(t) for t in textos) > 40, "estudiado": False}
+             "con_texto": texto_util(textos), "estudiado": False}
         self._guardar_textos(e, textos)
         with self._lock:
             self.lista.append(e)

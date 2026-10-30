@@ -386,7 +386,7 @@ def construir_interfaz(core, consola=None):
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
         if exp is not None:                             # «experimenta con…», «inventa un algoritmo nuevo…»
-            experimento_por_voz(exp)
+            experimento_por_voz(exp, ex_.quiere_mejorar(orden))
             return
         prog = pk_.pedido_programa(orden)
         if prog is not None:                            # «escríbeme un programa que…», «hazme un juego de…»: al editor
@@ -405,6 +405,10 @@ def construir_interfaz(core, consola=None):
         img = pin_.pedido_imagen(orden, siempre_dibuja=bool(core.pintor.instalados()))
         if img is not None:                             # «pinta…», «hazme una foto de…»: al pintor
             imagen_por_voz(img)
+            return
+        cod_net = net_.pedido_aprender_codigo(orden)
+        if cod_net is not None:                         # «aprende código de…» / «aprende a programar…»: lo busca y guarda
+            codigo_internet_por_voz(cod_net)
             return
         red = net_.interpretar(orden)
         if red is not None:                             # «busca en internet…», «lee el 2», «estudia en internet…»
@@ -1005,17 +1009,19 @@ def construir_interfaz(core, consola=None):
                   + f"Te lo dejo en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
         en_hilo(lambda: core.programa_acordado(pedido, al_paso=_al_paso_consola, al_codigo=_al_codigo_consola), terminado)
 
-    def experimento_por_voz(tema):
+    def experimento_por_voz(tema, mejorar=False):
         """«Kira, experimenta con…»: plantea 2-3 hipótesis, escribe y prueba cada una en modo seguro, se queda con
-        la mejor (acordada con Claude si están los dos), lo apunta en su cuaderno y lo deja en el editor."""
+        la mejor (acordada con Claude si están los dos), lo apunta en su cuaderno y lo deja en el editor.
+        mejorar=True («experimenta mejorando/optimizando…»): parte de lo que YA sabe y lo mejora."""
         if getattr(core, "cerebro_para_codigo", lambda: None)() is None:
             decir("Para inventar código necesito un cerebro: el mío (Menú › «Cerebro y oído») o la clave de Claude.")
             return
         equipo = en_equipo()
-        tarea_empieza("experimento", tema, lambda t_=tema: experimento_por_voz(t_), {"pedido": tema})
+        tarea_empieza("experimento", tema, lambda t_=tema, m_=mejorar: experimento_por_voz(t_, m_), {"pedido": tema})
         modelo.poner_estado("pensando")
-        decir(f"¡Me encanta! Voy a experimentar con {tema}: pruebo varias ideas en modo seguro, me quedo con la "
-              "mejor" + (" y la repaso con Claude" if equipo else "") + ". Puede tardar un rato.")
+        decir((f"¡Vale! Parto de lo que sé de {tema} y lo mejoro" if mejorar
+               else f"¡Me encanta! Voy a experimentar con {tema}: pruebo varias ideas en modo seguro, me quedo con la "
+                    "mejor") + (" y lo repaso con Claude" if equipo else "") + ". Puede tardar un rato.")
 
         def terminado(r):
             t = tarea_fin(not isinstance(r, Exception) and bool(r.get("ok")))
@@ -1047,7 +1053,7 @@ def construir_interfaz(core, consola=None):
             decir(f"Listo: {buenas} de {len(r['resultados'])} ideas funcionan" +
                   (" y Claude y yo estamos de acuerdo con la mejor" if r.get("acuerdo") else "") +
                   f". Te dejo la mejor en el editor: pulsa {'Jugar' if juego else 'Ejecutar'}.")
-        en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t, f)), terminado)
+        en_hilo(lambda: core.experimentar(tema, al_progreso=lambda f, t: avance(t, f), mejorar=mejorar), terminado)
 
     def defensa_por_voz(pedido=""):
         """«entrena tus defensas» / «juega al laberinto de defensa»: abre el JUEGO en 1ª persona (laberinto Matrix).
@@ -1116,6 +1122,21 @@ def construir_interfaz(core, consola=None):
             if pintor_ui["pintar"](descripcion, al_terminar=hecho) is False:
                 tarea_fin(False)                        # no llegó a empezar
         Clock.schedule_once(pintar_ya, 0.3)
+
+    def codigo_internet_por_voz(consulta):
+        """«aprende código de …» / «aprende a programar …»: busca código en internet (GitHub/Stack Overflow), lee lo
+        mejor y lo guarda en el baúl para reutilizarlo al programar."""
+        tarea_empieza("estudio", "aprender código de " + consulta,
+                      lambda c_=consulta: codigo_internet_por_voz(c_), {"pedido": consulta})
+        ir("internet")
+        decir(f"Busco código de «{consulta}» en internet y me quedo con lo útil para programar.")
+
+        def fin(r):
+            t = tarea_fin(not isinstance(r, Exception) and not str(r).startswith("[x]"))
+            if t is not None and t.interrumpida:
+                return
+            decir(f"[x] No pude: {r}" if isinstance(r, Exception) else str(r).replace("[OK] ", ""))
+        en_hilo(lambda: core.aprender_codigo(consulta, al_paso=lambda tx: avance(tx)), fin)
 
     def internet_por_voz(p_red, orden):
         """«Kira, busca en internet…», «lee el 2», «resume el 2», «guarda el 2», «estudia en internet…»."""

@@ -1264,3 +1264,206 @@ def fichas(tipo=None):
         if tipo is None or tipo_de(c["area"]) == tipo:
             res.append((c["titulo"], f"{c['titulo']}: {c['texto']}"))
     return res
+
+
+# =====================================================================================
+#  v2.60: MÁS códigos fuente avanzados (probados en el editor seguro + laboratorio + sus pruebas)
+# =====================================================================================
+RECETAS += [
+    {"id": "cache_menos_usado", "titulo": "Caché LRU (lo menos usado se tira)", "area": "Programación avanzada",
+     "temas": "cache lru memoria recordar olvidar ordereddict capacidad rapido acceso reciente",
+     "idea": "Guarda hasta N cosas; cuando se llena, tira la MENOS usada recientemente. Un OrderedDict que mueve al "
+             "final lo que tocas: lo viejo queda delante y se expulsa primero.", "complejidad": "O(1) por operación",
+     "codigo": '''
+from collections import OrderedDict
+
+
+class CacheLRU:
+    def __init__(self, capacidad):
+        self.cap = capacidad
+        self.datos = OrderedDict()
+        self.fuera = []
+
+    def pon(self, clave, valor):
+        if clave in self.datos:
+            self.datos.move_to_end(clave)
+        self.datos[clave] = valor
+        if len(self.datos) > self.cap:
+            viejo, _ = self.datos.popitem(last=False)
+            self.fuera.append(viejo)
+
+
+def registrar():
+    def cache(texto):
+        c = CacheLRU(2)
+        for parte in [p.strip() for p in texto.split(",") if p.strip()]:
+            c.pon(parte, parte.upper())
+        return "Dentro: " + ", ".join(c.datos.keys()) + "\\nExpulsados: " + (", ".join(c.fuera) or "ninguno")
+    return {"cache": cache}
+''',
+     "prueba": [("cache", "a, b, c", "Dentro: b, c"), ("cache", "a, b, c", "Expulsados: a")]},
+
+    {"id": "trie_autocompletar", "titulo": "Trie (autocompletar palabras)", "area": "Programación avanzada",
+     "temas": "trie arbol prefijo autocompletar buscador sugerencias palabras diccionario texto",
+     "idea": "Un árbol donde cada letra es un paso; las palabras que empiezan igual comparten camino. Autocompletar "
+             "es bajar por el prefijo y listar todo lo que cuelga.", "complejidad": "O(largo del prefijo)",
+     "codigo": '''
+class _Nodo:
+    def __init__(self):
+        self.hijos = {}
+        self.fin = False
+
+
+class Trie:
+    def __init__(self):
+        self.raiz = _Nodo()
+
+    def anadir(self, palabra):
+        n = self.raiz
+        for c in palabra:
+            n = n.hijos.setdefault(c, _Nodo())
+        n.fin = True
+
+    def _bajar(self, n, pref, salida):
+        if n.fin:
+            salida.append(pref)
+        for c, h in sorted(n.hijos.items()):
+            self._bajar(h, pref + c, salida)
+
+    def autocompletar(self, pref):
+        n = self.raiz
+        for c in pref:
+            if c not in n.hijos:
+                return []
+            n = n.hijos[c]
+        salida = []
+        self._bajar(n, pref, salida)
+        return salida
+
+
+def registrar():
+    def autocompleta(texto):
+        t = Trie()
+        for p in ["casa", "casino", "coche", "cocina", "perro"]:
+            t.anadir(p)
+        pref = texto.strip()
+        res = t.autocompletar(pref)
+        return f"Con «{pref}»: " + (", ".join(res) if res else "(nada)")
+    return {"autocompleta": autocompleta}
+''',
+     "prueba": [("autocompleta", "co", "Con «co»: coche, cocina"), ("autocompleta", "cas", "casa, casino")]},
+
+    {"id": "orden_dependencias", "titulo": "Orden topológico (qué va antes que qué)", "area": "Programación avanzada",
+     "temas": "orden topologico dependencias grafo tareas compilar arrancar antes despues graphlib ciclo",
+     "idea": "Si unas tareas dependen de otras, el orden topológico da una secuencia válida (cada cosa después de lo "
+             "que necesita). Si hay un ciclo, avisa de que es imposible.", "complejidad": "O(nodos + aristas)",
+     "codigo": '''
+from graphlib import TopologicalSorter, CycleError
+
+
+def orden_tareas(deps):
+    try:
+        return list(TopologicalSorter(deps).static_order())
+    except CycleError:
+        return None
+
+
+def registrar():
+    def orden(texto):
+        deps = {}
+        for linea in texto.split(";"):
+            if ":" in linea:
+                a, bs = linea.split(":", 1)
+                deps[a.strip()] = [b.strip() for b in bs.split(",") if b.strip()]
+        r = orden_tareas(deps)
+        return "Hay un ciclo: imposible ordenar." if r is None else "Orden: " + " -> ".join(r)
+    return {"orden": orden}
+''',
+     "prueba": [("orden", "c: b; b: a", "Orden: a -> b -> c"), ("orden", "a: b; b: a", "Hay un ciclo")]},
+
+    {"id": "limite_peticiones", "titulo": "Límite de peticiones (cubo de fichas)", "area": "Programación avanzada",
+     "temas": "limite peticiones rate limit cubo fichas token bucket abuso proteger servidor defensa cuota",
+     "idea": "Para que nadie abuse: hay un cubo con N fichas; cada petición gasta una; sin fichas, se rechaza. Así se "
+             "frena una ráfaga sin bloquear el uso normal.", "complejidad": "O(1) por petición",
+     "codigo": '''
+def registrar():
+    def limite(texto):
+        cap = 3
+        fichas = cap
+        res = []
+        for i, _ in enumerate([p for p in texto.split(",") if p.strip()], 1):
+            if fichas > 0:
+                fichas -= 1
+                res.append(f"petición {i}: OK ({fichas} quedan)")
+            else:
+                res.append(f"petición {i}: RECHAZADA (sin fichas)")
+        return "\\n".join(res)
+    return {"limite": limite}
+''',
+     "prueba": [("limite", "x,x,x,x,x", "petición 4: RECHAZADA (sin fichas)"),
+                ("limite", "x,x,x,x,x", "petición 1: OK (2 quedan)")]},
+
+    {"id": "evaluar_expresion", "titulo": "Calcular una expresión (sin usar eval)", "area": "Programación avanzada",
+     "temas": "expresion calcular aritmetica shunting yard pila operadores precedencia parentesis parser seguro sin eval",
+     "idea": "Convierte «2+3*4» respetando prioridades y paréntesis con el método del patio de maniobras (dos pilas), "
+             "sin usar eval (que sería peligroso). Primero a notación polaca, luego se evalúa.",
+     "complejidad": "O(largo de la expresión)",
+     "codigo": '''
+import re
+
+
+def calcular(expr):
+    tokens = re.findall(r"\\d+\\.?\\d*|[+\\-*/()]", expr)
+    prec = {"+": 1, "-": 1, "*": 2, "/": 2}
+    salida, ops = [], []
+    for t in tokens:
+        if re.match(r"\\d", t):
+            salida.append(float(t))
+        elif t in prec:
+            while ops and ops[-1] in prec and prec[ops[-1]] >= prec[t]:
+                salida.append(ops.pop())
+            ops.append(t)
+        elif t == "(":
+            ops.append(t)
+        elif t == ")":
+            while ops and ops[-1] != "(":
+                salida.append(ops.pop())
+            if ops:
+                ops.pop()
+    while ops:
+        salida.append(ops.pop())
+    pila = []
+    for s in salida:
+        if isinstance(s, float):
+            pila.append(s)
+        elif len(pila) >= 2:
+            b, a = pila.pop(), pila.pop()
+            pila.append({"+": a + b, "-": a - b, "*": a * b, "/": a / b if b else 0.0}[s])
+    return pila[0] if pila else 0.0
+
+
+def registrar():
+    def calcula(texto):
+        v = calcular(texto)
+        if v == int(v):
+            v = int(v)
+        return f"{texto.strip()} = {v}"
+    return {"calcula": calcula}
+''',
+     "prueba": [("calcula", "2+3*4", "2+3*4 = 14"), ("calcula", "(2+3)*4", "(2+3)*4 = 20")]},
+]
+
+CONCEPTOS += [
+    {"id": "coste_amortizado", "area": "Programación avanzada", "titulo": "Coste amortizado",
+     "temas": "amortizado coste complejidad lista array dinamico duplicar promedio operaciones",
+     "texto": "El coste amortizado mira el promedio de muchas operaciones seguidas, no la peor suelta. Ejemplo: una "
+              "lista que se agranda duplicando su tamaño cuando se llena. Esa copia puntual es cara, pero como pasa "
+              "cada vez menos (al doblar), repartida entre todas las inserciones sale a coste constante por elemento. "
+              "Por eso añadir al final de una lista se considera O(1) amortizado aunque de vez en cuando toque copiar."},
+    {"id": "idempotencia", "area": "Programación avanzada", "titulo": "Idempotencia",
+     "temas": "idempotencia idempotente repetir reintentar red peticion seguro efecto dos veces",
+     "texto": "Una operación es idempotente si hacerla una vez o varias deja el mismo resultado. «Poner el saldo a "
+              "100» es idempotente; «sumar 100 al saldo» no lo es. Importa mucho en redes: si una petición se pierde y "
+              "la reintentas, una operación idempotente no hace daño aunque llegue dos veces. Por eso las APIs bien "
+              "hechas usan claves de idempotencia y verbos como PUT para que reintentar sea seguro."},
+]

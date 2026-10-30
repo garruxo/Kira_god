@@ -76,6 +76,26 @@ _LEER_URL = re.compile(r"^(?:l[eé]e(?:me)?|abre|resume(?:me)?|guarda)\s+(?:esta
                        r"(?P<url>https?://\S+)$", re.I)
 
 
+_APRENDE_CODIGO = re.compile(
+    r"^(?:oye\s+|hola\s+)?(?:kira[\s,:;.]*)?(?:apr[eé]nde(?:te)?|estudia)\s+"
+    r"(?:a\s+programar|a\s+codificar|c[oó]digo\s+(?:de|sobre|para)|c[oó]digos?\s+(?:de|sobre|para)|"
+    r"a\s+hacer\s+en\s+c[oó]digo)\s+(?P<q>.+)$", re.I)
+
+
+def pedido_aprender_codigo(texto):
+    """«aprende código de X» / «aprende a programar X»: devuelve el tema (para buscar código en internet y guardarlo),
+    o None. No cuela si trae un enlace (eso es «aprende de este vídeo/pdf», que van por otro lado)."""
+    t = " ".join(str(texto or "").split()).strip(" .!¡?¿")
+    if re.search(r"https?://|youtu\.?be|\.pdf\b", t, re.I):
+        return None
+    m = _APRENDE_CODIGO.match(t)
+    if not m:
+        return None
+    q = m.group("q").strip(" ,.:")
+    q = re.sub(r"\s+(?:en\s+(?:internet|la\s+web|la\s+red)|online|por\s+internet)$", "", q, flags=re.I)
+    return q[:120] if len(q) >= 2 else None
+
+
 def interpretar(texto):
     """Qué se pide. Devuelve un dict o None:
       {'accion': 'buscar', 'tipo': 'web'|'codigo'|'docs', 'consulta': str}

@@ -38,7 +38,18 @@ ENFOQUES = {
     "variante": ("Inventar una variante",
                  "Inventa una VARIANTE nueva: cambia una regla, añade una restricción o generaliza la idea, y MIDE "
                  "con datos de ejemplo si la variante es mejor o peor que la original (imprime la comparación)."),
+    "mejorar": ("Mejorar un código que ya funciona",
+                "PARTE del código de referencia (que ya funciona) y MEJÓRALO: hazlo más rápido, más claro o más "
+                "completo SIN cambiar lo que hace. Imprime una comparación (antes/después) que demuestre la mejora."),
 }
+
+_MEJORAR = re.compile(r"\b(mejora|mejorando|mejorar|optimiz\w*|perfeccion\w*|a\s+partir\s+de\s+lo\s+que\s+sabes|"
+                      r"con\s+lo\s+que\s+(?:sabes|has\s+aprendido|aprendiste))", re.I)
+
+
+def quiere_mejorar(texto):
+    """¿El experimento pide MEJORAR/optimizar algo ya aprendido (en vez de inventar desde cero)?"""
+    return bool(_MEJORAR.search(" " + str(texto or "") + " "))
 
 INSTRUCCIONES_EXPERIMENTO = (
     "Es un EXPERIMENTO: inventa algo NUEVO, no copies el ejemplo. Al principio, un comentario «# Hipótesis: …» "
@@ -85,12 +96,18 @@ def pedido_experimento(texto):
 # =====================================================================================
 #  PLAN: QUÉ HIPÓTESIS PROBAR
 # =====================================================================================
-def plan(tema, n=3, recetas=None):
-    """[{'enfoque', 'titulo', 'instruccion', 'recetas': [receta, …]}] con n hipótesis. Usa las técnicas probadas
-    más parecidas al tema; si no hay ninguna parecida, inventa desde cero."""
+def plan(tema, n=3, recetas=None, mejorar=False):
+    """[{'enfoque', 'titulo', 'instruccion', 'recetas': [receta, …], 'codigo_base'?}] con n hipótesis. Usa las
+    técnicas probadas más parecidas al tema; si no hay ninguna parecida, inventa desde cero. mejorar=True: la
+    primera hipótesis es MEJORAR el código de la receta aprendida más parecida (a partir de lo que sabe)."""
     import saber_mejoras_kira as sm_
     if recetas is None:
         recetas = [r for _p, r in sm_.buscar(tema, n=4)]
+    sal = []
+    if mejorar and recetas:
+        titulo, instr = ENFOQUES["mejorar"]
+        sal.append({"enfoque": "mejorar", "titulo": titulo, "instruccion": instr, "recetas": recetas[:1],
+                    "codigo_base": recetas[0].get("codigo", "")})
     hip = []
     if len(recetas) >= 2:
         hip.append(("mezcla", recetas[:2]))
@@ -99,13 +116,14 @@ def plan(tema, n=3, recetas=None):
         hip.append(("variante", recetas[1:2] or recetas[:1]))
     else:
         hip = [("variante", []), ("mezcla", []), ("otro_campo", [])]
-    sal = []
-    for enfoque, rs in hip[:max(1, n)]:
+    for enfoque, rs in hip:
+        if len(sal) >= max(1, n):
+            break
         titulo, instr = ENFOQUES[enfoque]
         if not rs:
             instr = "No hay técnica de referencia: inventa desde cero. " + instr.split(":")[0] + "."
         sal.append({"enfoque": enfoque, "titulo": titulo, "instruccion": instr, "recetas": rs})
-    return sal
+    return sal[:max(1, n)]
 
 
 def pedido_de(tema, hipotesis, local=False):
@@ -114,9 +132,16 @@ def pedido_de(tema, hipotesis, local=False):
     refs = []
     for r in hipotesis["recetas"]:
         refs.append(f"- «{r['titulo']}»: {r['idea'][:300 if local else 600]}")
+    base = hipotesis.get("codigo_base")
+    if base:                                             # MEJORAR: se le da el código que ya funciona para partir de él
+        tope = 1200 if local else 3000
+        base_txt = ("\nCódigo que YA FUNCIONA (mejóralo, no lo dejes igual):\n```python\n"
+                    + base.strip()[:tope] + "\n```\n")
+    else:
+        base_txt = ""
     return (f"programa EXPERIMENTAL sobre: {tema}\n\nHipótesis a probar ({hipotesis['titulo']}): "
-            f"{hipotesis['instruccion']}\n" + ("Técnicas de referencia (ya probadas):\n" + "\n".join(refs) + "\n"
-                                             if refs else "") + "\n" + INSTRUCCIONES_EXPERIMENTO)
+            f"{hipotesis['instruccion']}\n" + base_txt + ("Técnicas de referencia (ya probadas):\n" + "\n".join(refs)
+                                                          + "\n" if refs else "") + "\n" + INSTRUCCIONES_EXPERIMENTO)
 
 
 # =====================================================================================

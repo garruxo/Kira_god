@@ -875,7 +875,7 @@ class KiraGodCore:
                 "umbrales": dict(d.umbrales)}
 
     @_con_trabajo("experimento")
-    def experimentar(self, tema, al_progreso=None):
+    def experimentar(self, tema, al_progreso=None, mejorar=False):
         """Kira INVENTA código nuevo: 2-3 hipótesis (mezclar técnicas, llevarlas a otro campo, variantes), cada una
         escrita y probada en modo seguro; se queda con la mejor, la acuerda con Claude si están los dos, lo apunta en
         su cuaderno y guarda la lección en el baúl. No instala nada. Devuelve un dict con 'ok', 'codigo', 'nombre',
@@ -888,7 +888,7 @@ class KiraGodCore:
             raise RuntimeError(self._sin_cerebro())
         local = autor == "local"
         avisar = al_progreso or (lambda f, t: None)
-        hipotesis = ex.plan(tema, n=2 if local else 3)
+        hipotesis = ex.plan(tema, n=2 if local else 3, mejorar=mejorar)
         resultados = []
         for i, h in enumerate(hipotesis, 1):
             avisar((i - 1) / (len(hipotesis) + 1), f"Hipótesis {i} de {len(hipotesis)}: {h['titulo'].lower()}…")
@@ -907,7 +907,9 @@ class KiraGodCore:
                    "ok": bool(r["ok"]), "nombre": r.get("nombre"), "codigo": r.get("codigo") or "",
                    "motivo": r.get("error") or "; ".join(x for x in r.get("historial", []) if "no pasa" in x)[-300:]}
             if res["ok"]:
-                res["puntos"], res["notas"] = ex.puntuar(True, r["dato"], res["codigo"], h["recetas"])
+                # al MEJORAR partimos del código de la receta a propósito: no penalizamos el parecido
+                recetas_punt = () if h.get("enfoque") == "mejorar" else h["recetas"]
+                res["puntos"], res["notas"] = ex.puntuar(True, r["dato"], res["codigo"], recetas_punt)
                 res["hipotesis"] = ex.hipotesis_del_codigo(res["codigo"])
                 res["conclusion"] = ex.conclusion_de((r["dato"] or {}).get("salida", ""))
                 res["dato"] = r["dato"]
@@ -1304,22 +1306,26 @@ class KiraGodCore:
         return ("Además de la librería estándar, puedes importar: " + ", ".join(nombres) +
                 " (instaladas en este móvil).")
 
-    def _ocr_pdf(self, e, al_progreso=None):
-        """Si el PDF está ESCANEADO (sin texto) y tengo lector (Tesseract), lo leo con OCR y guardo lo sacado (así la
-        próxima vez ya está). Devuelve True si ahora hay texto. Honesto: va lento y solo las primeras páginas."""
-        if e.get("con_texto", True):
-            return True
+    def _lector_listo(self):
+        """¿El lector de OCR (Tesseract) está disponible (idiomas descargados y librería)?"""
         lector = getattr(self, "lector", None)
         try:
-            disp = lector is not None and lector.disponible()
+            return bool(lector is not None and lector.disponible())
         except Exception:
-            disp = False
-        if not disp:
+            return False
+
+    def _ocr_pdf(self, e, al_progreso=None):
+        """Lee un PDF ESCANEADO (o con la capa de texto rota) con OCR y guarda lo sacado (así la próxima vez ya está).
+        Devuelve True si ahora hay texto. Honesto: va lento y solo las primeras páginas."""
+        import pdf_kira as pk
+        if e.get("ocr") or pk.texto_util(self.pdfs.textos(e)):
+            return True
+        if not self._lector_listo():
             return False
         if al_progreso:
             al_progreso(0.0, "El PDF está escaneado; lo leo con OCR (va lento)…")
         try:
-            textos = self.pdfs.ocr(e, lector.leer, al_progreso=al_progreso, cancelado=self.cancelado)
+            textos = self.pdfs.ocr(e, self.lector.leer, al_progreso=al_progreso, cancelado=self.cancelado)
             return bool(textos)
         except Exception:
             return False
@@ -1362,8 +1368,14 @@ class KiraGodCore:
             if e is None:
                 return ("[x] No tengo ese PDF. " + ("Di «mis pdf» para ver la lista." if bib.lista else
                                                      "Todavía no tengo ninguno: dime «descarga este PDF: » y el enlace."))
-            if not e.get("con_texto", True) and acc in ("leer", "abrir", "buscar", "resumir", "preguntar"):
-                self._ocr_pdf(e, al_progreso)              # escaneado: intento leerlo con OCR (Tesseract) y lo guardo
+            if acc in ("leer", "abrir", "buscar", "resumir", "preguntar") and not e.get("ocr") \
+                    and not pk.texto_util(bib.textos(e)):   # escaneado o con la capa de texto rota
+                if not self._lector_listo():
+                    return (f"[x] «{e['nombre']}» está escaneado (son imágenes) o su texto está roto. Para leerlo "
+                            "necesito mi lector de OCR y aún no está listo: entra en «Capturas» (en el menú) y descarga "
+                            "el lector una vez (~6 MB, español e inglés); después vuelve a pedírmelo. En el portátil lo "
+                            "leería sin eso.")
+                self._ocr_pdf(e, al_progreso)              # lo leo con OCR (Tesseract) y lo guardo
             if acc in ("leer", "abrir"):
                 p = o.get("pagina", 1)
                 txt = bib.pagina(e, p)
@@ -1524,6 +1536,51 @@ class KiraGodCore:
             return False, resumen
         n = rec.guardar(resumen, tema=(tema or pag.get("titulo") or "internet")[:80], fuente=pag.get("url", "internet"))
         return bool(n), resumen
+
+    def aprender_codigo(self, consulta, al_paso=None):
+        """«aprende código de X»: busca código en internet (GitHub / Stack Overflow), lee lo mejor y GUARDA los
+        fragmentos útiles en el baúl (como estudio), para reutilizarlos cuando programe algo parecido. Devuelve un
+        texto para el usuario. Honesto: depende de lo que encuentre y de que haya internet."""
+        import internet_kira as ik_
+        net = self.internet
+        rec = getattr(self, "recuerdos", None)
+        paso = al_paso or (lambda _t: None)
+        try:
+            res = net.buscar(consulta, "codigo")
+        except ik_.InternetError as e:
+            return f"[x] No pude buscar código (¿hay internet?): {e}"
+        leidas, guardadas = [], 0
+        for r in res:
+            if len(leidas) >= 3:
+                break
+            if self.cancelado():
+                break
+            paso(f"Leyendo {r['fuente']}…")
+            try:
+                pag = net.leer(r["url"])
+            except ik_.InternetError:
+                continue
+            try:
+                cod = net.codigo_de(pag) or ""
+            except Exception:
+                cod = "\n\n".join((pag.get("codigos") or [])[:1])
+            leidas.append(r["fuente"])
+            if rec is not None and (cod or pag.get("texto")):
+                nota = (pag.get("texto", "")[:500]).strip()
+                if cod:
+                    nota += "\n\nCódigo que encontré:\n" + cod[:1600]
+                try:
+                    if rec.guardar(nota, tema=consulta[:80], fuente=pag.get("url", r["url"])):
+                        guardadas += 1
+                except Exception:
+                    pass
+        if not leidas:
+            return f"[x] No encontré código de «{consulta}» que pudiera leer (prueba con otras palabras)."
+        repaso = self._repasar_con_claude(consulta) if hasattr(self, "_repasar_con_claude") else False
+        return (f"[OK] He aprendido código de «{consulta}»: miré {len(leidas)} fuente(s) ({', '.join(leidas)}) y "
+                f"guardé {guardadas} ejemplo(s) en mi baúl" + (", y Claude lo repasó" if repaso else "")
+                + f". Pregúntame «¿qué sabes de {consulta}?» para verlo; si quieres que sea parte de mí, ábrelo y di "
+                "«implementa este código» (tus dos toques). Por seguridad, lo de internet no lo uso solo sin que lo veas.")
 
     def estudiar_en_internet(self, consulta, paginas=3, al_paso=None):
         """Busca, lee las mejores páginas, las resume y guarda lo aprendido en el baúl (y Claude lo repasa si está)."""

@@ -77,5 +77,16 @@ ok("TEXTO OCR" in bib.pagina(e, 1), "tras el OCR, leer la página 1 ya da texto"
 # y queda guardado: textos() lo devuelve sin volver a hacer OCR
 ok("TEXTO OCR" in "".join(bib.textos(e)), "el texto del OCR queda guardado para la próxima")
 
+# --- texto_util: distingue texto bueno de basura de escaneo (capa de texto rota) ---
+ok(pk.texto_util(["El hacking ético busca vulnerabilidades con permiso para corregirlas antes que un atacante."]),
+   "texto de verdad: útil")
+ok(not pk.texto_util(["A" * 400]), "una página llena de «AAAA» no es texto útil (es escaneo roto)")
+ok(not pk.texto_util([]) and not pk.texto_util(["xx"]), "vacío o casi vacío: no es útil")
+# un PDF cuyo «texto» es basura se marca como escaneado (con_texto False) -> hará OCR
+import io
+import tempfile as _tf
+# reusar el escaneado de antes: su ficha ya marcó con_texto False
+ok(not e.get("con_texto", True) or e.get("ocr"), "el PDF de imágenes se marca para OCR (no como texto bueno)")
+
 print("\nTODO BIEN" if not fallos else f"\n{fallos} FALLOS")
 sys.exit(1 if fallos else 0)
