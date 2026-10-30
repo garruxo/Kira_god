@@ -180,18 +180,13 @@ def texto_ocr(ruta, leer_imagen, al_progreso=None, max_paginas=MAX_PAGINAS_OCR, 
             break
         if al_progreso:
             al_progreso(i / max(1, n_tot), f"Leyendo con OCR la página {i + 1} de {n_tot}…")
-        try:
-            imgs = list(lector.pages[i].images)
-        except Exception:
-            imgs = []
         trozos_pag = []
-        for j, img in enumerate(imgs[:4]):                  # como mucho 4 imágenes por página
-            ext = _os.path.splitext(getattr(img, "name", "") or "")[1].lower() or ".png"
+        for j, (ext, datos) in enumerate(_imagenes_pagina(lector.pages[i])[:4]):   # máx 4 imágenes por página
             tmp = _os.path.join(tempfile.gettempdir(), f"kira_ocr_{i}_{j}{ext}")
             t = ""
             try:
                 with open(tmp, "wb") as f:
-                    f.write(img.data)
+                    f.write(datos)
                 t = leer_imagen(tmp) or ""
             except Exception:
                 t = ""
@@ -204,6 +199,46 @@ def texto_ocr(ruta, leer_imagen, al_progreso=None, max_paginas=MAX_PAGINAS_OCR, 
                 trozos_pag.append(t.strip())
         textos.append(_limpiar("\n".join(trozos_pag)))
     return textos
+
+
+def _imagenes_pagina(pagina):
+    """[(extensión, bytes)] de las imágenes de una página. PRIMERO saca el JPEG crudo del PDF (sin Pillow, así SÍ
+    funciona en el móvil, que no lleva Pillow); si no hay JPEG y el sitio tiene Pillow (contenedor/portátil), usa
+    page.images (cubre más formatos de escaneo)."""
+    import os as _os
+    salida = []
+    try:
+        recursos = pagina.get("/Resources")
+        xo = recursos.get("/XObject") if recursos else None
+        if xo is not None:
+            xo = xo.get_object()
+            for nombre in list(xo):
+                try:
+                    obj = xo[nombre].get_object()
+                except Exception:
+                    continue
+                if obj.get("/Subtype") != "/Image":
+                    continue
+                filtro = obj.get("/Filter")
+                filtros = [str(f) for f in (filtro if isinstance(filtro, list) else [filtro])]
+                try:
+                    if "/DCTDecode" in filtros:                 # JPEG: los bytes crudos YA son un .jpg
+                        salida.append((".jpg", obj.get_data()))
+                    elif "/JPXDecode" in filtros:               # JPEG 2000
+                        salida.append((".jp2", obj.get_data()))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    if salida:
+        return salida
+    try:                                                        # reserva con Pillow (no en el móvil)
+        for img in list(pagina.images):
+            ext = _os.path.splitext(getattr(img, "name", "") or "")[1].lower() or ".png"
+            salida.append((ext, img.data))
+    except Exception:
+        pass
+    return salida
 
 
 def texto_util(textos):
