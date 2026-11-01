@@ -168,6 +168,20 @@ def formato_clave(r):
     return json.dumps(r, ensure_ascii=False)
 
 
+def formato_cebo(inf):
+    """El informe del cebo (honeypot): las IPs que han intentado atacar los puertos señuelo."""
+    if not inf:
+        return "(sin datos del cebo)"
+    filas = inf.get("ips", [])
+    lin = [f"Cebo: {inf.get('total_ips', 0)} IP(s) de fuera han tocado los señuelos.",
+           "(" + inf.get("aviso", "") + ")"]
+    for f in filas[:20]:
+        pais = f.get("pais") or "??"
+        puertos = ",".join(str(p) for p in f.get("puertos", [])) or "-"
+        lin.append(f"  {f.get('ip',''):16} x{f.get('veces',0):<4} [{pais}] puertos {puertos} {f.get('org','')}".rstrip())
+    return "\n".join(lin)
+
+
 def una_vez(cli, pregunta):
     print("Kira: ", end="", flush=True)
     print(cli.charla(pregunta, al_trozo=lambda t: print(t, end="", flush=True)))
@@ -231,6 +245,12 @@ def bucle(cli):
                 continue
             if bajo.startswith("/mira "):
                 print(formato_clave(cli.defensa("fuerza", clave=tu.split(" ", 1)[1])))
+                continue
+            if bajo in ("/cebo", "/trampa", "/honeypot"):
+                print(cli.defensa("cebo").get("resumen", "(sin datos del cebo)"))
+                continue
+            if bajo in ("/cebo-informe", "/informe-cebo"):
+                print(formato_cebo(cli.defensa("cebo").get("informe", {})))
                 continue
             print("Kira: ", end="", flush=True)
             cli.charla(tu, al_trozo=lambda t: print(t, end="", flush=True))

@@ -240,6 +240,32 @@ exec /usr/bin/python3 "$AQUI/espacio_kira.py" "\$@"
 KIRAESP
   $SUDO chmod +x /usr/local/bin/kira-espacio
   mkdir -p "$DATOS/espacio"
+  $SUDO tee /usr/local/bin/kira-cebo >/dev/null <<KIRACEBO
+#!/usr/bin/env bash
+# El cebo (honeypot) DEFENSIVO de Kira. Sin argumentos: enseña lo que ha picado.
+# Para que ESCUCHE: kira-cebo --escuchar   (abre puertos señuelo; solo observa, no ataca ni envía nada).
+if [ \$# -eq 0 ]; then exec /usr/bin/python3 "$AQUI/honeypot_kira.py" --estado; fi
+exec /usr/bin/python3 "$AQUI/honeypot_kira.py" "\$@"
+KIRACEBO
+  $SUDO chmod +x /usr/local/bin/kira-cebo
+  # El cebo como servicio: DEFINIDO pero NO se enciende solo (abre puertos a tu red; lo activas tú cuando quieras
+  # con: sudo systemctl enable --now kira-honeypot.service). Solo observa; nunca ataca ni envía datos fuera.
+  $SUDO tee /etc/systemd/system/kira-honeypot.service >/dev/null <<EOF
+[Unit]
+Description=Cebo (honeypot) DEFENSIVO de Kira: observa quién intenta atacar (no se enciende solo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$USER
+ExecStart=/usr/bin/python3 $AQUI/honeypot_kira.py --escuchar
+Restart=always
+RestartSec=20
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF
   $SUDO tee /usr/share/applications/kira-mapa.desktop >/dev/null <<MAPADESK
 [Desktop Entry]
 Name=Mapa de ataques (Kira)

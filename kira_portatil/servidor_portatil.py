@@ -408,6 +408,12 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                 if accion == "ataques":
                     import ataques_kira as at
                     return self._json(200, {"ok": True, **at.mapa_datos(at.cargar())})
+                # --- cebo (honeypot): qué ha picado. SOLO lee lo apuntado; no arranca ni envía nada ---
+                if accion == "cebo":
+                    import honeypot_kira as hp
+                    est = hp.cargar()
+                    return self._json(200, {"ok": True, "resumen": hp.resumen(est),
+                                            "informe": hp.informe_comunidad(est)})
                 return self._json(400, {"ok": False, "error": "acción de defensa desconocida"})
             except rd.DefensaError as e:
                 return self._json(400, {"ok": False, "error": str(e)})
