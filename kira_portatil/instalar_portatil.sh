@@ -258,7 +258,7 @@ Wants=network-online.target
 
 [Service]
 User=$USER
-ExecStart=/usr/bin/python3 $AQUI/honeypot_kira.py --escuchar
+ExecStart=/usr/bin/python3 $AQUI/honeypot_kira.py --escuchar --solo-casa
 Restart=always
 RestartSec=20
 StandardOutput=journal+console

@@ -319,6 +319,38 @@ class Sensor:
                 pass
 
 
+def ip_local():
+    """La IP PRIVADA de este portátil en su red local (para el modo seguro de casa). No manda nada a internet:
+    solo le pregunta al sistema qué IP usaría de salida. Si no es privada o no se sabe, devuelve None."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("10.255.255.255", 1))      # truco: NO envía paquetes, solo fija la IP de salida
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        return None
+    try:
+        if ipaddress.ip_address(ip).is_private:
+            return ip
+    except ValueError:
+        pass
+    return None
+
+
+def host_para(solo_casa, host="0.0.0.0"):
+    """Decide en qué dirección escuchar. Pura y testeable. En modo seguro de casa NUNCA devuelve 0.0.0.0:
+      - si encuentro mi IP de red local, escucho SOLO ahí (nada de fuera de tu red llega);
+      - si no la encuentro, escucho SOLO en 127.0.0.1 (solo este portátil: lo más cerrado posible)."""
+    if not solo_casa:
+        return host, "TODA la red del portátil (0.0.0.0)"
+    ip = ip_local()
+    if ip:
+        return ip, f"SOLO TU RED LOCAL (escucho únicamente en {ip}; nada de fuera de tu red llega al cebo)"
+    return "127.0.0.1", "SOLO ESTE PORTÁTIL (no encontré tu IP de red; escucho solo en 127.0.0.1, lo más cerrado)"
+
+
 def _al_mapa(ev):
     """Puente opcional: un toque del cebo de una IP EXTERNA se apunta también en `ataques_kira`, para que salga en
     el mapa del mundo que ya existe. Si algo falla, no pasa nada (el cebo sigue a lo suyo)."""
@@ -334,9 +366,11 @@ def _al_mapa(ev):
         pass
 
 
-def escuchar(puertos=None, host="0.0.0.0", ruta_estado=None):
-    """Arranca el cebo y se queda escuchando hasta Ctrl+C. Para el servicio del sistema y para '--escuchar'."""
+def escuchar(puertos=None, host="0.0.0.0", solo_casa=False, ruta_estado=None):
+    """Arranca el cebo y se queda escuchando hasta Ctrl+C. Para el servicio del sistema y para '--escuchar'.
+    solo_casa=True: modo seguro de casa (escucha solo en tu red local, nunca hacia fuera)."""
     senuelos = SENUELOS if not puertos else {p: SENUELOS.get(p, (servicio_de(p), b"\r\n")) for p in puertos}
+    host, modo = host_para(solo_casa, host)
 
     def aviso(ev, nueva):
         _al_mapa(ev)
@@ -348,9 +382,14 @@ def escuchar(puertos=None, host="0.0.0.0", ruta_estado=None):
     sensor = Sensor(senuelos=senuelos, host=host, al_evento=aviso, ruta_estado=ruta_estado)
     reales = sensor.iniciar()
     print("Cebo de Kira ESCUCHANDO (solo observa; no ataca ni envía nada fuera).", flush=True)
+    print("Modo:", modo, flush=True)
     print("Puertos señuelo:", ", ".join(f"{p}→{servicio_de(p)}" for p in reales), flush=True)
-    print("AVISO: esto abre puertos a tu red. Para que lleguen ataques de internet tendrías que redirigir esos "
-          "puertos en tu router (y asúmelo con cuidado). Ctrl+C para parar.", flush=True)
+    if not solo_casa:
+        print("AVISO: en este modo abres puertos a toda tu red. Para que lleguen ataques de internet tendrías que "
+              "redirigir esos puertos en tu router (y asúmelo con cuidado). Usa --solo-casa para lo más seguro. "
+              "Ctrl+C para parar.", flush=True)
+    else:
+        print("(Modo seguro de casa: nada de fuera de tu red local llega aquí.) Ctrl+C para parar.", flush=True)
     try:
         while True:
             time.sleep(1)
@@ -368,6 +407,8 @@ def _cli(argv):
     p.add_argument("--estado", action="store_true", help="enseña lo que ha picado hasta ahora")
     p.add_argument("--informe", action="store_true", help="informe para la comunidad (no lo envía)")
     p.add_argument("--host", default="0.0.0.0", help="en qué dirección escuchar (por defecto, toda tu red)")
+    p.add_argument("--solo-casa", action="store_true", dest="solo_casa",
+                   help="modo seguro: escucha SOLO en tu red local, nunca hacia fuera")
     p.add_argument("--puertos", default="", help="puertos señuelo separados por comas (por defecto, los de serie)")
     a = p.parse_args(argv)
     if a.estado:
@@ -377,7 +418,7 @@ def _cli(argv):
         print(json.dumps(informe_comunidad(cargar()), ensure_ascii=False, indent=2))
         return 0
     puertos = [int(x) for x in a.puertos.split(",") if x.strip().isdigit()] if a.puertos else None
-    escuchar(puertos=puertos, host=a.host)
+    escuchar(puertos=puertos, host=a.host, solo_casa=a.solo_casa)
     return 0
 
 

@@ -62,6 +62,16 @@ inf = hp.informe_comunidad(est)
 ok(inf["total_ips"] == 1 and inf["ips"][0]["ip"] == "1.2.3.4", "informe comunidad: solo IPs externas")
 ok("aparente" in inf["aviso"].lower(), "informe avisa de origen aparente")
 
+# --- MODO SEGURO DE CASA: nunca escucha en 0.0.0.0 ---
+h_normal, _ = hp.host_para(False)
+ok(h_normal == "0.0.0.0", "modo normal: toda la red")
+h_casa, modo_casa = hp.host_para(True)
+ok(h_casa != "0.0.0.0", f"modo casa NUNCA es 0.0.0.0 (es {h_casa})")
+import ipaddress as _ipa
+ok(h_casa == "127.0.0.1" or _ipa.ip_address(h_casa).is_private, "modo casa: solo IP local o privada")
+ip = hp.ip_local()
+ok(ip is None or _ipa.ip_address(ip).is_private, "ip_local es privada o None (nunca pública)")
+
 # --- CEBO DE VERDAD en localhost: abre un puerto, nos conectamos y comprueba que lo apuntó ---
 ruta = os.path.join(os.environ["HOME"], "hp.json")
 sensor = hp.Sensor(senuelos={0: ("SSH", b"SSH-2.0-OpenSSH_8.9\r\n")}, host="127.0.0.1",
