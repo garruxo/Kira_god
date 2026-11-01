@@ -14,7 +14,8 @@ import unicodedata
 
 def _recetas():
     todas = []
-    for nombre in ("recetas_graficos_kira", "recetas_ingenieria_kira", "saber_avanzado_kira"):
+    for nombre in ("recetas_graficos_kira", "recetas_ingenieria_kira", "saber_avanzado_kira",
+                   "saber_ciberseguridad_kira"):
         try:
             mod = __import__(nombre)
             todas.extend(getattr(mod, "RECETAS", []))

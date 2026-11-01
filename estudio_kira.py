@@ -29,6 +29,7 @@ POR_TEMA = 3                    # artículos por tema del plan
 INTERVALO = 10 * 60             # segundos entre temas cuando aprende sola
 FUENTE_INGENIERIA = "saber de ingeniería de Kira"   # fichas propias (recetas_ingenieria_kira), sin internet
 FUENTE_AVANZADO = "saber de programación y diseño de Kira"   # fichas propias (saber_avanzado_kira), sin internet
+FUENTE_CIBER = "saber de ciberseguridad de Kira"             # fichas propias (saber_ciberseguridad_kira), sin internet
 
 PLAN = [
     "Programación", "Python", "Algoritmo", "Estructura de datos", "Programación orientada a objetos",
@@ -91,12 +92,14 @@ class Estudiante:
         self.ultimo = str(d.get("ultimo", ""))[:120]
         self.ingenieria = int(d.get("ingenieria", 0)) if str(d.get("ingenieria", 0)).isdigit() else 0
         self.avanzado = int(d.get("avanzado", 0)) if str(d.get("avanzado", 0)).isdigit() else 0
+        self.ciberseguridad = int(d.get("ciberseguridad", 0)) if str(d.get("ciberseguridad", 0)).isdigit() else 0
 
     def _guardar(self):
         tmp = self.ruta + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"sola": self.sola, "indice": self.indice, "aprendidos": self.aprendidos,
-                       "ultimo": self.ultimo, "ingenieria": self.ingenieria, "avanzado": self.avanzado}, f, ensure_ascii=False)
+                       "ultimo": self.ultimo, "ingenieria": self.ingenieria, "avanzado": self.avanzado,
+                       "ciberseguridad": self.ciberseguridad}, f, ensure_ascii=False)
         os.replace(tmp, self.ruta)
 
     # ---------- Wikipedia ----------
@@ -195,6 +198,26 @@ class Estudiante:
         try:
             import recetas_ingenieria_kira as ri
             return self.ingenieria < len(ri.fichas())
+        except ImportError:
+            return False
+
+    def estudiar_ciberseguridad(self):
+        """Guarda en el baúl las fichas de ciberseguridad DEFENSIVA (saber_ciberseguridad_kira): recetas + conceptos.
+        Texto escrito y revisado a mano: no viene de internet. Devuelve (fichas nuevas, total)."""
+        import saber_ciberseguridad_kira as cs
+        fichas = cs.fichas()
+        nuevas = sum(self._ficha(tema, texto, fuente=FUENTE_CIBER) for tema, texto in fichas)
+        with self._lock:
+            self.aprendidos += nuevas
+            self.ciberseguridad = len(fichas)
+            self.ultimo = "ciberseguridad defensiva"
+            self._guardar()
+        return nuevas, len(fichas)
+
+    def ciberseguridad_pendiente(self):
+        try:
+            import saber_ciberseguridad_kira as cs
+            return getattr(self, "ciberseguridad", 0) < len(cs.fichas())
         except ImportError:
             return False
 

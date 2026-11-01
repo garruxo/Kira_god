@@ -227,6 +227,14 @@ def montar_sala_ciber(sm, ctx):
     c_est = BoxLayout(orientation="vertical", spacing=dp(6))
     prog = etiqueta("", alto=24, color=NEON)
     c_est.add_widget(prog)
+    # --- ESTUDIO AUTOMÁTICO: el botón ES tu permiso. Guarda su defensa y, si hay internet, lee sitios oficiales. ---
+    c_est.add_widget(etiqueta("Consola de defensa. Pulsa «ESTUDIAR solo» y Kira guarda su saber de defensa y, si hay "
+                              "internet, lee sola los sitios oficiales (INCIBE, OWASP, Wikipedia). El botón es tu "
+                              "permiso: solo lee y aprende, nunca ataca.", alto=62, color=TENUE))
+    est_estado = etiqueta("", alto=24, color=NEON)
+    c_est.add_widget(est_estado)
+    btn_auto = boton("ESTUDIAR solo (sitios oficiales)", lambda: estudiar_auto(), VERDE, alto=48)
+    c_est.add_widget(btn_auto)
     sv_lista = ScrollView(size_hint_y=0.32, do_scroll_x=False)
     rej = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(4))
     rej.bind(minimum_height=rej.setter("height"))
@@ -287,6 +295,29 @@ def montar_sala_ciber(sm, ctx):
         if sel["id"]:
             aprend.marcar(sel["id"], estado_)
             pintar_lista()
+
+    def estudiar_auto():
+        """El botón: Kira estudia SOLA. Guarda su saber de defensa (sin internet) y, si hay conexión, lee los
+        sitios oficiales preinstalados. Pulsar el botón es el permiso; no hay que confirmar cada sitio."""
+        if btn_auto.disabled:
+            return
+        btn_auto.disabled = True
+        est_estado.text = "Estudiando… guardo mi defensa y, si hay internet, leo los sitios oficiales."
+        silueta.hablar(3.0)
+
+        def al_paso(t):
+            Clock.schedule_once(lambda _dt: setattr(est_estado, "text", str(t)[:120]), 0)
+
+        def hecho(r):
+            btn_auto.disabled = False
+            txt = r if isinstance(r, str) else f"[x] {r}"
+            est_estado.text = txt.split("\n")[0][:120]
+            vista.text = txt
+            silueta.hablar(2.5)
+            pintar_lista()
+            if ctx["ajustes"].voz_hablar:
+                voz.hablar("Ya he estudiado ciberseguridad defensiva.")
+        en_hilo(lambda: core.estudiar_ciberseguridad(al_paso=al_paso, con_internet=True), hecho)
 
     # ---- SI TE PASA (qué hacer ante un incidente) ----
     c_cas = BoxLayout(orientation="vertical", spacing=dp(6))

@@ -1608,6 +1608,56 @@ class KiraGodCore:
                 f"guardado {guardadas} ficha(s) nuevas en mi baúl" + (", y Claude las ha repasado" if repaso else "") +
                 ". Pregúntame cuando quieras.")
 
+    def estudiar_ciberseguridad(self, al_paso=None, con_internet=False):
+        """El botón «ESTUDIAR» de la Sala de Ciberseguridad y «estudia ciberseguridad».
+        1) SIN internet: guarda en el baúl las fichas propias de defensa (recetas con código + conceptos).
+        2) Si con_internet=True (el botón): además lee los SITIOS OFICIALES preinstalados (INCIBE, OWASP, Wikipedia)
+           y guarda lo aprendido. SOLO defensa. Lo de internet se guarda y se recuerda, pero NO se le mete solo al
+           cerebro cuando programa (seguridad): para eso están tus dos toques («implementa este código»)."""
+        paso = al_paso or (lambda _t: None)
+        paso("Guardando mi saber de defensa (sin internet)…")
+        try:
+            nuevas, total = self.estudio.estudiar_ciberseguridad()
+        except (ImportError, OSError) as e:
+            return f"[x] No pude guardar mi saber de ciberseguridad: {e}"
+        base = (f"[OK] He estudiado ciberseguridad DEFENSIVA sin internet: {nuevas} ficha(s) nuevas (tengo {total}: "
+                "phishing, fuerza bruta, escaneos, MFA, cifrado y hash, mínimo privilegio, copias, detección de "
+                "anomalías e ingeniería social). Pregúntame «qué es el phishing» o «qué es la detección de anomalías». "
+                "Mis técnicas con código: «recetas de ciberseguridad».")
+        if not con_internet:
+            return base
+        try:
+            import saber_ciberseguridad_kira as cs
+            import internet_kira as ik_
+        except ImportError as e:
+            return base + f"\n\n(No pude abrir internet: {e}.)"
+        net = getattr(self, "internet", None)
+        if net is None:
+            return base + "\n\n(No tengo el buscador de internet listo.)"
+        leidas, guardadas, fallos = [], 0, 0
+        for fuente in cs.FUENTES_OFICIALES:
+            if self.cancelado():
+                break
+            paso(f"Leyendo {fuente['titulo']}…")
+            try:
+                pag = net.leer(fuente["url"])
+            except ik_.InternetError:
+                fallos += 1
+                continue
+            except Exception:
+                fallos += 1
+                continue
+            ok, _ = self.guardar_pagina(pag, fuente.get("tema") or "ciberseguridad")
+            leidas.append(fuente["titulo"])
+            guardadas += int(bool(ok))
+        if not leidas:
+            return (base + "\n\nHe intentado leer los sitios oficiales (INCIBE, OWASP, Wikipedia), pero ahora no he "
+                    "podido entrar (¿hay internet?). Mi saber de defensa sí está guardado; vuelve a darle al botón "
+                    "cuando tengas conexión.")
+        return (base + f"\n\nAdemás he leído {len(leidas)} sitio(s) oficial(es) ({', '.join(leidas)}) y he guardado "
+                f"{guardadas} ficha(s) nuevas de ellos en mi baúl. Por seguridad, lo que aprendo de internet lo "
+                "recuerdo pero no lo meto sola en mi cerebro al programar: para eso están tus dos toques.")
+
     def aprender_de_video(self, command):
         """«aprende de este vídeo: ‹enlace de YouTube›» -> saca lo que dice (subtítulos; si no hay, el oído), lo
         resume y lo guarda en el baúl. La voz puede pedirlo; no instala nada."""
@@ -1879,6 +1929,9 @@ class KiraGodCore:
                     "algoritmos, estructuras de datos, sistemas operativos, redes, bases de datos, compiladores, "
                     "seguridad defensiva, IA…). Pregúntame, por ejemplo, «qué es el teorema CAP» o «cómo funciona "
                     "Dijkstra». Mis técnicas con código: «recetas de ingeniería».")
+        if re.match(r"^estudia\s*:?\s*(?:la\s+|el\s+)?(?:ciberseguridad|seguridad(?:\s+inform[aá]tica|\s+defensiva)?)\s*$",
+                    cmd_lower):
+            return self.estudiar_ciberseguridad(con_internet=False)
         m = re.match(r"^estudia\s*:?\s*(?:el\s+|la\s+|las\s+)?(dise[ñn]o(?:\s+gr[aá]fico)?|programaci[oó]n\s+avanzada|"
                      r"programaci[oó]n\s+y\s+dise[ñn]o|todo\s+lo\s+avanzado|redes\s+neuronales|deep\s+learning|"
                      r"aprendizaje\s+profundo|inteligencia\s+artificial|machine\s+learning|aprendizaje\s+autom[aá]tico|"
