@@ -676,10 +676,31 @@ class KiraGodCore:
         except cerebro_ia_kira.Cancelada:
             raise
         except urllib.error.HTTPError as e:
+            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo)
+            if fb is not None:
+                return fb
             raise RuntimeError(f"La API respondió {e.code} (revisa clave y modelo)")
         except Exception as e:
+            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo)
+            if fb is not None:
+                return fb
             raise RuntimeError(f"No se pudo contactar con la API: {e}")
         return "".join(b.get("text", "") for b in datos.get("content", []) if b.get("type") == "text")
+
+    def _fallback_local(self, system, usuario, max_tokens, mensajes, al_trozo):
+        """Plan B: si el cerebro de Claude (API) falla y Kira tiene su cerebro PROPIO listo (o el de casa), responde
+        con él en vez de quedarse sin pensar. Devuelve el texto, o None si no hay cerebro local con el que tirar."""
+        import cerebro_ia_kira
+        cer = getattr(self, "cerebro_ia", None)
+        try:
+            if cer is None or not cer.local_disponible():
+                return None
+            return cer.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens,
+                                  al_trozo=al_trozo, parar=self.cancelado)
+        except cerebro_ia_kira.Cancelada:
+            raise
+        except Exception:
+            return None
 
     def generar_mejora(self, pedido: str, quien=None):
         """Devuelve (nombre, codigo). Se prueba en el laboratorio; aquí NO se instala nada.
