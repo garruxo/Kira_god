@@ -266,6 +266,59 @@ def construir_interfaz(core, consola=None):
         if boc["reloj"] is None:
             boc["reloj"] = Clock.schedule_interval(vigilar, 0.8)
 
+    # --- ventana emergente de PERMISO: Kira necesita INSTALAR algo para seguir (la info la mira libre; instalar, no) ---
+    perm = {"abierta": False}
+
+    def mostrar_permiso(nombre, motivo=""):
+        if perm["abierta"]:
+            return
+        from kivy.uix.popup import Popup
+        perm["abierta"] = True
+        cuerpo = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        msg = Label(text=f"Kira necesita instalar «{nombre}» para seguir.\n{motivo}\n\nSe baja de PyPI y se comprueba "
+                         "con su huella. ¿La instalo?", color=TXT, font_size=tam(15), halign="center", valign="middle",
+                    **FUENTE)
+        msg.bind(width=lambda *_: setattr(msg, "text_size", (msg.width, None)))
+        cuerpo.add_widget(msg)
+        estado = Label(text="", size_hint_y=None, height=dp(24), color=TENUE, font_size=tam(13), **FUENTE)
+        cuerpo.add_widget(estado)
+        fila = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
+        pop = Popup(title="Permiso para instalar", content=cuerpo, size_hint=(0.92, 0.5), auto_dismiss=False)
+
+        def cerrar():
+            perm["abierta"] = False
+            pop.dismiss()
+
+        def cancelar(*_):
+            core.olvidar_permiso(nombre)
+            cerrar()
+            decir(f"Vale, no instalo «{nombre}». Buscaré la solución de otra forma si puedo.")
+
+        def instalar(*_):
+            b_si.disabled = b_no.disabled = True
+            estado.text = f"Instalando «{nombre}»…"
+
+            def trabajo():
+                return core.instalar_libreria(
+                    nombre, progreso=lambda fr, t: Clock.schedule_once(lambda _dt: setattr(estado, "text", str(t)[:60]), 0))
+
+            def hecho(r):
+                estado.text = str(r)[:90] if isinstance(r, str) else "[x] no se pudo"
+                Clock.schedule_once(lambda _dt: cerrar(), 1.6)
+                decir(r if isinstance(r, str) else "[x] No pude instalarla.")
+            en_hilo(trabajo, hecho)
+
+        b_no = boton("Cancelar", cancelar, GRIS, alto=48)
+        b_si = boton("Instalar", instalar, VERDE, alto=48)
+        fila.add_widget(b_no)
+        fila.add_widget(b_si)
+        cuerpo.add_widget(fila)
+        pop.open()
+    try:
+        core.al_permiso = lambda n, m="": Clock.schedule_once(lambda _dt: mostrar_permiso(n, m), 0)
+    except Exception:
+        pass
+
     def decir(texto, hablar=True, ya_escrito=False):
         """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta.
         ya_escrito=True: el texto ya fue apareciendo mientras pensaba (no se vuelve a escribir)."""

@@ -407,6 +407,27 @@ _QUITA = re.compile(r"^(?:kira[\s,]+)?(?:quita|borra|desinstala|elimina)\s+(?:la
 _LISTA = re.compile(r"^(?:kira[\s,]+)?(?:mis|qu[eé]|las|tus)\s+(?:librer[ií]as|bibliotecas|paquetes)(?:\s+tienes)?\s*\??$", re.I)
 
 
+# Cuando un programa de Kira (o un experimento) falla porque le FALTA una librería, el error lo dice. Esto saca el
+# NOMBRE de esa librería, para que Kira PARE y le pregunte al dueño si la puede instalar (nunca sola). Puro, testeable.
+_RE_FALTA = re.compile(
+    r"no permite importar [«\"']?([A-Za-z0-9_]+)"          # modo seguro: «el modo seguro no permite importar «X»»
+    r"|No module named ['\"]?([A-Za-z0-9_]+)"             # python normal: No module named 'X'
+    r"|ModuleNotFoundError: No module named ['\"]?([A-Za-z0-9_]+)", re.I)
+# módulos del sistema que NO se instalan con pip (si faltan, no es cosa de descargar nada)
+_NO_INSTALABLES = {"os", "sys", "subprocess", "socket", "ctypes", "ssl", "fcntl", "termios", "posix", "pwd", "grp"}
+
+
+def necesita_libreria(error):
+    """Si el error dice que falta una librería instalable, devuelve su nombre; si no, None."""
+    m = _RE_FALTA.search(str(error or ""))
+    if not m:
+        return None
+    nombre = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+    if not nombre or nombre.lower() in _NO_INSTALABLES:
+        return None
+    return nombre
+
+
 def interpretar(texto):
     t = " ".join(str(texto or "").split()).strip(" ¿?¡!.")
     m = _INSTALA.match(t)

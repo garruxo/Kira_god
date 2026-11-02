@@ -1453,8 +1453,16 @@ class KiraGodCore:
                     if al_progreso:
                         al_progreso(i / max(1, e["paginas"]), f"Estudiando la página {i} de {e['paginas']}…")
                 bib.marcar_estudiado(e)
+                # Al terminar, REFLEXIONA sobre el PDF: cómo funciona, qué mejorar, qué haría falta (va al cuaderno).
+                reflexion = ""
+                try:
+                    muestra = "\n".join(t for t in bib.textos(e)[:3] if t)[:1400]
+                    reflexion = self._reflexionar(e["nombre"], muestra)
+                except Exception:
+                    reflexion = ""
+                extra = ("\n\nY lo he pensado:\n" + reflexion) if reflexion else ""
                 return (f"[OK] He estudiado «{e['nombre']}»: {rec.total() - antes} trozo(s) nuevos en mi baúl. "
-                        "Ahora puedes preguntarme por su contenido aunque no digas el PDF.")
+                        "Ahora puedes preguntarme por su contenido aunque no digas el PDF." + extra)
             if acc == "borrar":
                 bib.borrar(e)
                 return f"[OK] He borrado el PDF «{e['nombre']}» (lo estudiado se queda en el baúl)."
@@ -1786,9 +1794,17 @@ class KiraGodCore:
             if r.get("ok"):
                 salida = (r.get("dato") or {}).get("salida", "")
                 return {"ok": True, "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200], "intentos": i}
-            ultimo = {"ok": False, "resultado": f"intento {i}: {str(r.get('error') or '')[:200]}",
-                      "codigo": (codigo or "")[:1200]}
-            pista = f"\n\nLa vez anterior falló con: {str(r.get('error') or '')[:150]}. Corrígelo y hazlo más simple."
+            err = str(r.get("error") or "")
+            try:
+                import librerias_kira as lk_
+                falta = lk_.necesita_libreria(err)
+            except Exception:
+                falta = None
+            if falta:                                     # le falta una librería: NO sigo probando, PARO y pregunto
+                return {"ok": False, "resultado": f"me falta la librería «{falta}» para esto", "necesita": falta,
+                        "codigo": (codigo or "")[:1200], "intentos": i}
+            ultimo = {"ok": False, "resultado": f"intento {i}: {err[:200]}", "codigo": (codigo or "")[:1200]}
+            pista = f"\n\nLa vez anterior falló con: {err[:150]}. Corrígelo y hazlo más simple."
         ultimo["intentos"] = max(1, intentos)
         return ultimo
 
@@ -1840,6 +1856,106 @@ class KiraGodCore:
         import pensador_kira as pn
         return pn.texto_cuaderno(pn.cargar(self._ruta_pensar()), n)
 
+    # ---------- permisos de descarga: la info se mira libre, pero INSTALAR algo te lo pregunta ----------
+    def _ruta_permisos(self):
+        return os.path.join(self.dir, "permisos_pendientes.json")
+
+    def apuntar_permiso(self, nombre, motivo=""):
+        """Apunta que Kira NECESITA una librería/programa para seguir. No instala nada: es para preguntarte."""
+        nombre = str(nombre or "").strip()
+        if not nombre:
+            return
+        try:
+            with open(self._ruta_permisos(), encoding="utf-8") as f:
+                datos = json.load(f)
+        except (OSError, ValueError):
+            datos = {}
+        if not isinstance(datos, dict):
+            datos = {}
+        nuevo = nombre not in datos
+        datos[nombre] = {"motivo": str(motivo or "")[:200], "cuando": int(time.time())}
+        try:
+            with open(self._ruta_permisos(), "w", encoding="utf-8") as f:
+                json.dump(datos, f, ensure_ascii=False)
+            os.chmod(self._ruta_permisos(), 0o600)
+        except OSError:
+            pass
+        # avisa a la interfaz para que saque la ventana de «Instalar / Cancelar» (no instala nada por sí mismo)
+        cb = getattr(self, "al_permiso", None)
+        if nuevo and callable(cb):
+            try:
+                cb(nombre, str(motivo or ""))
+            except Exception:
+                pass
+
+    def olvidar_permiso(self, nombre):
+        """Quita un permiso pendiente (cuando el dueño lo cancela o ya se instaló)."""
+        try:
+            with open(self._ruta_permisos(), encoding="utf-8") as f:
+                datos = json.load(f)
+            datos.pop(str(nombre or ""), None)
+            with open(self._ruta_permisos(), "w", encoding="utf-8") as f:
+                json.dump(datos, f, ensure_ascii=False)
+        except (OSError, ValueError):
+            pass
+
+    def instalar_libreria(self, nombre, progreso=None, cancelado=None):
+        """Instala una librería AHORA (lo llama el botón «Instalar» de la ventana emergente = tu confirmación). Prepara
+        el plan y lo instala con confirmado=True. Devuelve un texto con el resultado. Quita el permiso pendiente."""
+        import librerias_kira as lk
+        lib = getattr(self, "librerias", None)
+        if lib is None:
+            return "[x] Las librerías no están disponibles en este dispositivo."
+        try:
+            lib.preparar(nombre)
+            lib.instalar_pendiente(confirmado=True, progreso=progreso, cancelado=cancelado or self.cancelado)
+        except lk.LibreriaError as e:
+            return f"[x] No pude instalar «{nombre}»: {e}"
+        except Exception as e:
+            return f"[x] No pude instalar «{nombre}»: {e}"
+        self.olvidar_permiso(nombre)
+        return f"[OK] Instalada «{nombre}». Ya puedo seguir; dime «piensa» otra vez cuando quieras."
+
+    def pendientes_descarga(self):
+        """Texto con lo que Kira necesita instalar para seguir (si hay algo). No instala nada."""
+        try:
+            with open(self._ruta_permisos(), encoding="utf-8") as f:
+                datos = json.load(f)
+        except (OSError, ValueError):
+            datos = {}
+        if not isinstance(datos, dict) or not datos:
+            return "No necesito instalar nada ahora mismo. La información la miro libre; para instalar algo siempre te pregunto."
+        lin = ["Para seguir necesitaría instalar esto (tú decides; no instalo nada solo):"]
+        for n, d in list(datos.items())[:10]:
+            lin.append(f"  - «{n}»" + (f": {d.get('motivo')}" if d.get("motivo") else ""))
+        lin.append("Si te parece bien, dime «instala la librería <nombre>» (son tus dos toques).")
+        return "\n".join(lin)
+
+    def _reflexionar(self, tema, texto="", al_paso=None):
+        """Tras estudiar algo (un vídeo, un PDF, un tema): PIENSA cómo funciona, qué se puede mejorar y qué haría
+        falta, y deja una conclusión fiable en el cuaderno. Devuelve el texto (o '' si no hay cerebro). Es una NOTA."""
+        import pensador_kira as pn
+        base = (texto or "")[:1400]
+        prompt = (f"Acabas de estudiar «{tema}». " + (f"Esto es lo que dice:\n{base}\n\n" if base else "")
+                  + "Reflexiona BREVE y claro: 1) ¿cómo funciona? 2) ¿qué se puede mejorar? 3) ¿qué haría falta? "
+                  "Termina con una conclusión fiable en una frase.")
+        try:
+            r = str(self._pensar_preguntar(prompt) or "").strip()
+        except Exception:
+            return ""
+        if len(r) < 20:
+            return ""
+        try:
+            ruta = self._ruta_pensar()
+            estado = pn.cargar(ruta)
+            pn.anotar(estado, {"cuando": int(time.time()), "semilla": tema, "pregunta": f"¿cómo funciona {tema} y cómo mejorarlo?",
+                               "respuesta": r[:600], "seguridad": "media", "duda": False,
+                               "fuente": "estudiado", "tipo": "reflexión"})
+            pn.guardar(estado, ruta)
+        except Exception:
+            pass
+        return r
+
     def ciclo_una(self, semilla=None, rondas=3):
         """El CICLO DE MEJORA: piensa → busca info → compara → experimenta → juzga → mejora, varias vueltas, y guarda
         la mejor versión y el recorrido. Es lo que el dueño llamó «pensar, experimentar y comparar sin parar»."""
@@ -1874,6 +1990,18 @@ class KiraGodCore:
                         nota = None if self.cancelado() else self.pensar_una()
                         if nota and nota.get("fuente") in ("sin cerebro", "error"):
                             fallo = True
+                        falta = (nota or {}).get("experimento", {}).get("necesita") if nota else None
+                        if falta:                        # necesita instalar algo: PARO y te lo pregunto (tus dos toques)
+                            self.apuntar_permiso(falta, f"para pensar sobre «{(nota or {}).get('semilla', '')}»")
+                            pn.anotar(est := pn.cargar(self._ruta_pensar()),
+                                      {"cuando": int(time.time()), "semilla": (nota or {}).get("semilla", ""),
+                                       "pregunta": "(paré: necesito instalar algo)",
+                                       "respuesta": f"Para seguir necesito la librería «{falta}». Dime «instala la "
+                                                    f"librería {falta}» si te parece (tus dos toques).",
+                                       "seguridad": "baja", "duda": True, "fuente": "permiso", "tipo": "idea"})
+                            pn.guardar(est, self._ruta_pensar())
+                            self._pensar_on = False
+                            break
                     except Exception as e:
                         fallo = True
                         try:                                 # que un fallo del bucle NO se quede mudo: queda escrito
@@ -1915,6 +2043,9 @@ class KiraGodCore:
         if re.match(r"^(?:tu |mi )?cuaderno(?: de pensamientos)?$|^qu[eé] has pensado$|^qu[eé] piensas$|"
                     r"^tus pensamientos$|^pensamientos$", cmd_lower):
             return self.cuaderno_texto()
+        if re.match(r"^qu[eé] necesitas(?: descargar| instalar)?$|^qu[eé] (?:quieres|te hace falta) (?:descargar|instalar)$|"
+                    r"^pendientes?(?: de descarga)?$|^qu[eé] te falta$", cmd_lower):
+            return self.pendientes_descarga()
         mc = re.match(r"^(?:piensa a fondo|investiga(?:\s+y\s+mejora)?|ciclo de mejora|mejora sin parar|"
                       r"mejora constantemente)\b(?:\s+(?:en|sobre|de|el|la|los|las)\s+|\s+)?(.*)$", cmd_lower)
         if mc:
@@ -1968,9 +2099,16 @@ class KiraGodCore:
         resumen, con = self.resumir_pagina(pag, tema=r["titulo"])
         fuente = "sus subtítulos" if r.get("fuente") == "subtitulos" else "mi oído"
         cab = f"He aprendido del vídeo «{r['titulo']}» (de {fuente}) y lo he guardado en mi baúl.\n\n"
-        if con:
-            return cab + resumen
-        return cab + "(Sin cerebro encendido no sé resumir, pero he guardado el texto del vídeo tal cual en el baúl.)"
+        if not con:
+            return cab + "(Sin cerebro encendido no sé resumir, pero he guardado el texto del vídeo tal cual en el baúl.)"
+        # Al terminar, REFLEXIONA: cómo funciona, qué se puede mejorar, qué haría falta (queda en el cuaderno).
+        reflexion = ""
+        try:
+            reflexion = self._reflexionar(r["titulo"], r.get("texto", ""))
+        except Exception:
+            reflexion = ""
+        extra = ("\n\nY lo he pensado un poco:\n" + reflexion) if reflexion else ""
+        return cab + resumen + extra
 
     def _orden_internet(self, command):
         import internet_kira as ik_
@@ -2510,7 +2648,7 @@ class KiraGodCore:
         elif re.match(r"^(?:piensa|ponte a pensar|empieza a pensar|ponte a cuestionar|deja de pensar|para de pensar|"
                       r"no pienses|tu cuaderno|mi cuaderno|cuaderno de pensamientos|qu[eé] has pensado|qu[eé] piensas|"
                       r"tus pensamientos|pensamientos|piensa a fondo|investiga|ciclo de mejora|mejora sin parar|"
-                      r"mejora constantemente)\b", cmd_lower):   # la curiosidad: pensar/estudiar/experimentar/ciclo
+                      r"mejora constantemente|qu[eé] necesitas|qu[eé] te falta|pendientes?)\b", cmd_lower):
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)
