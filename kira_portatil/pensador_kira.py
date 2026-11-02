@@ -159,7 +159,14 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
             return None
 
     base = f"Piensa como programadora curiosa. Responde BREVE y claro. Si no lo sabes, di «NO LO SÉ».\nPregunta: {pregunta}"
-    respuesta = str(preguntar(base) or "")
+    try:
+        respuesta = str(preguntar(base) or "")
+    except Exception as e:                               # el cerebro no está listo, sin red, etc.: QUE SE VEA
+        nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta,
+                "respuesta": f"(no pude pensar ahora: {e})", "seguridad": "baja", "duda": True,
+                "fuente": "sin cerebro", "tipo": "idea"}
+        anotar(estado, nota)
+        return nota
     seguridad, duda = clasificar_respuesta(respuesta)
     fuente = "lo que sé"
 

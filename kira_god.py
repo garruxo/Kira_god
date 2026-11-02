@@ -1761,10 +1761,15 @@ class KiraGodCore:
         import pensador_kira as pn
         ruta = self._ruta_pensar()
         estado = pn.cargar(ruta)
+        # El cerebro del móvil es lento: la mayoría de pensamientos son RÁPIDOS (solo pensar/estudiar); experimenta
+        # y compara solo de vez en cuando, para que el cuaderno se llene pronto y no se quede 10 min en blanco.
+        i = estado.get("i", 0)
+        experimenta = (i % 2 == 1)
+        compara = estudiar and (i % 3 == 2)
         nota = pn.pensar_una(estado, self._pensar_preguntar,
                              estudiar=self._estudiar_pensando if estudiar else None,
-                             experimentar=self._experimentar_pensando,
-                             comparar=self._comparar_codigo if estudiar else None)
+                             experimentar=self._experimentar_pensando if experimenta else None,
+                             comparar=self._comparar_codigo if compara else None)
         pn.guardar(estado, ruta)
         return nota
 
@@ -1772,8 +1777,8 @@ class KiraGodCore:
         import pensador_kira as pn
         return pn.texto_cuaderno(pn.cargar(self._ruta_pensar()), n)
 
-    def pensar_sola(self, encender, cada_seg=600):
-        """Enciende/apaga el pensar solo. Mientras está encendido, un hilo piensa un ratito cada ~10 min (suave, para
+    def pensar_sola(self, encender, cada_seg=240):
+        """Enciende/apaga el pensar solo. Mientras está encendido, un hilo piensa un ratito cada ~4 min (suave, para
         no gastar batería; en el portátil va mejor). Lo pensado va al cuaderno; nada se aplica solo."""
         import threading
         self._pensar_on = bool(encender)
@@ -1788,8 +1793,16 @@ class KiraGodCore:
                     try:
                         if not self.cancelado():
                             self.pensar_una()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        try:                                 # que un fallo del bucle NO se quede mudo: queda escrito
+                            import pensador_kira as pn
+                            est = pn.cargar(self._ruta_pensar())
+                            pn.anotar(est, {"cuando": int(time.time()), "semilla": "pensar",
+                                            "pregunta": "(no pude pensar esta vez)", "respuesta": str(e)[:200],
+                                            "seguridad": "baja", "duda": True, "fuente": "error", "tipo": "idea"})
+                            pn.guardar(est, self._ruta_pensar())
+                        except Exception:
+                            pass
                     for _ in range(max(30, int(cada_seg))):
                         if not getattr(self, "_pensar_on", False):
                             break
@@ -1807,9 +1820,16 @@ class KiraGodCore:
                     r"^tus pensamientos$|^pensamientos$", cmd_lower):
             return self.cuaderno_texto()
         if re.match(r"^piensa (?:una|algo|un poco|un rato)\b", cmd_lower):
-            n = self.pensar_una()
+            try:
+                n = self.pensar_una()
+            except Exception as e:
+                return f"No he podido pensar ahora mismo: {e}"
             if not n:
                 return "Ahora mismo no se me ocurre una pregunta nueva; prueba «piensa» para que siga sola."
+            if n.get("fuente") in ("sin cerebro", "error"):
+                return (f"Lo intenté pero no pude pensar: {n.get('respuesta','')}. "
+                        "Necesito un cerebro listo: enciende/descarga mi cerebro, o conéctame al portátil por la "
+                        "WiFi de casa, o pon la clave de Claude. Luego vuelve a decirme «piensa una».")
             exp = n.get("experimento")
             extra = (f"\nLo probé: {'funcionó' if exp.get('ok') else 'no salió'} — {exp.get('resultado','')}"
                      if exp else "")

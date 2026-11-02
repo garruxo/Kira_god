@@ -52,6 +52,16 @@ est2 = pk.cargar(ruta)
 ok(est2["notas"] and est2["notas"][0]["pregunta"] == nota["pregunta"], "se guardó y se relee del disco")
 ok("Cuaderno de Kira" in pk.texto_cuaderno(est2), "cuaderno legible")
 
+# --- si el cerebro falla, NO se queda mudo: anota el motivo ---
+def preguntar_roto(p):
+    raise RuntimeError("cerebro no listo")
+
+
+estx = pk._vacio()
+nerr = pk.pensar_una(estx, preguntar_roto, semillas=["una función"])
+ok(nerr and nerr["fuente"] == "sin cerebro" and "no pude pensar" in nerr["respuesta"], "fallo del cerebro -> nota")
+ok(estx["notas"], "la nota de error queda en el cuaderno (no vacío)")
+
 # --- GUARDA anti-divergencia: la copia del portátil debe dar lo mismo en lo puro ---
 lap_path = os.path.join(RAIZ, "kira_portatil", "pensador_kira.py")
 spec = importlib.util.spec_from_file_location("pensador_lap", lap_path)
