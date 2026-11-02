@@ -38,10 +38,16 @@ def experimentar(preg, sem):
     return {"ok": True, "resultado": "nodos=3 aristas=2", "codigo": "g={}"}
 
 
+def comparar(preg, sem, codigo):
+    return {"fuente": "GitHub", "resumen": "el de fuera usa una cola; el mío una lista. Podría optimizar."}
+
+
 est = pk.cargar(ruta)
-nota = pk.pensar_una(est, preguntar, experimentar=experimentar, semillas=["un grafo"])
+nota = pk.pensar_una(est, preguntar, experimentar=experimentar, comparar=comparar, semillas=["un grafo"])
 pk.guardar(est, ruta)
 ok(nota and nota["tipo"] == "experimento", "tema de código -> experimenta")
+ok(nota.get("comparacion", {}).get("fuente") == "GitHub", "comparó su código con uno de fuera")
+ok("comparé con GitHub" in pk.texto_cuaderno(est), "el cuaderno muestra la comparación")
 est2 = pk.cargar(ruta)
 ok(est2["notas"] and est2["notas"][0]["pregunta"] == nota["pregunta"], "se guardó y se relee del disco")
 ok("Cuaderno de Kira" in pk.texto_cuaderno(est2), "cuaderno legible")

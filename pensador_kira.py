@@ -127,9 +127,9 @@ def proxima_semilla(estado, semillas=None):
     return semillas[i % len(semillas)]
 
 
-def pensar_una(estado, preguntar, estudiar=None, experimentar=None, semillas=None, ahora=None):
-    """Un pensamiento: elige semilla + pregunta NUEVA, se responde, estudia si duda y, si es de código, EXPERIMENTA.
-    preguntar/estudiar/experimentar se inyectan (cada sitio pone los suyos). Devuelve la nota (o None)."""
+def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=None, semillas=None, ahora=None):
+    """Un pensamiento: elige semilla + pregunta NUEVA, se responde, estudia si duda y, si es de código, EXPERIMENTA
+    y (si puede) COMPARA su código con uno de fuera para mejorar. Todo inyectado. Devuelve la nota (o None)."""
     ahora = int(ahora if ahora is not None else time.time())
     semilla = proxima_semilla(estado, semillas)
     pregunta = next((q for q in generar_preguntas(semilla) if not ya_pensada(estado, q)), None)
@@ -169,6 +169,16 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, semillas=Non
             if exp.get("ok"):
                 nota["seguridad"] = "alta" if seguridad != "baja" else "media"
 
+    # Comparar su código con uno de fuera (para mejorar su técnica). Es una NOTA; nada se mete solo en su cerebro.
+    if comparar is not None and es_programable(semilla):
+        codigo_mio = (nota.get("experimento") or {}).get("codigo", "")
+        try:
+            comp = comparar(pregunta, semilla, codigo_mio)
+        except Exception:
+            comp = None
+        if comp:
+            nota["comparacion"] = comp
+
     anotar(estado, nota)
     return nota
 
@@ -187,6 +197,9 @@ def texto_cuaderno(estado, n=15):
         exp = nt.get("experimento")
         if exp:
             out.append(f"   . prueba: {'OK' if exp.get('ok') else 'fallo'} - {str(exp.get('resultado', ''))[:120]}")
+        comp = nt.get("comparacion")
+        if comp:
+            out.append(f"   . comparé con {comp.get('fuente', 'otra fuente')}: {str(comp.get('resumen', ''))[:140]}")
     return "\n".join(out)
 
 

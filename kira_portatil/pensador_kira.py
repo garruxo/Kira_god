@@ -146,9 +146,9 @@ def proxima_semilla(estado, semillas=None):
     return semillas[i % len(semillas)]
 
 
-def pensar_una(estado, preguntar, estudiar=None, experimentar=None, semillas=None, ahora=None):
+def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=None, semillas=None, ahora=None):
     """Un pensamiento: elige una semilla y una pregunta NUEVA, intenta responderse, estudia si duda y, si es de
-    programación, EXPERIMENTA. Todo inyectado (preguntar/estudiar/experimentar) para poder probarlo sin red.
+    programación, EXPERIMENTA y (si puede) COMPARA su código con uno de fuera. Todo inyectado para probarlo sin red.
     Devuelve la nota (o None si no encontró pregunta nueva)."""
     ahora = int(ahora if ahora is not None else time.time())
     semilla = proxima_semilla(estado, semillas)
@@ -190,6 +190,15 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, semillas=Non
             if exp.get("ok"):
                 nota["seguridad"] = "alta" if seguridad != "baja" else "media"
 
+    if comparar is not None and es_programable(semilla):
+        codigo_mio = (nota.get("experimento") or {}).get("codigo", "")
+        try:
+            comp = comparar(pregunta, semilla, codigo_mio)
+        except Exception:
+            comp = None
+        if comp:
+            nota["comparacion"] = comp
+
     anotar(estado, nota)
     return nota
 
@@ -209,6 +218,9 @@ def texto_cuaderno(estado, n=15):
         exp = nt.get("experimento")
         if exp:
             out.append(f"   · prueba: {'OK' if exp.get('ok') else 'falló'} — {str(exp.get('resultado',''))[:120]}")
+        comp = nt.get("comparacion")
+        if comp:
+            out.append(f"   · comparé con {comp.get('fuente', 'otra fuente')}: {str(comp.get('resumen', ''))[:140]}")
     return "\n".join(out)
 
 

@@ -1666,8 +1666,59 @@ class KiraGodCore:
         clave, _ = self.reparto("codigo")                 # el cerebro que haya (local, propio o el de casa)
         if clave is None:
             raise RuntimeError(self._sin_cerebro())
+        # Si el portátil está conectado, PIENSA CON EL CEREBRO GRANDE (max_tokens>=800 enruta al grande en casa);
+        # si no, con el pequeño del móvil. Así sus pensamientos son mejores cuando puede.
+        grande = False
+        try:
+            grande = bool(self.cerebro_ia.casa_disponible())
+        except Exception:
+            grande = False
         return self._llamar_api(clave, "Eres Kira, una programadora curiosa que se cuestiona las cosas.",
-                                prompt, max_tokens=320) or ""
+                                prompt, max_tokens=900 if grande else 320) or ""
+
+    def _comparar_codigo(self, pregunta, semilla, mi_codigo):
+        """Busca en internet un código parecido (GitHub/Stack Overflow), lo GUARDA en el baúl como ejemplo y le pide
+        al cerebro que COMPARE el suyo con el de fuera para mejorar. Es una NOTA; por seguridad lo de internet NO se
+        mete solo en su cerebro al programar (para eso, «implementa este código» + dos toques). None si no hay red."""
+        net = getattr(self, "internet", None)
+        if net is None:
+            return None
+        try:
+            res = net.buscar(semilla or pregunta, "codigo")
+        except Exception:
+            return None
+        ejemplo, fuente = "", ""
+        for r in (res or [])[:2]:
+            if self.cancelado():
+                break
+            try:
+                pag = net.leer(r["url"])
+            except Exception:
+                continue
+            try:
+                ejemplo = net.codigo_de(pag) or "\n\n".join((pag.get("codigos") or [])[:1])
+            except Exception:
+                ejemplo = "\n\n".join((pag.get("codigos") or [])[:1])
+            if ejemplo:
+                fuente = r.get("fuente") or r.get("url", "internet")
+                rec = getattr(self, "recuerdos", None)
+                if rec is not None:
+                    try:
+                        rec.guardar("Ejemplo encontrado:\n" + ejemplo[:1500], tema=(semilla or pregunta)[:80],
+                                    fuente=pag.get("url", r.get("url", "internet")))
+                    except Exception:
+                        pass
+                break
+        if not ejemplo:
+            return None
+        try:
+            resumen = self._pensar_preguntar(
+                f"Soy programadora y quiero MEJORAR. Este es mi código para «{semilla}»:\n```\n{mi_codigo[:900]}\n```\n"
+                f"Y este lo encontré por ahí:\n```\n{ejemplo[:900]}\n```\nCompáralos en 2-3 frases: ¿qué hace mejor "
+                "cada uno y qué podría yo mejorar? Breve.")
+        except Exception:
+            resumen = ""
+        return {"fuente": fuente, "resumen": (resumen or "").strip()[:400]} if resumen else None
 
     def _estudiar_pensando(self, pregunta):
         """Material corto para contestarse una duda (busca y resume; NO lo guarda en el baúl: es para pensar ahora)."""
@@ -1712,7 +1763,8 @@ class KiraGodCore:
         estado = pn.cargar(ruta)
         nota = pn.pensar_una(estado, self._pensar_preguntar,
                              estudiar=self._estudiar_pensando if estudiar else None,
-                             experimentar=self._experimentar_pensando)
+                             experimentar=self._experimentar_pensando,
+                             comparar=self._comparar_codigo if estudiar else None)
         pn.guardar(estado, ruta)
         return nota
 
