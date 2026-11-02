@@ -1824,13 +1824,17 @@ class KiraGodCore:
             pass
         if encender and not getattr(self, "_pensar_hilo", None):
             def bucle():
+                import pensador_kira as pn
+                fallos = 0
                 while getattr(self, "_pensar_on", False):
+                    fallo = False
                     try:
-                        if not self.cancelado():
-                            self.pensar_una()
+                        nota = None if self.cancelado() else self.pensar_una()
+                        if nota and nota.get("fuente") in ("sin cerebro", "error"):
+                            fallo = True
                     except Exception as e:
+                        fallo = True
                         try:                                 # que un fallo del bucle NO se quede mudo: queda escrito
-                            import pensador_kira as pn
                             est = pn.cargar(self._ruta_pensar())
                             pn.anotar(est, {"cuando": int(time.time()), "semilla": "pensar",
                                             "pregunta": "(no pude pensar esta vez)", "respuesta": str(e)[:200],
@@ -1838,6 +1842,21 @@ class KiraGodCore:
                             pn.guardar(est, self._ruta_pensar())
                         except Exception:
                             pass
+                    fallos = fallos + 1 if fallo else 0
+                    if fallos >= 3:                          # 3 veces seguidas sin cerebro: me paro (no gasto batería)
+                        try:
+                            est = pn.cargar(self._ruta_pensar())
+                            pn.anotar(est, {"cuando": int(time.time()), "semilla": "pensar",
+                                            "pregunta": "(me paré de pensar sola)",
+                                            "respuesta": "No tengo un cerebro listo para pensar (la clave de Claude "
+                                                         "falla o aún no he descargado mi cerebro). Arréglalo y dime "
+                                                         "«piensa» otra vez.",
+                                            "seguridad": "baja", "duda": True, "fuente": "error", "tipo": "idea"})
+                            pn.guardar(est, self._ruta_pensar())
+                        except Exception:
+                            pass
+                        self._pensar_on = False
+                        break
                     for _ in range(max(30, int(cada_seg))):
                         if not getattr(self, "_pensar_on", False):
                             break
