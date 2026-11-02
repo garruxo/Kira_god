@@ -1856,6 +1856,25 @@ class KiraGodCore:
         import pensador_kira as pn
         return pn.texto_cuaderno(pn.cargar(self._ruta_pensar()), n)
 
+    def soluciones_texto(self):
+        """Lo que Kira ya ha RESUELTO del todo y se ha guardado como solución (para mejorarlo más adelante)."""
+        import pensador_kira as pn
+        return pn.texto_soluciones(pn.cargar(self._ruta_pensar()))
+
+    def probar_permiso(self):
+        """Para que el dueño VEA la ventana emergente de permiso aunque todavía no haya hecho falta instalar nada.
+        Solo la muestra; no instala ni apunta nada. (Sale de verdad cuando un experimento necesita una librería.)"""
+        cb = getattr(self, "al_permiso", None)
+        if not callable(cb):
+            return ("La ventana de permiso solo puede salir desde la pantalla principal de Kira (no está conectada "
+                    "aquí). Sale sola cuando, pensando, necesite instalar una librería para seguir.")
+        try:
+            cb("ejemplo", "es solo una prueba: así se ve la ventana cuando de verdad necesite instalar algo")
+        except Exception as e:
+            return f"No pude mostrar la ventana: {e}"
+        return ("Te he mostrado la ventana de permiso de EJEMPLO. Pulsa «Cancelar» (es solo una prueba). Cuando de "
+                "verdad necesite instalar algo para resolver un tema, saldrá igual y tú decides.")
+
     # ---------- permisos de descarga: la info se mira libre, pero INSTALAR algo te lo pregunta ----------
     def _ruta_permisos(self):
         return os.path.join(self.dir, "permisos_pendientes.json")
@@ -2046,6 +2065,11 @@ class KiraGodCore:
         if re.match(r"^qu[eé] necesitas(?: descargar| instalar)?$|^qu[eé] (?:quieres|te hace falta) (?:descargar|instalar)$|"
                     r"^pendientes?(?: de descarga)?$|^qu[eé] te falta$", cmd_lower):
             return self.pendientes_descarga()
+        if re.match(r"^(?:tus|mis) soluciones$|^qu[eé] has resuelto$|^tus mejoras$|^soluciones$", cmd_lower):
+            return self.soluciones_texto()
+        if re.match(r"^prueba (?:la ventana de |el )?permiso$|^prueba de permiso$|"
+                    r"^(?:mu[eé]strame|ens[eé][ñn]ame) la ventana de permiso$", cmd_lower):
+            return self.probar_permiso()
         mc = re.match(r"^(?:piensa a fondo|investiga(?:\s+y\s+mejora)?|ciclo de mejora|mejora sin parar|"
                       r"mejora constantemente)\b(?:\s+(?:en|sobre|de|el|la|los|las)\s+|\s+)?(.*)$", cmd_lower)
         if mc:
@@ -2648,7 +2672,9 @@ class KiraGodCore:
         elif re.match(r"^(?:piensa|ponte a pensar|empieza a pensar|ponte a cuestionar|deja de pensar|para de pensar|"
                       r"no pienses|tu cuaderno|mi cuaderno|cuaderno de pensamientos|qu[eé] has pensado|qu[eé] piensas|"
                       r"tus pensamientos|pensamientos|piensa a fondo|investiga|ciclo de mejora|mejora sin parar|"
-                      r"mejora constantemente|qu[eé] necesitas|qu[eé] te falta|pendientes?)\b", cmd_lower):
+                      r"mejora constantemente|qu[eé] necesitas|qu[eé] te falta|pendientes?|tus soluciones|"
+                      r"mis soluciones|qu[eé] has resuelto|tus mejoras|prueba (?:la ventana de |el )?permiso|"
+                      r"mu[eé]strame la ventana de permiso|ens[eé][ñn]ame la ventana de permiso)\b", cmd_lower):
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)

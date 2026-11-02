@@ -74,7 +74,7 @@ def clasificar_respuesta(texto):
 
 
 def _vacio():
-    return {"notas": [], "vistas": [], "desde": int(time.time()), "i": 0}
+    return {"notas": [], "vistas": [], "soluciones": {}, "desde": int(time.time()), "i": 0}
 
 
 def cargar(ruta):
@@ -118,13 +118,90 @@ def anotar(estado, nota):
 def proxima_semilla(estado, semillas=None):
     semillas = semillas or SEMILLAS
     notas = estado.get("notas", [])
+    sols = estado.get("soluciones", {})
     i = estado.get("i", 0)
     estado["i"] = i + 1
+    # de vez en cuando VUELVE a una solución ya guardada para MEJORARLA (lo pidió el dueño: ir mejorando más adelante)
+    if sols and i % 5 == 4:
+        viejo = min(sols.values(), key=lambda s: s.get("cuando", 0))
+        if viejo.get("semilla"):
+            return viejo["semilla"] + " (mejorar)"
     if notas and i % 3 == 2:
         base = notas[-1].get("semilla") or ""
         if base:
             return base + " (más a fondo)"
     return semillas[i % len(semillas)]
+
+
+def es_resuelta(nota):
+    """¿Esta nota es ya una SOLUCIÓN fiable? Alta seguridad, sin duda y, si probó código, funcionó."""
+    if not nota or nota.get("duda"):
+        return False
+    if nota.get("seguridad") != "alta":
+        return False
+    exp = nota.get("experimento")
+    if exp is not None and not exp.get("ok"):
+        return False
+    return True
+
+
+def _punt_sol(s):
+    return (1 if (s.get("codigo") or "").strip() else 0, len(s.get("respuesta", "")))
+
+
+def consolidar(estado, nota):
+    """Lo pidió el dueño: cuando un tema queda RESUELTO, Kira se queda con la SOLUCIÓN y BORRA del cuaderno las notas
+    flojas (dudas, fallos, sin cerebro) de ESE mismo tema, para dejarlo limpio y poder MEJORARLO más adelante.
+    La solución va aparte (estado['soluciones'][tema]): se queda con la mejor y cuenta las veces que la ha mejorado.
+    No toca 'vistas' (para no volver a hacerse la misma pregunta). Devuelve True si consolidó."""
+    if not es_resuelta(nota):
+        return False
+    tema = _norm(nota.get("semilla", ""))
+    if not tema:
+        return False
+    exp = nota.get("experimento") or {}
+    sols = estado.setdefault("soluciones", {})
+    prev = sols.get(tema)
+    nueva = {"semilla": nota.get("semilla", ""), "pregunta": nota.get("pregunta", ""),
+             "respuesta": (nota.get("respuesta", "") or "")[:800], "codigo": (exp.get("codigo") or "")[:1500],
+             "cuando": int(nota.get("cuando", time.time())),
+             "veces": (prev.get("veces", 1) if prev else 0) + 1}
+    # se queda con la MEJOR (código que funciona > respuesta más completa), pero cuenta siempre la mejora
+    mejor = nueva if (prev is None or _punt_sol(nueva) >= _punt_sol(prev)) else dict(prev)
+    mejor["veces"] = nueva["veces"]
+    mejor["cuando"] = nueva["cuando"]
+    sols[tema] = mejor
+    # limpiar las notas flojas del MISMO tema (ya está resuelto): fuera dudas, fallos, sin cerebro/permiso/error
+    nuevas = []
+    for nt in estado.get("notas", []):
+        if nt is nota:
+            nuevas.append(nt)
+            continue
+        mismo = _norm(nt.get("semilla", "")) == tema
+        e = nt.get("experimento")
+        floja = (nt.get("duda") or nt.get("seguridad") == "baja"
+                 or nt.get("fuente") in ("sin cerebro", "error", "permiso")
+                 or (e is not None and not e.get("ok")))
+        if mismo and floja:
+            continue
+        nuevas.append(nt)
+    estado["notas"] = nuevas
+    return True
+
+
+def texto_soluciones(estado):
+    sols = estado.get("soluciones", {})
+    if not sols:
+        return ("Aún no tengo soluciones guardadas. Cuando resuelva un tema del todo, me quedo con la solución aquí "
+                "y borro los intentos fallidos de ese tema, para ir mejorándola más adelante.")
+    out = [f"Soluciones que Kira ya tiene ({len(sols)}):"]
+    for s in sorted(sols.values(), key=lambda x: x.get("cuando", 0), reverse=True)[:20]:
+        veces = s.get("veces", 1)
+        mejora = f" (mejorada {veces} veces)" if veces > 1 else ""
+        cod = " [con código]" if (s.get("codigo") or "").strip() else ""
+        resp = (s.get("respuesta", "") or "").replace("\n", " ")[:160]
+        out.append(f"\n• {s.get('semilla', '')}{mejora}{cod}\n   -> {resp}")
+    return "\n".join(out)
 
 
 def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=None, insistir=1, semillas=None,
@@ -193,6 +270,7 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
             nota["comparacion"] = comp
 
     anotar(estado, nota)
+    consolidar(estado, nota)      # si quedó resuelto, me quedo con la solución y limpio los intentos flojos del tema
     return nota
 
 
@@ -259,6 +337,7 @@ def ciclo(estado, semilla, preguntar, estudiar=None, experimentar=None, comparar
             "fuente": "estudiado" if info else "lo que sé", "tipo": "ciclo",
             "rondas": len(historial), "historial": historial, "experimento": mejor}
     anotar(estado, nota)
+    consolidar(estado, nota)      # si el ciclo dio una versión que funciona, se guarda como solución y limpia el tema
     return nota
 
 
@@ -284,6 +363,9 @@ def texto_cuaderno(estado, n=15):
         comp = nt.get("comparacion")
         if comp:
             out.append(f"   . comparé con {comp.get('fuente', 'otra fuente')}: {str(comp.get('resumen', ''))[:140]}")
+    sols = estado.get("soluciones", {})
+    if sols:
+        out.append(f"\n({len(sols)} tema(s) ya resuelto(s) y guardado(s) como solución; di «tus soluciones».)")
     return "\n".join(out)
 
 
@@ -293,5 +375,7 @@ def resumen(estado):
         return "Kira aún no ha pensado nada. Dile «piensa» para que empiece a cuestionarse las cosas."
     exps = sum(1 for n in notas if n.get("tipo") == "experimento")
     dudas = sum(1 for n in notas if n.get("duda"))
-    return (f"Kira lleva {len(notas)} pensamiento(s): {exps} con experimento y {dudas} duda(s) por resolver. "
+    sols = len(estado.get("soluciones", {}))
+    extra = f" Ya tiene {sols} solución(es) guardada(s) (di «tus soluciones»)." if sols else ""
+    return (f"Kira lleva {len(notas)} pensamiento(s): {exps} con experimento y {dudas} duda(s) por resolver.{extra} "
             "Dile «tu cuaderno» para leer qué se ha ido preguntando. (Son notas suyas; nada se aplica solo.)")

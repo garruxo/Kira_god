@@ -91,4 +91,34 @@ n3 = pk.pensar_una(est3, lambda p: "La ética estudia el bien y el mal.", estudi
                    experimentar=experimentar_falso, semillas=["la ética"])
 ok(n3["tipo"] == "idea" and "experimento" not in n3, "tema no-código: piensa, no experimenta")
 
+# --- v2.75: consolidar (borra lo resuelto, se queda con la solución, para mejorar más adelante) ---
+ok(pk.es_resuelta({"seguridad": "alta", "duda": False}), "alta + sin duda -> resuelta")
+ok(not pk.es_resuelta({"seguridad": "alta", "duda": True}), "con duda -> NO resuelta")
+ok(not pk.es_resuelta({"seguridad": "media", "duda": False}), "media -> NO resuelta")
+ok(not pk.es_resuelta({"seguridad": "alta", "duda": False, "experimento": {"ok": False}}), "experimento fallido -> NO resuelta")
+
+estc = pk._vacio()
+# una nota floja (duda) y una buena del MISMO tema
+pk.anotar(estc, {"semilla": "una pila", "pregunta": "¿y si falla una pila?", "respuesta": "no lo sé", "duda": True, "seguridad": "baja", "fuente": "sin cerebro"})
+buena = {"semilla": "una pila", "pregunta": "¿cómo funciona una pila?", "respuesta": "LIFO: el último en entrar sale primero, clarísimo y seguro.", "duda": False, "seguridad": "alta", "cuando": 100, "experimento": {"ok": True, "codigo": "p=[]"}}
+pk.anotar(estc, buena)
+ok(pk.consolidar(estc, buena), "consolida una nota resuelta")
+ok("una pila" in pk.texto_soluciones(estc), "la solución queda guardada")
+ok(estc["soluciones"], "hay soluciones en el estado")
+ok(all(not (nt.get("duda") and pk._norm(nt.get("semilla","")) == pk._norm("una pila")) for nt in estc["notas"]), "borró la nota floja del tema resuelto")
+ok(any(nt is buena for nt in estc["notas"]), "la nota buena se queda")
+
+# mejorar: una segunda solución del mismo tema cuenta veces y se queda con la mejor
+buena2 = {"semilla": "una pila", "pregunta": "¿cómo mejorar una pila?", "respuesta": "igual pero con tope de tamaño y mejor explicado para que no reviente nunca.", "duda": False, "seguridad": "alta", "cuando": 200, "experimento": {"ok": True, "codigo": "p=[]; MAX=100"}}
+pk.anotar(estc, buena2)
+pk.consolidar(estc, buena2)
+ok(estc["soluciones"][pk._norm("una pila")]["veces"] == 2, "cuenta las mejoras (2 veces)")
+
+# proxima_semilla: con soluciones, de vez en cuando vuelve a MEJORAR una
+estm = pk._vacio()
+estm["soluciones"] = {"x": {"semilla": "una pila", "cuando": 1}}
+estm["i"] = 4
+sm = pk.proxima_semilla(estm)
+ok("mejorar" in sm, "revisita una solución para mejorarla")
+
 print(f"\nTODO BIEN {n}")
