@@ -1792,9 +1792,33 @@ class KiraGodCore:
         ultimo["intentos"] = max(1, intentos)
         return ultimo
 
+    def _semillas_pensar(self, k=15):
+        """Las SEMILLAS sobre las que piensa: PRIMERO lo que ha ESTUDIADO (los temas de su baúl, de lo más reciente),
+        y detrás los temas de serie, para que no se quede corta. Así se cuestiona lo que de verdad aprende, no solo
+        una lista fija. (Solo el NOMBRE del tema va de semilla; luego estudia/responde como siempre.)"""
+        import pensador_kira as pn
+        rec = getattr(self, "recuerdos", None)
+        temas, vistos = [], set()
+        if rec is not None:
+            try:
+                n = rec.total()
+                tope = n - 400                            # mira como mucho los 400 recuerdos más recientes
+                while n > 0 and n > tope and len(temas) < k:
+                    r = rec.leer(n)
+                    n -= 1
+                    t = ((r or {}).get("tema") or "").strip()
+                    tl = t.lower()
+                    if t and 3 <= len(t) <= 60 and tl not in vistos:
+                        vistos.add(tl)
+                        temas.append(t)
+            except Exception:
+                temas = []
+        base = [s for s in pn.SEMILLAS if s.lower() not in vistos]
+        return (temas + base) if temas else list(pn.SEMILLAS)
+
     def pensar_una(self, estudiar=True):
-        """Un pensamiento: se hace una pregunta nueva, se responde (estudia si duda) y, si es de código, lo prueba.
-        Lo apunta en su cuaderno. Son NOTAS suyas; no aplica nada sola. Devuelve la nota (o None)."""
+        """Un pensamiento: se hace una pregunta nueva (sobre lo que ha ESTUDIADO si tiene baúl), se responde (estudia
+        si duda) y, si es de código, lo prueba. Lo apunta en su cuaderno. Son NOTAS suyas; no aplica nada sola."""
         import pensador_kira as pn
         ruta = self._ruta_pensar()
         estado = pn.cargar(ruta)
@@ -1807,7 +1831,8 @@ class KiraGodCore:
                              estudiar=self._estudiar_pensando if estudiar else None,
                              experimentar=self._experimentar_pensando if experimenta else None,
                              comparar=self._comparar_codigo if compara else None,
-                             insistir=2)                   # si no lo sabe, busca y repiensa 2 veces antes de rendirse
+                             insistir=2,                   # si no lo sabe, busca y repiensa 2 veces antes de rendirse
+                             semillas=self._semillas_pensar())
         pn.guardar(estado, ruta)
         return nota
 
@@ -1822,7 +1847,7 @@ class KiraGodCore:
         ruta = self._ruta_pensar()
         estado = pn.cargar(ruta)
         if not semilla:
-            semilla = pn.proxima_semilla(estado)
+            semilla = pn.proxima_semilla(estado, self._semillas_pensar())   # sobre lo que ha estudiado
         nota = pn.ciclo(estado, semilla, self._pensar_preguntar,
                         estudiar=self._estudiar_pensando, experimentar=self._experimentar_pensando,
                         comparar=self._comparar_codigo, rondas=rondas)
