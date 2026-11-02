@@ -414,6 +414,12 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                     est = hp.cargar()
                     return self._json(200, {"ok": True, "resumen": hp.resumen(est),
                                             "informe": hp.informe_comunidad(est)})
+                # --- cuaderno de pensamientos (la curiosidad). SOLO lee las notas; no hace pensar en remoto ---
+                if accion == "cuaderno":
+                    import pensador_kira as pn
+                    est = pn.cargar()
+                    return self._json(200, {"ok": True, "resumen": pn.resumen(est),
+                                            "cuaderno": pn.texto_cuaderno(est, int(d.get("n", 15)))})
                 return self._json(400, {"ok": False, "error": "acción de defensa desconocida"})
             except rd.DefensaError as e:
                 return self._json(400, {"ok": False, "error": str(e)})

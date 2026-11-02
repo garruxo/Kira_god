@@ -252,6 +252,10 @@ def bucle(cli):
             if bajo in ("/cebo-informe", "/informe-cebo"):
                 print(formato_cebo(cli.defensa("cebo").get("informe", {})))
                 continue
+            if bajo in ("/cuaderno", "/pienso", "/pensamientos"):
+                r = cli.defensa("cuaderno")
+                print(r.get("cuaderno", r.get("resumen", "(cuaderno vacío)")))
+                continue
             print("Kira: ", end="", flush=True)
             cli.charla(tu, al_trozo=lambda t: print(t, end="", flush=True))
             print()

@@ -1658,6 +1658,116 @@ class KiraGodCore:
                 f"{guardadas} ficha(s) nuevas de ellos en mi baúl. Por seguridad, lo que aprendo de internet lo "
                 "recuerdo pero no lo meto sola en mi cerebro al programar: para eso están tus dos toques.")
 
+    # ---------- la CURIOSIDAD de Kira (pensar, estudiar y experimentar sola) ----------
+    def _ruta_pensar(self):
+        return os.path.join(self.dir, "pensamientos.json")
+
+    def _pensar_preguntar(self, prompt):
+        clave, _ = self.reparto("codigo")                 # el cerebro que haya (local, propio o el de casa)
+        if clave is None:
+            raise RuntimeError(self._sin_cerebro())
+        return self._llamar_api(clave, "Eres Kira, una programadora curiosa que se cuestiona las cosas.",
+                                prompt, max_tokens=320) or ""
+
+    def _estudiar_pensando(self, pregunta):
+        """Material corto para contestarse una duda (busca y resume; NO lo guarda en el baúl: es para pensar ahora)."""
+        net = getattr(self, "internet", None)
+        if net is None:
+            return ""
+        try:
+            res = net.buscar(pregunta, "web")
+        except Exception:
+            return ""
+        for r in (res or [])[:2]:
+            if self.cancelado():
+                break
+            try:
+                pag = net.leer(r["url"])
+            except Exception:
+                continue
+            resumen, _ = self.resumir_pagina(pag, pregunta)
+            if resumen and len(resumen) > 40:
+                return resumen
+        return ""
+
+    def _experimentar_pensando(self, pregunta, semilla):
+        """Como es programadora: escribe un programita que PRUEBE la idea y lo corre en MODO SEGURO (no instala nada)."""
+        import programar_kira as pk
+        try:
+            _nombre, codigo = self.generar_programa(
+                f"Escribe un programa CORTO de Python que demuestre y pruebe la idea de: {semilla}. "
+                "Debe imprimir con print() un resultado que confirme que funciona. Nada de red ni de archivos.",
+                con_recetas=False)
+        except Exception as e:
+            return {"ok": False, "resultado": f"no me salió el código: {e}"}
+        r = pk.probar_programa(codigo)
+        salida = (r.get("dato") or {}).get("salida", "") if r.get("ok") else (r.get("error") or "")
+        return {"ok": bool(r.get("ok")), "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200]}
+
+    def pensar_una(self, estudiar=True):
+        """Un pensamiento: se hace una pregunta nueva, se responde (estudia si duda) y, si es de código, lo prueba.
+        Lo apunta en su cuaderno. Son NOTAS suyas; no aplica nada sola. Devuelve la nota (o None)."""
+        import pensador_kira as pn
+        ruta = self._ruta_pensar()
+        estado = pn.cargar(ruta)
+        nota = pn.pensar_una(estado, self._pensar_preguntar,
+                             estudiar=self._estudiar_pensando if estudiar else None,
+                             experimentar=self._experimentar_pensando)
+        pn.guardar(estado, ruta)
+        return nota
+
+    def cuaderno_texto(self, n=12):
+        import pensador_kira as pn
+        return pn.texto_cuaderno(pn.cargar(self._ruta_pensar()), n)
+
+    def pensar_sola(self, encender, cada_seg=600):
+        """Enciende/apaga el pensar solo. Mientras está encendido, un hilo piensa un ratito cada ~10 min (suave, para
+        no gastar batería; en el portátil va mejor). Lo pensado va al cuaderno; nada se aplica solo."""
+        import threading
+        self._pensar_on = bool(encender)
+        try:
+            with open(os.path.join(self.dir, "pensar_sola.json"), "w", encoding="utf-8") as f:
+                json.dump({"on": self._pensar_on}, f)
+        except OSError:
+            pass
+        if encender and not getattr(self, "_pensar_hilo", None):
+            def bucle():
+                while getattr(self, "_pensar_on", False):
+                    try:
+                        if not self.cancelado():
+                            self.pensar_una()
+                    except Exception:
+                        pass
+                    for _ in range(max(30, int(cada_seg))):
+                        if not getattr(self, "_pensar_on", False):
+                            break
+                        time.sleep(1)
+                self._pensar_hilo = None
+            self._pensar_hilo = threading.Thread(target=bucle, daemon=True)
+            self._pensar_hilo.start()
+        return self._pensar_on
+
+    def _orden_pensar(self, cmd_lower):
+        if re.match(r"^(?:deja|para) de pensar|^no pienses\b|^deja de cuestionar", cmd_lower):
+            self.pensar_sola(False)
+            return "[OK] Dejo de pensar sola. Lo que ya pensé se queda en mi cuaderno («tu cuaderno» para leerlo)."
+        if re.match(r"^(?:tu |mi )?cuaderno(?: de pensamientos)?$|^qu[eé] has pensado$|^qu[eé] piensas$|"
+                    r"^tus pensamientos$|^pensamientos$", cmd_lower):
+            return self.cuaderno_texto()
+        if re.match(r"^piensa (?:una|algo|un poco|un rato)\b", cmd_lower):
+            n = self.pensar_una()
+            if not n:
+                return "Ahora mismo no se me ocurre una pregunta nueva; prueba «piensa» para que siga sola."
+            exp = n.get("experimento")
+            extra = (f"\nLo probé: {'funcionó' if exp.get('ok') else 'no salió'} — {exp.get('resultado','')}"
+                     if exp else "")
+            return f"Me pregunté: {n['pregunta']}\n→ {n['respuesta'][:400]} ({n['fuente']}){extra}"
+        self.pensar_sola(True)
+        return ("[OK] Me pongo a pensar sola: me haré preguntas (por qué, cómo, para qué) y, si son de código, las "
+                "probaré en mi editor seguro; lo que aprenda lo anoto en mi cuaderno. Son notas mías: no aplico nada "
+                "sola (eso sigue con tus dos toques). Pienso un ratito cada pocos minutos para no gastar batería; "
+                "mejor con el móvil cargando. Di «tu cuaderno» para leerme o «deja de pensar» para parar.")
+
     def aprender_de_video(self, command):
         """«aprende de este vídeo: ‹enlace de YouTube›» -> saca lo que dice (subtítulos; si no hay, el oído), lo
         resume y lo guarda en el baúl. La voz puede pedirlo; no instala nada."""
@@ -2212,6 +2322,10 @@ class KiraGodCore:
         elif cmd_lower in ("recuerdos", "baul", "baúl", "baúl de recuerdos", "baul de recuerdos") or \
                 re.match(r"^(?:guarda recuerdo|qu[eé] recuerdas de|recuerdos de|busca en tus recuerdos|olvida recuerdo|parecido)\b", cmd_lower):
             return self._orden_recuerdos(command, cmd_lower)
+        elif re.match(r"^(?:piensa|ponte a pensar|empieza a pensar|ponte a cuestionar|deja de pensar|para de pensar|"
+                      r"no pienses|tu cuaderno|mi cuaderno|cuaderno de pensamientos|qu[eé] has pensado|qu[eé] piensas|"
+                      r"tus pensamientos|pensamientos)\b", cmd_lower):   # la curiosidad: pensar/estudiar/experimentar
+            return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)
         elif getattr(self, "internet", None) is not None and self.internet.es_orden(command):

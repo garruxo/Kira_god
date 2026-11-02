@@ -248,6 +248,32 @@ if [ \$# -eq 0 ]; then exec /usr/bin/python3 "$AQUI/honeypot_kira.py" --estado; 
 exec /usr/bin/python3 "$AQUI/honeypot_kira.py" "\$@"
 KIRACEBO
   $SUDO chmod +x /usr/local/bin/kira-cebo
+  $SUDO tee /usr/local/bin/kira-pensar >/dev/null <<KIRAPIENSA
+#!/usr/bin/env bash
+# La curiosidad de Kira: piensa, estudia y experimenta sola. Sin argumentos: enseña su cuaderno.
+# Para que piense en bucle: kira-pensar --pensar   (usa el cerebro grande; lo que piensa son notas, nada se aplica solo).
+if [ \$# -eq 0 ]; then exec /usr/bin/python3 "$AQUI/pensador_kira.py" --cuaderno; fi
+exec /usr/bin/python3 "$AQUI/pensador_kira.py" "\$@"
+KIRAPIENSA
+  $SUDO chmod +x /usr/local/bin/kira-pensar
+  # El pensador como servicio: DEFINIDO pero NO se enciende solo (usa el cerebro grande sin parar; lo activa el
+  # dueño con: sudo systemctl enable --now kira-pensador.service). Lo que piensa son notas; nada se aplica solo.
+  $SUDO tee /etc/systemd/system/kira-pensador.service >/dev/null <<EOF
+[Unit]
+Description=La curiosidad de Kira: piensa, estudia y experimenta sola (no se enciende solo)
+After=network-online.target kira-portatil.service
+Wants=network-online.target
+
+[Service]
+User=$USER
+ExecStart=/usr/bin/python3 $AQUI/pensador_kira.py --pensar --cada 5
+Restart=always
+RestartSec=30
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF
   # El cebo como servicio: DEFINIDO pero NO se enciende solo (abre puertos a tu red; lo activas tú cuando quieras
   # con: sudo systemctl enable --now kira-honeypot.service). Solo observa; nunca ataca ni envía datos fuera.
   $SUDO tee /etc/systemd/system/kira-honeypot.service >/dev/null <<EOF
