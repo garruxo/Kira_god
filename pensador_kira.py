@@ -127,7 +127,8 @@ def proxima_semilla(estado, semillas=None):
     return semillas[i % len(semillas)]
 
 
-def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=None, semillas=None, ahora=None):
+def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=None, insistir=1, semillas=None,
+               ahora=None):
     """Un pensamiento: elige semilla + pregunta NUEVA, se responde, estudia si duda y, si es de código, EXPERIMENTA
     y (si puede) COMPARA su código con uno de fuera para mejorar. Todo inyectado. Devuelve la nota (o None)."""
     ahora = int(ahora if ahora is not None else time.time())
@@ -151,16 +152,21 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
     seguridad, duda = clasificar_respuesta(respuesta)
     fuente = "lo que sé"
 
-    if duda and estudiar is not None:
+    # INSISTE: mientras siga siendo una DUDA, busca y vuelve a pensar, hasta `insistir` veces (no infinito: el
+    # cerebro pequeño es lento y «la perfección» no se garantiza, pero así no se rinde al primer «no lo sé»).
+    intentos = 0
+    while duda and estudiar is not None and intentos < max(1, insistir):
+        intentos += 1
         try:
             material = str(estudiar(pregunta) or "")
         except Exception:
             material = ""
-        if material:
-            respuesta = str(preguntar(base + "\n\nMe he informado y dice:\n" + material[:1500] +
-                                      "\n\nAhora respóndete con esto.") or "") or respuesta
-            seguridad, duda = clasificar_respuesta(respuesta)
-            fuente = "estudiado"
+        if not material:
+            break
+        respuesta = str(preguntar(base + "\n\nMe he informado y dice:\n" + material[:1500] +
+                                  "\n\nAhora respóndete con esto, claro y seguro.") or "") or respuesta
+        seguridad, duda = clasificar_respuesta(respuesta)
+        fuente = "estudiado"
 
     nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta, "respuesta": respuesta.strip(),
             "seguridad": seguridad, "duda": duda, "fuente": fuente, "tipo": "idea"}

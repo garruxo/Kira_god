@@ -80,6 +80,16 @@ ok(estx["notas"], "la nota de error queda en el cuaderno (no vacío)")
 nce = pk.ciclo(pk._vacio(), "una pila", preguntar_roto)
 ok(nce["fuente"] == "sin cerebro", "ciclo sin cerebro -> nota clara")
 
+# --- INSISTE: si sigue sin saber, estudia y repiensa varias veces ---
+cuenta = {"e": 0}
+pk.pensar_una(pk._vacio(), lambda p: "No lo sé", estudiar=lambda q: (cuenta.__setitem__("e", cuenta["e"] + 1), "info")[1],
+              insistir=2, semillas=["x"])
+ok(cuenta["e"] == 2, "insistir=2 estudia 2 veces si sigue sin saber")
+cuenta["e"] = 0
+pk.pensar_una(pk._vacio(), lambda p: "No lo sé", estudiar=lambda q: (cuenta.__setitem__("e", cuenta["e"] + 1), "info")[1],
+              insistir=1, semillas=["x"])
+ok(cuenta["e"] == 1, "por defecto (insistir=1) estudia una vez")
+
 # --- GUARDA anti-divergencia: la copia del portátil debe dar lo mismo en lo puro ---
 lap_path = os.path.join(RAIZ, "kira_portatil", "pensador_kira.py")
 spec = importlib.util.spec_from_file_location("pensador_lap", lap_path)

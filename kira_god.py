@@ -1762,19 +1762,35 @@ class KiraGodCore:
                 return resumen
         return ""
 
-    def _experimentar_pensando(self, pregunta, semilla):
-        """Como es programadora: escribe un programita que PRUEBE la idea y lo corre en MODO SEGURO (no instala nada)."""
+    def _experimentar_pensando(self, pregunta, semilla, intentos=3):
+        """Como es programadora: escribe un programita que PRUEBE la idea y lo corre en MODO SEGURO (no instala nada).
+        INSISTE: si el cerebro no da código o el programa falla, reintenta hasta `intentos` veces (el cerebro pequeño
+        a veces no entrega el bloque a la primera). Se queda con el mejor intento. Honesto: tras varios fallos lo dice."""
         import programar_kira as pk
-        try:
-            _nombre, codigo = self.generar_programa(
-                f"Escribe un programa CORTO de Python que demuestre y pruebe la idea de: {semilla}. "
-                "Debe imprimir con print() un resultado que confirme que funciona. Nada de red ni de archivos.",
-                con_recetas=False)
-        except Exception as e:
-            return {"ok": False, "resultado": f"no me salió el código: {e}"}
-        r = pk.probar_programa(codigo)
-        salida = (r.get("dato") or {}).get("salida", "") if r.get("ok") else (r.get("error") or "")
-        return {"ok": bool(r.get("ok")), "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200]}
+        ultimo = {"ok": False, "resultado": "no lo conseguí tras varios intentos", "codigo": ""}
+        pista = ""
+        for i in range(1, max(1, intentos) + 1):
+            if self.cancelado():
+                break
+            try:
+                _nombre, codigo = self.generar_programa(
+                    f"Escribe un programa CORTO de Python que demuestre y pruebe la idea de: {semilla}. "
+                    "Debe imprimir con print() un resultado que confirme que funciona. Nada de red ni de archivos. "
+                    "Responde SOLO con el programa dentro de un bloque ```python." + pista,
+                    con_recetas=False)
+            except Exception as e:
+                ultimo = {"ok": False, "resultado": f"intento {i}: no me salió el código ({e})", "codigo": ""}
+                pista = "\n\nLa vez anterior no me diste el código en un bloque ```python. Hazlo más corto y simple."
+                continue
+            r = pk.probar_programa(codigo)
+            if r.get("ok"):
+                salida = (r.get("dato") or {}).get("salida", "")
+                return {"ok": True, "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200], "intentos": i}
+            ultimo = {"ok": False, "resultado": f"intento {i}: {str(r.get('error') or '')[:200]}",
+                      "codigo": (codigo or "")[:1200]}
+            pista = f"\n\nLa vez anterior falló con: {str(r.get('error') or '')[:150]}. Corrígelo y hazlo más simple."
+        ultimo["intentos"] = max(1, intentos)
+        return ultimo
 
     def pensar_una(self, estudiar=True):
         """Un pensamiento: se hace una pregunta nueva, se responde (estudia si duda) y, si es de código, lo prueba.
@@ -1790,7 +1806,8 @@ class KiraGodCore:
         nota = pn.pensar_una(estado, self._pensar_preguntar,
                              estudiar=self._estudiar_pensando if estudiar else None,
                              experimentar=self._experimentar_pensando if experimenta else None,
-                             comparar=self._comparar_codigo if compara else None)
+                             comparar=self._comparar_codigo if compara else None,
+                             insistir=2)                   # si no lo sabe, busca y repiensa 2 veces antes de rendirse
         pn.guardar(estado, ruta)
         return nota
 
