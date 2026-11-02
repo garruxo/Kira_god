@@ -257,8 +257,45 @@ def texto_util(textos):
     return True
 
 
+# Algunos PDF (sobre todo de matemáticas/lógica) escriben los símbolos con una fuente especial; al sacar el texto
+# salen los NOMBRES internos de la fuente («comma.math» = «,», «period.math» = «.») o cuadritos de «no se pudo
+# traducir» (). Esto lo limpia para que se lea bien. Los símbolos que vienen como cuadro no siempre se recuperan
+# (el PDF no da la info), pero al menos no ensucian el texto.
+_GLIFOS = {
+    "comma": ",", "period": ".", "semicolon": ";", "colon": ":", "exclam": "!", "question": "?",
+    "parenleft": "(", "parenright": ")", "bracketleft": "[", "bracketright": "]",
+    "braceleft": "{", "braceright": "}", "angbracketleft": "⟨", "angbracketright": "⟩",
+    "equal": "=", "plus": "+", "minus": "−", "slash": "/", "backslash": "\\", "asterisk": "*",
+    "percent": "%", "ampersand": "&", "bar": "|", "space": " ", "quotesingle": "'", "quotedbl": '"',
+    "logicalnot": "¬", "logicaland": "∧", "logicalor": "∨", "arrowright": "→", "arrowleft": "←",
+    "arrowdblright": "⇒", "arrowdblleft": "⇐", "arrowboth": "↔", "arrowdblboth": "⇔",
+    "element": "∈", "notelement": "∉", "universal": "∀", "existential": "∃", "emptyset": "∅",
+    "union": "∪", "intersection": "∩", "subset": "⊂", "subsetorequal": "⊆", "notequal": "≠",
+    "lessequal": "≤", "greaterequal": "≥", "infinity": "∞", "summation": "∑", "product": "∏",
+    "integral": "∫", "radical": "√", "partialdiff": "∂", "multiply": "×", "divide": "÷",
+}
+
+
+def _un_glifo(m):
+    nombre = m.group(1)
+    if nombre in _GLIFOS:
+        return _GLIFOS[nombre]
+    if nombre.isalpha() and len(nombre) <= 3:            # una letra/variable (p, q, abc): déjala, con espacio
+        return nombre + " "
+    return " "                                            # nombre raro: fuera
+
+
+def _limpiar_glifos(t):
+    # «/nombre.math» o «nombre.math» (nombres de glifo de fuentes de matemáticas), con cualquier sufijo .algo
+    t = re.sub(r"/?([A-Za-z]+)\.(?:math|disp|text|op|big|sans|tt|cal|frak|bb|rm|sf|it|bf)\b", _un_glifo, t)
+    # cuadritos / .notdef / caracteres de uso privado / el de «reemplazo»
+    t = re.sub(r"[�-￰-￼]+", "", t)
+    return t
+
+
 def _limpiar(t):
     t = t.replace("\x00", "").replace("\r", "\n")
+    t = _limpiar_glifos(t)                               # restos de fuentes matemáticas: «comma.math», cuadritos…
     t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)               # palabras partidas al final de línea
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
