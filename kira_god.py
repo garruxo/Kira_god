@@ -1777,6 +1777,20 @@ class KiraGodCore:
         import pensador_kira as pn
         return pn.texto_cuaderno(pn.cargar(self._ruta_pensar()), n)
 
+    def ciclo_una(self, semilla=None, rondas=3):
+        """El CICLO DE MEJORA: piensa → busca info → compara → experimenta → juzga → mejora, varias vueltas, y guarda
+        la mejor versión y el recorrido. Es lo que el dueño llamó «pensar, experimentar y comparar sin parar»."""
+        import pensador_kira as pn
+        ruta = self._ruta_pensar()
+        estado = pn.cargar(ruta)
+        if not semilla:
+            semilla = pn.proxima_semilla(estado)
+        nota = pn.ciclo(estado, semilla, self._pensar_preguntar,
+                        estudiar=self._estudiar_pensando, experimentar=self._experimentar_pensando,
+                        comparar=self._comparar_codigo, rondas=rondas)
+        pn.guardar(estado, ruta)
+        return nota
+
     def pensar_sola(self, encender, cada_seg=240):
         """Enciende/apaga el pensar solo. Mientras está encendido, un hilo piensa un ratito cada ~4 min (suave, para
         no gastar batería; en el portátil va mejor). Lo pensado va al cuaderno; nada se aplica solo."""
@@ -1819,6 +1833,23 @@ class KiraGodCore:
         if re.match(r"^(?:tu |mi )?cuaderno(?: de pensamientos)?$|^qu[eé] has pensado$|^qu[eé] piensas$|"
                     r"^tus pensamientos$|^pensamientos$", cmd_lower):
             return self.cuaderno_texto()
+        mc = re.match(r"^(?:piensa a fondo|investiga(?:\s+y\s+mejora)?|ciclo de mejora|mejora sin parar|"
+                      r"mejora constantemente)\b(?:\s+(?:en|sobre|de|el|la|los|las)\s+|\s+)?(.*)$", cmd_lower)
+        if mc:
+            tema = (mc.group(1) or "").strip() or None
+            try:
+                n = self.ciclo_una(semilla=tema)
+            except Exception as e:
+                return f"No he podido hacer el ciclo ahora: {e}"
+            if n.get("fuente") in ("sin cerebro", "error"):
+                return (f"Quise mejorar pero no pude pensar: {n.get('respuesta','')}. Necesito un cerebro listo "
+                        "(enciende/descarga mi cerebro, conéctame al portátil o pon la clave).")
+            rondas = n.get("historial", [])
+            oks = sum(1 for h in rondas if h.get("ok"))
+            paso = "; ".join(f"ronda {h['ronda']}: {'OK' if h['ok'] else 'falló'}" for h in rondas)
+            return (f"He hecho un ciclo de mejora sobre «{n['semilla']}» ({len(rondas)} vuelta(s), {oks} que "
+                    f"funcionaron). {paso}.\nMi conclusión: {n['respuesta'][:300]}\n"
+                    "Lo tienes entero en «tu cuaderno». (Son notas; nada se aplica solo.)")
         if re.match(r"^piensa (?:una|algo|un poco|un rato)\b", cmd_lower):
             try:
                 n = self.pensar_una()
@@ -2396,7 +2427,8 @@ class KiraGodCore:
             return self._orden_recuerdos(command, cmd_lower)
         elif re.match(r"^(?:piensa|ponte a pensar|empieza a pensar|ponte a cuestionar|deja de pensar|para de pensar|"
                       r"no pienses|tu cuaderno|mi cuaderno|cuaderno de pensamientos|qu[eé] has pensado|qu[eé] piensas|"
-                      r"tus pensamientos|pensamientos)\b", cmd_lower):   # la curiosidad: pensar/estudiar/experimentar
+                      r"tus pensamientos|pensamientos|piensa a fondo|investiga|ciclo de mejora|mejora sin parar|"
+                      r"mejora constantemente)\b", cmd_lower):   # la curiosidad: pensar/estudiar/experimentar/ciclo
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)

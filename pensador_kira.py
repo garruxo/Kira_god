@@ -190,6 +190,72 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
     return nota
 
 
+def ciclo(estado, semilla, preguntar, estudiar=None, experimentar=None, comparar=None, rondas=3, ahora=None):
+    """El CICLO DE MEJORA que no para: pensar → buscar info → comparar → experimentar → juzgar si funciona → si no,
+    buscar más y volver a intentarlo, mejorando cada vuelta. Se queda con la mejor versión y guarda el recorrido.
+    Todo inyectado (preguntar/estudiar/experimentar/comparar) para probarlo sin red ni cerebro. Acotado a `rondas`
+    (el cerebro pequeño es lento; nada infinito). Devuelve la nota del ciclo."""
+    ahora = int(ahora if ahora is not None else time.time())
+    pregunta = f"¿cómo dominar {semilla} y mejorarlo?"
+
+    info = ""
+    if estudiar is not None:
+        try:
+            info = str(estudiar(f"cómo se hace {semilla}") or "")[:1200]
+        except Exception:
+            info = ""
+    try:
+        idea = str(preguntar(f"Quiero dominar «{semilla}». "
+                             + (f"Esto he averiguado: {info}\n" if info else "")
+                             + "Explica BREVE cómo hacerlo y cómo probar que funciona.") or "")
+    except Exception as e:
+        nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta,
+                "respuesta": f"(no pude pensar ahora: {e})", "seguridad": "baja", "duda": True,
+                "fuente": "sin cerebro", "tipo": "idea"}
+        anotar(estado, nota)
+        return nota
+
+    historial, mejor, prev_codigo = [], None, ""
+    for r in range(1, max(1, rondas) + 1):
+        pedido = (f"{semilla}. Mejora este código y hazlo mejor:\n{prev_codigo}" if prev_codigo
+                  else f"{semilla}. Escribe y prueba la idea.")
+        exp = {}
+        if experimentar is not None:
+            try:
+                exp = experimentar(pedido, semilla) or {}
+            except Exception as e:
+                exp = {"ok": False, "resultado": str(e)[:160]}
+        comp = None
+        if comparar is not None and (exp.get("codigo") or "").strip():
+            try:
+                comp = comparar(pedido, semilla, exp.get("codigo", ""))
+            except Exception:
+                comp = None
+        funciona = bool(exp.get("ok"))
+        historial.append({"ronda": r, "ok": funciona, "resultado": (exp.get("resultado") or "")[:160],
+                          "comparacion": (comp or {}).get("resumen", "") if comp else ""})
+        if funciona and mejor is None:
+            mejor = exp
+        if exp.get("codigo"):
+            prev_codigo = exp["codigo"]
+        # pensar cómo mejorar para la próxima vuelta
+        try:
+            idea = str(preguntar(f"Mi intento de «{semilla}» {'funcionó' if funciona else 'falló'}: "
+                                 f"{(exp.get('resultado') or '')[:200]}. ¿Cómo lo mejoro en la próxima vuelta? "
+                                 "Una idea concreta y breve.") or "") or idea
+        except Exception:
+            pass
+        if funciona and r >= 2:                 # ya funciona y ha dado al menos una vuelta de mejora: para aquí
+            break
+
+    nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta, "respuesta": idea.strip()[:500],
+            "seguridad": "alta" if mejor else "media", "duda": mejor is None,
+            "fuente": "estudiado" if info else "lo que sé", "tipo": "ciclo",
+            "rondas": len(historial), "historial": historial, "experimento": mejor}
+    anotar(estado, nota)
+    return nota
+
+
 def texto_cuaderno(estado, n=15):
     notas = estado.get("notas", [])[-n:]
     if not notas:
@@ -198,11 +264,16 @@ def texto_cuaderno(estado, n=15):
     out = [f"Cuaderno de Kira — {len(estado.get('notas', []))} pensamiento(s):"]
     for nt in notas:
         m = marca.get(nt.get("seguridad"), "~")
-        etq = " [experimento]" if nt.get("tipo") == "experimento" else (" [duda]" if nt.get("duda") else "")
+        etq = {"ciclo": " [ciclo de mejora]", "experimento": " [experimento]"}.get(
+            nt.get("tipo"), " [duda]" if nt.get("duda") else "")
         resp = (nt.get("respuesta", "") or "").replace("\n", " ")[:160]
         out.append(f"\n{m}{etq} {nt.get('pregunta', '')}\n   -> {resp} ({nt.get('fuente', '')})")
+        for h in nt.get("historial", []):
+            comp = f" | comparé: {h['comparacion'][:60]}" if h.get("comparacion") else ""
+            out.append(f"   . ronda {h.get('ronda')}: {'OK' if h.get('ok') else 'falló'} "
+                       f"{str(h.get('resultado', ''))[:90]}{comp}")
         exp = nt.get("experimento")
-        if exp:
+        if exp and not nt.get("historial"):
             out.append(f"   . prueba: {'OK' if exp.get('ok') else 'fallo'} - {str(exp.get('resultado', ''))[:120]}")
         comp = nt.get("comparacion")
         if comp:
