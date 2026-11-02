@@ -1790,11 +1790,11 @@ class KiraGodCore:
                 ultimo = {"ok": False, "resultado": f"intento {i}: no me salió el código ({e})", "codigo": ""}
                 pista = "\n\nLa vez anterior no me diste el código en un bloque ```python. Hazlo más corto y simple."
                 continue
-            r = pk.probar_programa(codigo)
-            if r.get("ok"):
-                salida = (r.get("dato") or {}).get("salida", "")
+            ok_prog, motivo, dato = pk.probar_programa(codigo)   # devuelve una TUPLA (ok, motivo, dato), no un dict
+            if ok_prog:
+                salida = (dato or {}).get("salida", "")
                 return {"ok": True, "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200], "intentos": i}
-            err = str(r.get("error") or "")
+            err = str(motivo or "")
             try:
                 import librerias_kira as lk_
                 falta = lk_.necesita_libreria(err)
@@ -1989,11 +1989,34 @@ class KiraGodCore:
         pn.guardar(estado, ruta)
         return nota
 
-    def pensar_sola(self, encender, cada_seg=240):
-        """Enciende/apaga el pensar solo. Mientras está encendido, un hilo piensa un ratito cada ~4 min (suave, para
-        no gastar batería; en el portátil va mejor). Lo pensado va al cuaderno; nada se aplica solo."""
+    def registrar_actividad(self):
+        """El dueño ha dado una orden: Kira le ATIENDE. Pausa el pensar un rato (vuelve sola tras `_inactivo_seg`)."""
+        self._ultima_actividad = time.time()
+
+    def reanudar_pensar(self):
+        """Al abrir la app: si el dueño dejó el pensar encendido, lo reanuda (suave: espera el rato de inactividad,
+        así no frena el arranque y respeta la batería). Devuelve True si lo reanudó."""
+        try:
+            with open(os.path.join(self.dir, "pensar_sola.json"), encoding="utf-8") as f:
+                on = bool(json.load(f).get("on"))
+        except (OSError, ValueError):
+            on = False
+        if on:
+            self.registrar_actividad()           # cuenta como que acabas de abrir: pensará cuando lleves 5 min quieto
+            self.pensar_sola(True, ya=False)
+        return on
+
+    def pensar_sola(self, encender, cada_seg=30, inactivo_seg=300, ya=True):
+        """Pensar SIN PARAR (lo pidió el dueño). Mientras está encendido, un hilo piensa una cosa tras otra; PERO si
+        el dueño acaba de darle una orden (hablaste con ella), se PAUSA para atenderte y vuelve sola cuando llevas
+        `inactivo_seg` (5 min) sin pedirle nada. Si al pensar necesita instalar algo, NO se para: deja el aviso en
+        pantalla y sigue pensando en otra cosa. `ya`=True empieza al momento (orden de voz); `ya`=False respeta la
+        espera de inactividad (reanudar al abrir la app). Lo pensado va al cuaderno; nada se aplica solo."""
         import threading
         self._pensar_on = bool(encender)
+        self._inactivo_seg = int(inactivo_seg)
+        if encender and ya:
+            self._ultima_actividad = 0      # al encender por voz, empieza a pensar YA (no espera los 5 min)
         try:
             with open(os.path.join(self.dir, "pensar_sola.json"), "w", encoding="utf-8") as f:
                 json.dump({"on": self._pensar_on}, f)
@@ -2004,23 +2027,27 @@ class KiraGodCore:
                 import pensador_kira as pn
                 fallos = 0
                 while getattr(self, "_pensar_on", False):
+                    # ¿el dueño está pendiente? si te atendió hace poco, NO pienso (te dejo sitio y te atiendo a ti)
+                    inact = time.time() - getattr(self, "_ultima_actividad", 0)
+                    if self.cancelado() or inact < getattr(self, "_inactivo_seg", 300):
+                        time.sleep(2)
+                        continue
                     fallo = False
                     try:
-                        nota = None if self.cancelado() else self.pensar_una()
+                        nota = self.pensar_una()
                         if nota and nota.get("fuente") in ("sin cerebro", "error"):
                             fallo = True
                         falta = (nota or {}).get("experimento", {}).get("necesita") if nota else None
-                        if falta:                        # necesita instalar algo: PARO y te lo pregunto (tus dos toques)
+                        if falta:                        # necesita instalar algo: NO paro -> aviso en pantalla y sigo
                             self.apuntar_permiso(falta, f"para pensar sobre «{(nota or {}).get('semilla', '')}»")
                             pn.anotar(est := pn.cargar(self._ruta_pensar()),
                                       {"cuando": int(time.time()), "semilla": (nota or {}).get("semilla", ""),
-                                       "pregunta": "(paré: necesito instalar algo)",
-                                       "respuesta": f"Para seguir necesito la librería «{falta}». Dime «instala la "
-                                                    f"librería {falta}» si te parece (tus dos toques).",
+                                       "pregunta": "(dejé pendiente instalar algo y seguí)",
+                                       "respuesta": f"Para ese tema necesitaría «{falta}»; te lo he dejado en pantalla "
+                                                    "para que decidas y sigo pensando en otra cosa.",
                                        "seguridad": "baja", "duda": True, "fuente": "permiso", "tipo": "idea"})
                             pn.guardar(est, self._ruta_pensar())
-                            self._pensar_on = False
-                            break
+                            fallo = False                # sí pensó (y encima avisó): no cuenta como fallo, no paro
                     except Exception as e:
                         fallo = True
                         try:                                 # que un fallo del bucle NO se quede mudo: queda escrito
@@ -2046,8 +2073,11 @@ class KiraGodCore:
                             pass
                         self._pensar_on = False
                         break
-                    for _ in range(max(30, int(cada_seg))):
+                    # espera corta entre pensamientos; si el dueño vuelve a hablar, corto la espera para atenderle ya
+                    for _ in range(max(5, int(cada_seg))):
                         if not getattr(self, "_pensar_on", False):
+                            break
+                        if time.time() - getattr(self, "_ultima_actividad", 0) < getattr(self, "_inactivo_seg", 300):
                             break
                         time.sleep(1)
                 self._pensar_hilo = None
@@ -2103,10 +2133,12 @@ class KiraGodCore:
                      if exp else "")
             return f"Me pregunté: {n['pregunta']}\n→ {n['respuesta'][:400]} ({n['fuente']}){extra}"
         self.pensar_sola(True)
-        return ("[OK] Me pongo a pensar sola: me haré preguntas (por qué, cómo, para qué) y, si son de código, las "
-                "probaré en mi editor seguro; lo que aprenda lo anoto en mi cuaderno. Son notas mías: no aplico nada "
-                "sola (eso sigue con tus dos toques). Pienso un ratito cada pocos minutos para no gastar batería; "
-                "mejor con el móvil cargando. Di «tu cuaderno» para leerme o «deja de pensar» para parar.")
+        return ("[OK] Me pongo a pensar sin parar: me haré preguntas (por qué, cómo, para qué) y, si son de código, "
+                "las probaré en mi editor seguro; lo que aprenda lo anoto en mi cuaderno. Cuando me hables PARO para "
+                "atenderte, y vuelvo a pensar sola cuando lleves 5 minutos sin pedirme nada. Si para algún tema "
+                "necesito instalar algo, te lo dejo avisado en pantalla y sigo pensando en otra cosa. Son notas mías: "
+                "no aplico ni instalo nada sola (eso sigue con tus dos toques). Pensar sin parar gasta batería: mejor "
+                "con el móvil cargando. Di «tu cuaderno» para leerme, «tus soluciones» o «deja de pensar» para parar.")
 
     def aprender_de_video(self, command):
         """«aprende de este vídeo: ‹enlace de YouTube›» -> saca lo que dice (subtítulos; si no hay, el oído), lo
@@ -2517,6 +2549,7 @@ class KiraGodCore:
     # ---------- núcleo ----------
     def procesar_orden(self, command: str) -> str:
         """Núcleo universal de ejecución rápida y control."""
+        self.registrar_actividad()      # has dado una orden: te atiendo y pauso el pensar (vuelve solo tras 5 min)
         cmd_lower = command.lower().strip()
 
         # las MEJORAS INSTALADAS van primero (si su orden no es una palabra suelta del núcleo, como «busca»): así

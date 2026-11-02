@@ -318,6 +318,11 @@ def construir_interfaz(core, consola=None):
         core.al_permiso = lambda n, m="": Clock.schedule_once(lambda _dt: mostrar_permiso(n, m), 0)
     except Exception:
         pass
+    # si el dueño dejó el pensar encendido, reanudarlo al abrir (suave: piensa cuando lleve 5 min sin pedir nada)
+    try:
+        Clock.schedule_once(lambda _dt: core.reanudar_pensar(), 3)
+    except Exception:
+        pass
 
     def decir(texto, hablar=True, ya_escrito=False):
         """Kira 'habla': el texto se escribe poco a poco y, si hay voz y está activada, se lee en voz alta.
@@ -351,6 +356,9 @@ def construir_interfaz(core, consola=None):
     def enviar(texto=None):
         texto = campo.text if texto is None else texto
         texto = ik.limpiar_entrada(texto)
+        if texto:
+            try: core.registrar_actividad()   # me hablas: te atiendo y pauso el pensar (vuelve solo tras 5 min)
+            except Exception: pass
         if texto and contestar_pregunta(texto):         # «sí» / «déjalo» a «¿sigo con lo que dejé a medias?»
             campo.text = ""
             return
@@ -516,6 +524,8 @@ def construir_interfaz(core, consola=None):
 
     def hablar_con_kira(texto):
         """La charla de siempre (y las órdenes del núcleo y de las mejoras instaladas): la respuesta va apareciendo."""
+        try: core.registrar_actividad()       # me hablas: te atiendo y pauso el pensar (vuelve solo tras 5 min)
+        except Exception: pass
         st["ocupado"] = True
         if st["reloj_txt"] is not None:
             st["reloj_txt"].cancel()

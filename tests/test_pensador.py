@@ -121,4 +121,14 @@ estm["i"] = 4
 sm = pk.proxima_semilla(estm)
 ok("mejorar" in sm, "revisita una solución para mejorarla")
 
+# --- la experiencia NO se queda en la RAM: se guarda en DISCO y sobrevive (pedido del dueño) ---
+import tempfile
+ruta_tmp = os.path.join(tempfile.mkdtemp(), "pensamientos.json")
+pk.guardar(estc, ruta_tmp)                  # estc trae notas + soluciones
+ok(os.path.exists(ruta_tmp), "el cuaderno se escribe en disco")
+recargado = pk.cargar(ruta_tmp)             # simula cerrar y volver a abrir la app
+ok(recargado.get("soluciones"), "al recargar de disco siguen las soluciones")
+ok(pk._norm("una pila") in recargado["soluciones"], "la solución guardada sobrevive al reinicio")
+ok(recargado.get("notas") == estc.get("notas"), "las notas sobreviven al reinicio tal cual")
+
 print(f"\nTODO BIEN {n}")
