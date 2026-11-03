@@ -507,7 +507,8 @@ def montar_sala_hacker(sm, ctx):
     r_bib = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
     r_bib.add_widget(barra("BIBLIOTECA", "‹ Sala", volver_a_sala))
     fila_est = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4))
-    estantes = (("leccion", "Lecciones"), ("apunte", "Apuntes"), ("modulo", "Módulos"), ("aprendido", "Aprendido"))
+    estantes = (("leccion", "Lecciones"), ("apunte", "Apuntes"), ("modulo", "Módulos"), ("aprendido", "Aprendido"),
+                ("solucion", "Soluciones"))
     btn_est = {}
     for clave, nombre in estantes:
         btn_est[clave] = boton(nombre, lambda c=clave: elegir_estante(c), GRIS, alto=42)
@@ -540,6 +541,11 @@ def montar_sala_hacker(sm, ctx):
             return [(i["id"], i["titulo"], i["texto"]) for i in biblioteca.listar(clave)]
         if clave == "modulo":
             return [(m["nombre"], m["nombre"], None) for m in ctl.modulos()]
+        if clave == "solucion":                       # lo que Kira ha RESUELTO pensando (siempre visible)
+            try:
+                return core.soluciones_lista()
+            except Exception:
+                return []
         return [(i["id"], i["tema"], f"{i['texto']}\n\nFuente: {i.get('fuente', '')}") for i in cerebro.conocimiento.listar()]
 
     def elegir_estante(clave):

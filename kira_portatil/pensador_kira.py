@@ -48,6 +48,8 @@ _TIPOS_PREGUNTA = [
     "¿para qué sirve {s} en la práctica, con un ejemplo?",
     "¿qué pasaría si {s} fallara o no existiera?",
     "¿en qué se parece y en qué se diferencia {s} de algo que ya conozco?",
+    "¿cómo se puede MEJORAR {s} y qué se necesita para mejorarlo?",
+    "¿cuál sería la MEJOR forma de {s} y por qué es la mejor?",
 ]
 
 # Si la semilla/pregunta huele a código, no solo se piensa: se EXPERIMENTA.

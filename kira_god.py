@@ -1861,6 +1861,110 @@ class KiraGodCore:
         import pensador_kira as pn
         return pn.texto_soluciones(pn.cargar(self._ruta_pensar()))
 
+    def soluciones_lista(self):
+        """Las soluciones como lista para la Biblioteca de la Sala Hacker: [(id, titulo, texto)]. Siempre visibles."""
+        import pensador_kira as pn
+        est = pn.cargar(self._ruta_pensar())
+        out = []
+        foco = self._foco_cargar()
+        if foco and foco.get("tema"):                      # el foco actual va primero, para verlo siempre
+            est_f = ("RESUELTO" if foco.get("resuelto") else ("pensando sin parar" if foco.get("activo")
+                     else "en pausa (dímelo para retomar)"))
+            out.append(("__foco__", f"◎ Foco: {foco['tema']} — {est_f}",
+                        f"Tema en el que me centro: {foco['tema']}\nEstado: {est_f}.\n"
+                        "Di «déjalo para otro día» para pausarlo o «retoma {t}» para seguir.".format(t=foco["tema"])))
+        for tema, s in sorted(est.get("soluciones", {}).items(), key=lambda kv: kv[1].get("cuando", 0), reverse=True):
+            veces = s.get("veces", 1)
+            cab = s.get("semilla", tema) + (f" (mejorada {veces} veces)" if veces > 1 else "")
+            cuerpo = s.get("respuesta", "")
+            if (s.get("codigo") or "").strip():
+                cuerpo += "\n\nCódigo:\n" + s["codigo"]
+            out.append(("sol:" + tema, "✔ " + cab, cuerpo))
+        return out
+
+    # ---------- FOCO: pensar en algo CONCRETO sin parar hasta resolverlo ----------
+    def _ruta_foco(self):
+        return os.path.join(self.dir, "foco.json")
+
+    def _foco_cargar(self):
+        try:
+            with open(self._ruta_foco(), encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) and d.get("tema") else None
+        except (OSError, ValueError):
+            return None
+
+    def _foco_guardar(self, foco):
+        try:
+            with open(self._ruta_foco(), "w", encoding="utf-8") as f:
+                json.dump(foco, f, ensure_ascii=False)
+            os.chmod(self._ruta_foco(), 0o600)
+        except OSError:
+            pass
+
+    def enfocar(self, tema):
+        """«piensa en X hasta resolverlo»: Kira se CENTRA en ese tema y lo piensa/experimenta/compara SIN PARAR
+        (ciclo de mejora, vuelta tras vuelta) hasta que encuentre una solución que funcione, o hasta que le digas
+        que lo deje para otro día. Nada se aplica solo. Empieza ya."""
+        tema = str(tema or "").strip(" .,:;")
+        if len(tema) < 2:
+            return "Dime en qué quieres que me centre, por ejemplo «piensa en la búsqueda binaria hasta resolverlo»."
+        self._foco = {"tema": tema, "activo": True, "resuelto": False, "desde": int(time.time())}
+        self._foco_guardar(self._foco)
+        self.pensar_sola(True)                 # enciende el pensar; ya=True -> empieza al momento con el foco
+        return (f"Me centro en «{tema}» y no paro: lo pienso, lo pruebo y busco cómo mejorarlo vuelta tras vuelta "
+                "hasta dar con la mejor solución. Cuando la tenga, te preguntaré qué quieres hacer con ella (app, web "
+                "o meterla en mí). Dime «déjalo para otro día» cuando quieras que lo aparque. (Nada se aplica solo.)")
+
+    def dejar_foco(self):
+        """«déjalo para otro día»: aparca el tema del foco (sin borrarlo; puedes retomarlo). Sigue pensando en general
+        solo si el pensar estaba encendido aparte."""
+        foco = self._foco_cargar()
+        if not foco:
+            return "Ahora mismo no me estoy centrando en nada en concreto."
+        foco["activo"] = False
+        self._foco = foco
+        self._foco_guardar(foco)
+        return (f"Vale, dejo «{foco['tema']}» para otro día (lo tengo guardado). Dime «retoma {foco['tema']}» cuando "
+                "quieras que siga con ello. Lo que ya saqué está en la Sala Hacker ▸ Biblioteca ▸ Soluciones.")
+
+    def retomar_foco(self, tema=None):
+        """«retoma X» / «sigue con X»: vuelve a centrarse (en X, o en lo último si no dices tema)."""
+        if tema and len(str(tema).strip()) >= 2:
+            return self.enfocar(tema)
+        foco = self._foco_cargar()
+        if not foco:
+            return "No tengo ningún tema aparcado. Dime «piensa en X hasta resolverlo» para empezar uno."
+        if foco.get("resuelto"):
+            return self.enfocar(foco["tema"])      # ya estaba resuelto: lo retoma para mejorarlo aún más
+        foco["activo"] = True
+        self._foco = foco
+        self._foco_guardar(foco)
+        self.pensar_sola(True)
+        return f"Retomo «{foco['tema']}» y sigo sin parar hasta resolverlo."
+
+    def usar_solucion(self, tema, destino):
+        """Cuando el dueño elige qué hacer con una solución encontrada: 'app' / 'web' / 'kira'. Honesto: no construye
+        la app/web entera solo; guía al siguiente paso real (que sigue pasando por el laboratorio + tus dos toques)."""
+        import pensador_kira as pn
+        est = pn.cargar(self._ruta_pensar())
+        s = est.get("soluciones", {}).get(pn._norm(tema)) or {}
+        if not s:
+            return "No encuentro esa solución guardada."
+        destino = str(destino or "").lower()
+        if destino.startswith("kira") or "integra" in destino or "funci" in destino:
+            return ("Para meterla en mí como función nueva: ve a la Sala Hacker ▸ Biblioteca ▸ Soluciones, copia el "
+                    f"código de «{tema}» y dime «implementa este código» (lo pruebo en mi laboratorio y lo instalas con "
+                    "tus dos toques). No meto nada en mí sola.")
+        if destino.startswith("web"):
+            return (f"Para una web con esto: dime «diséñame una web de {tema}» y la monto con lo aprendido; el código "
+                    "de la solución lo tienes en la Biblioteca ▸ Soluciones para apoyarte.")
+        if destino.startswith("app"):
+            return (f"Para una app: si es un juego, dime «conviértelo en una app»; si es otra cosa, aún no fabrico una "
+                    f"app completa sola de cualquier código (sería mentira decir que sí). El código de «{tema}» está en "
+                    "la Biblioteca ▸ Soluciones para seguir.")
+        return "Dime si quieres hacer una app, una web, o integrarla en mí."
+
     def probar_permiso(self):
         """Para que el dueño VEA la ventana emergente de permiso aunque todavía no haya hecho falta instalar nada.
         Solo la muestra; no instala ni apunta nada. (Sale de verdad cuando un experimento necesita una librería.)"""
@@ -2034,7 +2138,25 @@ class KiraGodCore:
                         continue
                     fallo = False
                     try:
-                        nota = self.pensar_una()
+                        foco = self._foco_cargar()
+                        if foco and foco.get("activo") and not foco.get("resuelto"):
+                            # CENTRADA en un tema concreto: ciclo de mejora sobre él, vuelta tras vuelta
+                            nota = self.ciclo_una(semilla=foco["tema"])
+                            est_s = pn.cargar(self._ruta_pensar())
+                            if pn._norm(foco["tema"]) in est_s.get("soluciones", {}):     # ¡resuelto!
+                                foco["resuelto"] = True
+                                foco["activo"] = False
+                                self._foco = foco
+                                self._foco_guardar(foco)
+                                sol = est_s["soluciones"][pn._norm(foco["tema"])]
+                                cb = getattr(self, "al_solucion", None)
+                                if callable(cb):
+                                    try:
+                                        cb(foco["tema"], sol.get("respuesta", ""), sol.get("codigo", ""))
+                                    except Exception:
+                                        pass
+                        else:
+                            nota = self.pensar_una()
                         if nota and nota.get("fuente") in ("sin cerebro", "error"):
                             fallo = True
                         falta = (nota or {}).get("experimento", {}).get("necesita") if nota else None
@@ -2100,6 +2222,25 @@ class KiraGodCore:
         if re.match(r"^prueba (?:la ventana de |el )?permiso$|^prueba de permiso$|"
                     r"^(?:mu[eé]strame|ens[eé][ñn]ame) la ventana de permiso$", cmd_lower):
             return self.probar_permiso()
+        # ---- FOCO: centrarse en un tema concreto hasta resolverlo / dejarlo / retomarlo ----
+        if re.match(r"^d[eé]jal[oa](?: para otro d[ií]a| por hoy| para luego| para ma[ñn]ana)?$|"
+                    r"^aparca(?: el tema| eso)?$|^deja (?:el tema|eso|el foco) para otro d[ií]a$|"
+                    r"^deja de (?:pensar en|centrarte en|investigar) (?:eso|ello|el tema)$|^deja el tema$", cmd_lower):
+            return self.dejar_foco()
+        mr = re.match(r"^(?:retoma|ret[oó]mal[oa]|vuelve al tema|vuelve a centrarte(?: en)?|contin[uú]a con el tema)"
+                      r"(?:\s+(?:el tema\s+)?(?:de\s+)?(.+))?$", cmd_lower)
+        if mr:
+            t = (mr.group(1) or "").strip(" .,:")
+            return self.retomar_foco(t if len(t) >= 2 else None)
+        mf = re.match(r"^(?:piensa|pi[eé]nsate)\s+(?:en|sobre)\s+(.+?)\s+(?:hasta\s+(?:resolverl[oa]|encontrar(?:la)?"
+                      r"(?: la soluci[oó]n)?|que lo resuelvas|el final|dar con (?:la|una) soluci[oó]n)|sin parar|"
+                      r"sin descanso)$"
+                      r"|^(?:c[eé]ntrate|concé?ntrate|enf[oó]cate)\s+(?:en|sobre)\s+(.+)$"
+                      r"|^resu[eé]lveme\s+(.+)$"
+                      r"|^investiga\s+(.+?)\s+hasta\s+resolverl[oa]$", cmd_lower)
+        if mf:
+            tema = next((g for g in mf.groups() if g), "").strip(" .,:")
+            return self.enfocar(tema)
         mc = re.match(r"^(?:piensa a fondo|investiga(?:\s+y\s+mejora)?|ciclo de mejora|mejora sin parar|"
                       r"mejora constantemente)\b(?:\s+(?:en|sobre|de|el|la|los|las)\s+|\s+)?(.*)$", cmd_lower)
         if mc:
@@ -2707,7 +2848,9 @@ class KiraGodCore:
                       r"tus pensamientos|pensamientos|piensa a fondo|investiga|ciclo de mejora|mejora sin parar|"
                       r"mejora constantemente|qu[eé] necesitas|qu[eé] te falta|pendientes?|tus soluciones|"
                       r"mis soluciones|qu[eé] has resuelto|tus mejoras|prueba (?:la ventana de |el )?permiso|"
-                      r"mu[eé]strame la ventana de permiso|ens[eé][ñn]ame la ventana de permiso)\b", cmd_lower):
+                      r"mu[eé]strame la ventana de permiso|ens[eé][ñn]ame la ventana de permiso|c[eé]ntrate|"
+                      r"conc[eé]ntrate|enf[oó]cate|resu[eé]lveme|d[eé]jalo|aparca|retoma|ret[oó]malo|"
+                      r"vuelve al tema|vuelve a centrarte|deja el tema|deja de centrarte)\b", cmd_lower):
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)

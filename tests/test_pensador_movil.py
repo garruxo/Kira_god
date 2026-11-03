@@ -25,7 +25,7 @@ def ok(c, m):
 ruta = os.path.join(tempfile.mkdtemp(), "pensamientos.json")
 
 # --- pura ---
-ok(len(pk.generar_preguntas("una pila")) == 5, "5 preguntas")
+ok(len(pk.generar_preguntas("una pila")) == 7, "7 preguntas")
 ok(pk.es_programable("un grafo") and not pk.es_programable("la amistad"), "detecta lo programable")
 ok(pk.clasificar_respuesta("No lo sé")[1] is True, "duda")
 

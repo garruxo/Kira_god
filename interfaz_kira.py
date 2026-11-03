@@ -318,6 +318,46 @@ def construir_interfaz(core, consola=None):
         core.al_permiso = lambda n, m="": Clock.schedule_once(lambda _dt: mostrar_permiso(n, m), 0)
     except Exception:
         pass
+
+    # ---- ventana: Kira RESOLVIÓ el tema en el que se centró -> te pregunta qué hacer con la solución ----
+    sol_st = {"abierta": False}
+
+    def mostrar_solucion(tema, resumen="", codigo=""):
+        if sol_st["abierta"]:
+            return
+        from kivy.uix.popup import Popup
+        sol_st["abierta"] = True
+        cuerpo = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        msg = Label(text=f"He resuelto «{tema}».\n{(resumen or '')[:200]}\n\n¿Qué quieres hacer con ello?",
+                    color=TXT, font_size=tam(15), halign="center", valign="middle", **FUENTE)
+        msg.bind(width=lambda *_: setattr(msg, "text_size", (msg.width, None)))
+        cuerpo.add_widget(msg)
+        fila = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
+        pop = Popup(title="Solución encontrada", content=cuerpo, size_hint=(0.94, 0.5), auto_dismiss=False)
+
+        def elegir(destino):
+            sol_st["abierta"] = False
+            pop.dismiss()
+            try:
+                decir(core.usar_solucion(tema, destino))
+            except Exception as e:
+                decir(f"No pude seguir con eso: {e}")
+
+        def luego(*_):
+            sol_st["abierta"] = False
+            pop.dismiss()
+            decir(f"Vale, lo dejo guardado. Lo tienes en la Sala Hacker ▸ Biblioteca ▸ Soluciones, «{tema}».")
+
+        fila.add_widget(boton("App", lambda *_: elegir("app"), GRIS, alto=48))
+        fila.add_widget(boton("Web", lambda *_: elegir("web"), GRIS, alto=48))
+        fila.add_widget(boton("En Kira", lambda *_: elegir("kira"), VERDE, alto=48))
+        cuerpo.add_widget(fila)
+        cuerpo.add_widget(boton("Luego", luego, TENUE, alto=40))
+        pop.open()
+    try:
+        core.al_solucion = lambda t, r="", c="": Clock.schedule_once(lambda _dt: mostrar_solucion(t, r, c), 0)
+    except Exception:
+        pass
     # si el dueño dejó el pensar encendido, reanudarlo al abrir (suave: piensa cuando lleve 5 min sin pedir nada)
     try:
         Clock.schedule_once(lambda _dt: core.reanudar_pensar(), 3)
