@@ -1923,6 +1923,154 @@ class KiraGodCore:
         except Exception:
             return False
 
+    # ---------- INVESTIGAR (v2.80): el dueño da encargos; Kira investiga y, según sea, GUARDA / PROGRAMA / hace APP ----
+    def investigar(self, peticion, recordar=False):
+        """«investiga …» / «pregúntate …»: Kira mira qué es el encargo y lo hace: si es para ENTENDER, lo guarda
+        (reflexión); si es para PROGRAMAR, escribe y prueba el código; si es una APP, la crea. Nada se mete en Kira
+        ni se instala solo (sigue por la auto-mejora o tus dos toques)."""
+        import investigar_kira as iv
+        peticion = str(peticion or "").strip()
+        if len(peticion) < 3:
+            return "Dime qué quieres que investigue, por ejemplo «investiga qué es un árbol binario»."
+        if recordar:
+            try:
+                iv.anadir(self.dir, peticion)
+            except Exception:
+                pass
+        tipo = iv.clasificar_peticion(peticion)
+        try:
+            if tipo == "app":
+                r = self._investigar_app(peticion)
+            elif tipo == "programa":
+                r = self._investigar_programa(peticion)
+            else:
+                r = self._investigar_reflexion(peticion)
+        except Exception as e:
+            r = f"Lo intenté investigar pero me topé con un problema: {e}"
+        try:
+            iv.marcar_hecha(self.dir, peticion)
+        except Exception:
+            pass
+        return r
+
+    def encargar(self, peticion):
+        """El dueño me da una pregunta/encargo: lo GUARDO para pensarlo cuando esté pensando (no lo hago al vuelo).
+        Cuando piense, lo investigo y, según sea, lo guardo (reflexión), lo programo o te hago la app."""
+        import investigar_kira as iv
+        peticion = str(peticion or "").strip()
+        if len(peticion) < 3:
+            return "Dime qué quieres que me pregunte, por ejemplo «pregúntate qué es un árbol binario»."
+        try:
+            nuevo = iv.anadir(self.dir, peticion)
+        except Exception:
+            nuevo = True
+        if nuevo:
+            base = (f"Apuntado para pensarlo: «{peticion[:80]}». Cuando esté pensando lo investigo y, según sea, lo "
+                    "guardo (reflexión), lo programo o te hago la app.")
+        else:
+            base = f"Ya lo tenía apuntado: «{peticion[:80]}». Lo pensaré cuando esté pensando."
+        if not getattr(self, "_pensar_on", False):
+            base += " Ahora no estoy pensando: dime «piensa» para que me ponga con ello."
+        return base
+
+    def investigar_listar(self):
+        import investigar_kira as iv
+        return iv.texto_listar(self.dir)
+
+    def _investigar_reflexion(self, peticion):
+        """Para ENTENDER algo: estudia (si puede), piensa y GUARDA la reflexión (cuaderno + baúl)."""
+        try:
+            material = self._estudiar_pensando(peticion) or ""
+        except Exception:
+            material = ""
+        try:
+            reflexion = self._reflexionar(peticion, material)
+        except Exception:
+            reflexion = ""
+        if not reflexion:
+            return (f"Quise investigar «{peticion[:80]}» pero no tengo cerebro listo (enciende/descarga mi cerebro, "
+                    "conéctame al portátil o pon la clave). Lo dejo apuntado para cuando pueda.")
+        try:
+            if getattr(self, "recuerdos", None):
+                self.recuerdos.guardar(reflexion[:800], tema=peticion[:60], fuente="investigado")
+        except Exception:
+            pass
+        return (f"He investigado «{peticion[:80]}» y lo he guardado (reflexión):\n\n{reflexion[:500]}\n\n"
+                "(Está en mi baúl y en el cuaderno.)")
+
+    def _investigar_programa(self, peticion):
+        """Para PROGRAMAR: escribe y prueba el código en modo seguro. Lo guarda como solución y, si la auto-mejora
+        está encendida y es un módulo, lo implementa (con su red de seguridad). Si falta una librería, te pregunta."""
+        exp = self._experimentar_pensando(peticion, peticion)
+        falta = (exp or {}).get("necesita")
+        if falta:
+            try:
+                self.apuntar_permiso(falta, f"para programar «{peticion[:60]}»")
+            except Exception:
+                pass
+            return (f"Para programar «{peticion[:60]}» necesitaría la librería «{falta}». Te lo he dejado en pantalla "
+                    "para que decidas; no instalo nada sola.")
+        codigo = (exp or {}).get("codigo", "")
+        if not exp or not exp.get("ok") or not codigo:
+            return (f"Lo intenté programar pero no me salió del todo: {(exp or {}).get('resultado', 'sin resultado')}. "
+                    f"Lo seguiré intentando; también puedes decirme «piensa en {peticion[:40]} hasta resolverlo».")
+        self._guardar_solucion(peticion, codigo=codigo, resultado=exp.get("resultado", ""))
+        extra = ""
+        try:
+            if self.auto_mejora_encendida():
+                r = self.auto_implementar(peticion[:31], codigo, peticion)
+                if isinstance(r, dict) and r.get("texto"):
+                    extra = "\n\n" + r["texto"]
+        except Exception:
+            pass
+        return (f"He programado «{peticion[:60]}» y lo he probado en mi editor seguro (OK). Está en la Sala Hacker ▸ "
+                f"Biblioteca ▸ Soluciones.{extra}\n\nSi quieres que lo meta en mí: «implementa este código» (o enciende "
+                "la auto-mejora). Si lo quieres como app: «hazme una app de esto».")
+
+    def _investigar_app(self, peticion):
+        """Para una APP: programa la idea y la convierte en una app web instalable (sin compilar)."""
+        exp = self._experimentar_pensando(peticion, peticion)
+        falta = (exp or {}).get("necesita")
+        if falta:
+            try:
+                self.apuntar_permiso(falta, f"para la app de «{peticion[:60]}»")
+            except Exception:
+                pass
+            return f"Para la app de «{peticion[:60]}» necesitaría «{falta}»; te lo dejo en pantalla. No instalo nada sola."
+        codigo = (exp or {}).get("codigo", "")
+        if not codigo:
+            return (f"Para la app de «{peticion[:50]}» primero necesito el programa y no me salió aún; dímelo otra vez "
+                    f"o «piensa en {peticion[:40]} hasta resolverlo» y luego te hago la app.")
+        try:
+            import app_web_kira as aw
+            pagina = aw.html_app(codigo, titulo=peticion[:40])
+            carpeta = os.path.join(self.dir, "apps")
+            os.makedirs(carpeta, exist_ok=True)
+            ruta = os.path.join(carpeta, aw.nombre_archivo(peticion[:40]))
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write(pagina)
+        except Exception as e:
+            return f"Programé «{peticion[:50]}» pero no pude hacer la app web: {e}."
+        self._guardar_solucion(peticion, codigo=codigo, resultado=(exp or {}).get("resultado", ""))
+        return (f"He hecho una APP WEB de «{peticion[:50]}» (un solo .html, sin compilar): {ruta}. Ábrela y, en el "
+                "navegador, «Añadir a la pantalla de inicio» para tenerla como app.")
+
+    def _guardar_solucion(self, tema, codigo="", resultado=""):
+        """Guarda lo investigado como SOLUCIÓN (aparece en Biblioteca ▸ Soluciones y se puede mejorar luego)."""
+        import pensador_kira as pn
+        try:
+            ruta = self._ruta_pensar()
+            estado = pn.cargar(ruta)
+            nota = {"cuando": int(time.time()), "semilla": tema, "pregunta": f"encargo del dueño: {tema}",
+                    "respuesta": (resultado or "resuelto")[:600], "seguridad": "alta", "duda": False,
+                    "fuente": "investigado", "tipo": "experimento",
+                    "experimento": {"ok": True, "codigo": codigo, "resultado": resultado}}
+            pn.anotar(estado, nota)
+            pn.consolidar(estado, nota)
+            pn.guardar(estado, ruta)
+        except Exception:
+            pass
+
     # ---------- FOCO: pensar en algo CONCRETO sin parar hasta resolverlo ----------
     def _ruta_foco(self):
         return os.path.join(self.dir, "foco.json")
@@ -2194,8 +2342,16 @@ class KiraGodCore:
                         continue
                     fallo = False
                     try:
-                        foco = self._foco_cargar()
-                        if foco and foco.get("activo") and not foco.get("resuelto"):
+                        import investigar_kira as _iv
+                        encargo = None
+                        try:
+                            encargo = _iv.pendiente(self.dir)       # tus encargos van PRIMERO
+                        except Exception:
+                            encargo = None
+                        if encargo:
+                            self.investigar(encargo)                # investiga y, según sea, guarda/programa/hace app
+                            nota = None
+                        elif (foco := self._foco_cargar()) and foco.get("activo") and not foco.get("resuelto"):
                             # CENTRADA en un tema concreto: ciclo de mejora sobre él, vuelta tras vuelta
                             nota = self.ciclo_una(semilla=foco["tema"])
                             est_s = pn.cargar(self._ruta_pensar())
@@ -2684,7 +2840,10 @@ class KiraGodCore:
                 partes.append("He estudiado y guardado: " + "; ".join(titulos) + ". (Fuente: Wikipedia.)")
             if repaso:
                 partes.append("Y lo he repasado con Claude: me ha corregido y completado la ficha.")
-            return "[OK] " + " ".join(partes) + " Pregúntame sobre ello cuando quieras."
+            pensar = (" Y me lo pienso: cuando esté pensando me preguntaré sobre ello (cómo funciona, para qué sirve, "
+                      "qué puedo hacer con ello, cómo mejorarlo, cómo programarlo…). "
+                      + ("Ya estoy pensando." if getattr(self, "_pensar_on", False) else "Dime «piensa» para que me ponga."))
+            return "[OK] " + " ".join(partes) + pensar + " Pregúntame sobre ello cuando quieras."
         return est.estado_texto() + "\n" + (self.recuerdos.estado_texto() if self.recuerdos else "")
 
     def _repasar_con_claude(self, tema):
@@ -2908,6 +3067,11 @@ class KiraGodCore:
         elif cmd_lower in ("recuerdos", "baul", "baúl", "baúl de recuerdos", "baul de recuerdos") or \
                 re.match(r"^(?:guarda recuerdo|qu[eé] recuerdas de|recuerdos de|busca en tus recuerdos|olvida recuerdo|parecido)\b", cmd_lower):
             return self._orden_recuerdos(command, cmd_lower)
+        elif (lambda ac: ac[0] is not None)(__import__("investigar_kira").es_orden(command)):  # encargos del dueño
+            accion, carga = __import__("investigar_kira").es_orden(command)
+            if accion == "listar":
+                return self.investigar_listar()
+            return self.encargar(carga)        # lo GUARDO para pensarlo cuando esté pensando (no lo hago al vuelo)
         elif re.match(r"^(?:piensa|ponte a pensar|empieza a pensar|ponte a cuestionar|deja de pensar|para de pensar|"
                       r"no pienses|tu cuaderno|mi cuaderno|cuaderno de pensamientos|qu[eé] has pensado|qu[eé] piensas|"
                       r"tus pensamientos|pensamientos|piensa a fondo|investiga|ciclo de mejora|mejora sin parar|"
