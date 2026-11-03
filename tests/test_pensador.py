@@ -23,7 +23,7 @@ def ok(c, m):
 
 # --- preguntas: 5 tipos, con la semilla metida ---
 qs = pk.generar_preguntas("un bucle")
-ok(len(qs) == 7 and all("un bucle" in q for q in qs), "genera 7 preguntas con la semilla")
+ok(len(qs) == 10 and all("un bucle" in q for q in qs), "genera 10 preguntas con la semilla")
 ok(any(q.startswith("¿por qué") for q in qs) and any("¿cómo" in q for q in qs), "incluye por qué y cómo")
 
 # --- clasificar la respuesta ---

@@ -21,9 +21,13 @@ def ok(c, m):
 
 # --- PURO: el pensador también se pregunta cómo MEJORAR y cuál es la MEJOR forma ---
 qs = pk.generar_preguntas("una pila")
-ok(len(qs) == 7, "7 tipos de pregunta")
+ok(len(qs) == 10, "10 tipos de pregunta")
 ok(any("MEJORAR" in q for q in qs), "se pregunta cómo MEJORAR y qué se necesita")
 ok(any("MEJOR forma" in q for q in qs), "busca la MEJOR forma")
+# actitud de programadora experta: incorporar a su sistema, mejorar su código, programar en Kivy/Python
+ok(any("INCORPORAR" in q and "Kira" in q for q in qs), "se pregunta si incorporarlo a su sistema")
+ok(any("mi propio código" in q for q in qs), "se pregunta qué mejorar en su propio código")
+ok(any("Python/Kivy" in q for q in qs), "se pregunta cómo programarlo en Python/Kivy")
 
 src_g = open(os.path.join(RAIZ, "kira_god.py"), encoding="utf-8").read()
 src_i = open(os.path.join(RAIZ, "interfaz_kira.py"), encoding="utf-8").read()

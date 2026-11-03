@@ -41,6 +41,9 @@ _TIPOS_PREGUNTA = [
     "¿en qué se parece y en qué se diferencia {s} de algo que ya conozco?",
     "¿cómo se puede MEJORAR {s} y qué se necesita para mejorarlo?",
     "¿cuál sería la MEJOR forma de {s} y por qué es la mejor?",
+    "¿se podría INCORPORAR {s} a mi propio sistema (Kira) como una función nueva, y cómo?",
+    "¿hay algo de {s} que pueda MEJORAR en mi propio código?",
+    "¿cómo programaría {s} en Python/Kivy, paso a paso, como una programadora experta?",
 ]
 
 _PROGRAMABLE = ("funcion", "bucle", "recursi", "lista", "diccionario", "pila", "cola", "arbol", "grafo",
@@ -218,7 +221,7 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
         if ya_pensada(estado, pregunta):
             return None
 
-    base = ("Piensa como programadora curiosa. Responde BREVE y claro. Si no lo sabes, di «NO LO SÉ».\n"
+    base = ("Piensa como programadora EXPERTA y curiosa. Responde BREVE y claro. Si no lo sabes, di «NO LO SÉ».\n"
             "Pregunta: " + pregunta)
     try:
         respuesta = str(preguntar(base) or "")
