@@ -198,6 +198,51 @@ def _player_api(vid, bajar):
         return ""
 
 
+def _desescapar(s):
+    try:
+        return json.loads('"' + s + '"')
+    except Exception:
+        return s.replace('\\"', '"')
+
+
+def _videos_de_busqueda(html_, maximo=3):
+    """Saca [(videoId, titulo)] de la página de resultados de YouTube, en orden. Sin internet aquí: puro sobre el HTML."""
+    vistos, out = set(), []
+    for m in re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})".*?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"',
+                         html_ or "", re.S):
+        vid, titulo = m.group(1), _desescapar(m.group(2))
+        if vid in vistos:
+            continue
+        vistos.add(vid)
+        out.append((vid, titulo))
+        if len(out) >= maximo:
+            return out
+    for m in re.finditer(r'"videoId":"([\w-]{11})"', html_ or ""):   # reserva: solo los IDs en orden
+        vid = m.group(1)
+        if vid in vistos:
+            continue
+        vistos.add(vid)
+        out.append((vid, ""))
+        if len(out) >= maximo:
+            break
+    return out
+
+
+def buscar(consulta, bajar=None, maximo=3):
+    """Busca en YouTube y devuelve [(videoId, titulo)] de los primeros vídeos. `bajar(url)->bytes` se inyecta (internet).
+    Para «estudia X»: buscar «X tutorial» y «X curso completo» y aprender de los mejores."""
+    import urllib.parse
+    bajar = bajar or _bajar_defecto
+    q = urllib.parse.quote_plus(str(consulta or "").strip())
+    if not q:
+        return []
+    try:
+        html_ = bajar("https://www.youtube.com/results?search_query=" + q + "&hl=es").decode("utf-8", "replace")
+    except Exception:
+        return []
+    return _videos_de_busqueda(html_, maximo)
+
+
 def aprender(texto, bajar=None, transcribir=None, idioma="es"):
     """Saca lo que dice un vídeo de YouTube. `bajar(url)->bytes` (internet) y `transcribir(id)->texto` (el oído) se
     inyectan. Devuelve el texto del vídeo para que el núcleo lo resuma/estudie."""

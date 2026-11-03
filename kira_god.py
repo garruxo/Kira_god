@@ -1611,6 +1611,94 @@ class KiraGodCore:
                 + f". Pregúntame «¿qué sabes de {consulta}?» para verlo; si quieres que sea parte de mí, ábrelo y di "
                 "«implementa este código» (tus dos toques). Por seguridad, lo de internet no lo uso solo sin que lo veas.")
 
+    def es_estudia_general(self, texto):
+        import estudio_kira as est_
+        return est_.es_estudia_general(texto)
+
+    def _buscar_cursos_youtube(self, tema, maximo=2):
+        """Busca en YouTube CURSOS COMPLETOS (gratis) y tutoriales del tema. Devuelve [(videoId, titulo)]."""
+        import video_kira as vk
+        try:
+            vids = vk.buscar(f"{tema} curso completo gratis", maximo=maximo)
+            if len(vids) < maximo:
+                ids = {v[0] for v in vids}
+                vids += [v for v in vk.buscar(f"{tema} tutorial", maximo=maximo) if v[0] not in ids]
+            return vids[:maximo]
+        except Exception:
+            return []
+
+    def estudiar_a_fondo(self, tema, al_paso=None):
+        """«estudia X»: estudia DE VERDAD —webs oficiales / tutoriales / cursos gratis en la web y CURSOS COMPLETOS de
+        YouTube—, lo guarda en el baúl y lo deja para pensarlo. Con `al_paso(fraccion, texto)` mueve la barra. Al acabar,
+        sigue pensando sola cuando NO esté estudiando. Necesita internet."""
+        tema = str(tema or "").strip()
+        if len(tema) < 2:
+            return "Dime qué quieres que estudie, por ejemplo «estudia Python»."
+
+        def paso(fr, txt):
+            if al_paso:
+                try:
+                    al_paso(fr, txt)
+                except Exception:
+                    pass
+
+        self._estudiando = True
+        partes, titulos, repaso = [], [], False
+        try:
+            paso(0.1, f"Buscando «{tema}» en webs oficiales, tutoriales y cursos gratis…")
+            try:
+                r_web = self.estudiar_en_internet(f"{tema} curso completo gratis documentación oficial tutorial",
+                                                  paginas=3, al_paso=lambda t: paso(0.3, t))
+                if isinstance(r_web, str) and r_web.startswith("[OK]"):
+                    partes.append("webs oficiales/tutoriales/cursos gratis")
+            except Exception:
+                pass
+            if not self.cancelado():
+                paso(0.5, f"Buscando CURSOS COMPLETOS de «{tema}» en YouTube…")
+                vids = self._buscar_cursos_youtube(tema)
+                hechos = 0
+                for i, (vid, titulo) in enumerate(vids):
+                    if self.cancelado():
+                        break
+                    paso(0.6 + 0.3 * (i / max(1, len(vids))), f"Aprendiendo del vídeo: {(titulo or vid)[:40]}…")
+                    try:
+                        rv = self.aprender_de_video(f"https://youtu.be/{vid}")
+                        if isinstance(rv, str) and not rv.startswith("[x]"):
+                            hechos += 1
+                    except Exception:
+                        pass
+                if hechos:
+                    partes.append(f"{hechos} curso(s)/tutorial(es) de YouTube")
+            paso(0.92, "Guardando y repasando…")
+            try:
+                est_ = getattr(self, "estudio", None)
+                if est_ is not None:
+                    titulos = est_.estudiar(tema) or []     # fichas de Wikipedia (extra)
+            except Exception:
+                titulos = []
+            try:
+                repaso = self._repasar_con_claude(tema)     # Claude corrige/completa las fichas si está el acuerdo
+            except Exception:
+                repaso = False
+        finally:
+            self._estudiando = False
+        try:
+            self.pensar_sola(True, ya=False)                # cuando no esté estudiando, que siga pensando
+        except Exception:
+            pass
+        paso(1.0, "Listo.")
+        trozos = list(partes)
+        if titulos:
+            trozos.append("fichas de Wikipedia (" + "; ".join(titulos[:6]) + ")")
+        if repaso:
+            trozos.append("y lo he repasado con Claude")
+        if not trozos:
+            return (f"He intentado estudiar «{tema}» pero no pude leer webs, vídeos ni Wikipedia (¿hay internet?). Lo "
+                    "intento otra vez cuando haya conexión.")
+        return (f"[OK] He estudiado «{tema}» de verdad: {', '.join(trozos)}. Lo he guardado en mi baúl. Y me lo pienso: "
+                "cuando no esté estudiando sigo pensando sobre ello (cómo funciona, para qué sirve, qué puedo hacer, "
+                "cómo mejorarlo, cómo programarlo…). Pregúntame cuando quieras.")
+
     def estudiar_en_internet(self, consulta, paginas=3, al_paso=None):
         """Busca, lee las mejores páginas, las resume y guarda lo aprendido en el baúl (y Claude lo repasa si está)."""
         import internet_kira as ik_
@@ -2337,7 +2425,8 @@ class KiraGodCore:
                 while getattr(self, "_pensar_on", False):
                     # ¿el dueño está pendiente? si te atendió hace poco, NO pienso (te dejo sitio y te atiendo a ti)
                     inact = time.time() - getattr(self, "_ultima_actividad", 0)
-                    if self.cancelado() or inact < getattr(self, "_inactivo_seg", 300):
+                    if (self.cancelado() or getattr(self, "_estudiando", False)      # mientras estudia, NO pienso a la vez
+                            or inact < getattr(self, "_inactivo_seg", 300)):
                         time.sleep(2)
                         continue
                     fallo = False
@@ -2823,27 +2912,9 @@ class KiraGodCore:
                 return f"[x] {e}"
             return (f"[OK] He leído la documentación de Python{' de ' + m.group(1) if m.group(1) else ''} que trae el "
                     f"móvil: {n} ficha(s) nuevas. Pregúntame, por ejemplo: «qué hace json.loads».")
-        m = re.match(r"^estudia\s*:?\s*(.+)$", command.strip(), re.I)
-        if m:
-            tema = m.group(1).strip()
-            try:
-                titulos = est.estudiar(tema)
-            except ValueError as e:
-                return f"[x] {e}"
-            except Exception as e:
-                return f"[x] No pude conectar con la Wikipedia ({str(e)[:120]}). ¿Hay internet?"
-            repaso = self._repasar_con_claude(tema)       # Claude corrige y completa lo que aprendió
-            if not titulos and not repaso:
-                return "[i] No he encontrado nada nuevo sobre eso (o ya lo sabía)."
-            partes = []
-            if titulos:
-                partes.append("He estudiado y guardado: " + "; ".join(titulos) + ". (Fuente: Wikipedia.)")
-            if repaso:
-                partes.append("Y lo he repasado con Claude: me ha corregido y completado la ficha.")
-            pensar = (" Y me lo pienso: cuando esté pensando me preguntaré sobre ello (cómo funciona, para qué sirve, "
-                      "qué puedo hacer con ello, cómo mejorarlo, cómo programarlo…). "
-                      + ("Ya estoy pensando." if getattr(self, "_pensar_on", False) else "Dime «piensa» para que me ponga."))
-            return "[OK] " + " ".join(partes) + pensar + " Pregúntame sobre ello cuando quieras."
+        tema_gen = self.es_estudia_general(command)
+        if tema_gen:                                       # «estudia X» GENÉRICO: webs oficiales + cursos de YouTube
+            return self.estudiar_a_fondo(tema_gen)         # (la interfaz lo lanza con barra; aquí, sin barra, de reserva)
         return est.estado_texto() + "\n" + (self.recuerdos.estado_texto() if self.recuerdos else "")
 
     def _repasar_con_claude(self, tema):

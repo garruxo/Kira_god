@@ -97,5 +97,5 @@ core.estudio.paso = lambda: ("x", [])
 ok("estudiar sola" in core.procesar_orden("aprende sola"), "aprende sola")
 ok("Dejo de estudiar" in core.procesar_orden("deja de aprender"), "deja de aprender")
 core.estudio._pedir = caido
-ok("No pude conectar" in core.procesar_orden("estudia: algo"), "sin internet: mensaje claro")
+ok("internet" in core.procesar_orden("estudia: algo").lower(), "sin internet: mensaje claro")
 print("ESTUDIO OK", n)

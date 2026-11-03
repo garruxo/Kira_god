@@ -52,6 +52,38 @@ MODULOS_PYTHON = [
 ]
 
 
+# especiales SIEMPRE (con o sin dos puntos): van a sus fichas propias, no al estudio general
+_ESPECIAL_SIEMPRE = re.compile(
+    r"^(?:la\s+|el\s+|las\s+|los\s+)?(?:ingenieria|algoritmos|informatica|ciberseguridad|seguridad|"
+    r"diseno|programacion\s+avanzada|en\s+internet)\b")
+# especiales de IA: SOLO sin dos puntos («estudia redes» = fichas propias; «estudia: redes» = estudio general)
+_ESPECIAL_IA = re.compile(
+    r"^(?:la\s+)?(?:redes|deep|aprendizaje|inteligencia|machine|lenguaje|procesamiento|pln|nlp|rag|fine|ajuste)\b")
+
+
+def es_estudia_general(texto):
+    """'tema' si es un «estudia X» GENÉRICO (estudiar a fondo: webs oficiales + cursos de YouTube), o None si es un
+    estudio ESPECIAL (ingeniería/ciberseguridad/diseño/redes-IA sin dos puntos/python:/en internet) o no es «estudia».
+    «estudia: X» (con dos puntos) va SIEMPRE al general salvo los especiales-siempre. Puro."""
+    import unicodedata
+    t = re.sub(r"^\s*kira[\s,:]+", "", str(texto or ""), flags=re.I).strip()
+    m = re.match(r"^estudia(:|\s)\s*(.+)$", t, re.I)
+    if not m:
+        return None
+    con_colon = (m.group(1) == ":")
+    tema = m.group(2).strip(" .?!¡¿")
+    if len(tema) < 2:
+        return None
+    norm = "".join(c for c in unicodedata.normalize("NFD", tema.lower()) if unicodedata.category(c) != "Mn")
+    if re.match(r"^python\s*:", norm):          # «estudia python: …» = documentación de Python (especial)
+        return None
+    if _ESPECIAL_SIEMPRE.match(norm):
+        return None
+    if _ESPECIAL_IA.match(norm) and not con_colon:
+        return None
+    return tema
+
+
 def _limpio(t, maximo):
     t = re.sub(r"<[^>]{0,200}>", "", str(t or ""))
     t = re.sub(r"\s+", " ", t).strip()

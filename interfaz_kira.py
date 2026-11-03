@@ -540,6 +540,14 @@ def construir_interfaz(core, consola=None):
         if cod_net is not None:                         # «aprende código de…» / «aprende a programar…»: lo busca y guarda
             codigo_internet_por_voz(cod_net)
             return
+        tema_est = None
+        try:
+            tema_est = core.es_estudia_general(orden)   # «estudia X» genérico: con barra, webs + cursos de YouTube
+        except Exception:
+            tema_est = None
+        if tema_est:
+            estudiar_por_voz(tema_est)
+            return
         red = net_.interpretar(orden)
         if red is not None:                             # «busca en internet…», «lee el 2», «estudia en internet…»
             internet_por_voz(red, orden)
@@ -725,6 +733,23 @@ def construir_interfaz(core, consola=None):
             else:
                 voz.hablar("No he conseguido una mejora que pase las pruebas. Te dejo el detalle en la terminal.")
         Clock.schedule_once(lambda _dt: hacker["pedir_mejora"](pedido, al_terminar), 2.5)
+
+    def estudiar_por_voz(tema):
+        """«estudia X»: estudia de verdad (webs oficiales + cursos completos de YouTube) con BARRA animada; al acabar,
+        sigue pensando sobre ello cuando no esté estudiando."""
+        tarea_empieza("estudio", f"estudiar {tema}", lambda t_=tema: estudiar_por_voz(t_), {"tema": tema})
+        decir(f"Me pongo a estudiar «{tema}»: busco webs oficiales, tutoriales y cursos completos gratis de YouTube. "
+              "Verás la barra mientras estudio; cuando acabe, sigo pensando sobre ello.")
+
+        def trabajo():
+            return core.estudiar_a_fondo(tema, al_paso=lambda fr, txt: avance(txt, fr))
+
+        def hecho(r):
+            t = tarea_fin(True)
+            if t is not None and t.interrumpida:
+                return
+            decir(r if isinstance(r, str) else "He terminado de estudiar.")
+        en_hilo(trabajo, hecho)
 
     def mejora_con_codigo(orden):
         """La mejora sale del código que tienes en el editor (o de lo último leído: captura o internet). Si ya es un
