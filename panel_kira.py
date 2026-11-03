@@ -418,6 +418,93 @@ class PanelControl:
                     msg += " Kira ya sabe usarla: la tiene apuntada en su baúl."
             return {"ok": ok, "texto": ("[OK] " if ok else "[x] ") + msg}
 
+    # ---------- AUTO-MEJORA (v2.79): se aplica sola SOLO si pasa TODO, con copia de seguridad y retorno si falla ----
+    def _dir_auto(self):
+        return self.pc.carpeta_datos()
+
+    def auto_mejora(self, encender=None):
+        """Lee o cambia el interruptor de la auto-mejora (viene APAGADO). Con encender=True/False lo cambia."""
+        import auto_mejora_kira as am
+        if encender is not None:
+            am.encender(self._dir_auto(), bool(encender))
+        return am.encendido(self._dir_auto())
+
+    def auto_implementar(self, nombre, codigo, pedido=""):
+        """Lo pidió el dueño: que lo implemente ELLA SOLA. Prepara la mejora (pasa el laboratorio del móvil y sus
+        pruebas) y SOLO si pasa TODO y la auto-mejora está encendida la APLICA sin pedir los dos toques (con copia de
+        seguridad; si al arrancar falla, se revierte). Devuelve {ok, aplicada, texto}. Si no pasa, NO aplica nada."""
+        import re as _re
+        import auto_mejora_kira as am
+        codigo = str(codigo or "").strip("\n") + "\n"
+        if "def registrar" not in codigo:
+            return {"ok": False, "aplicada": False,
+                    "texto": "Eso no es un módulo de Kira (no define registrar()), así que no lo meto sola."}
+        nombre = _re.sub(r"[^a-z0-9_]+", "_", (nombre or "").lower()).strip("_")[:31] or "mejora_auto"
+        if not nombre[0].isalpha():
+            nombre = "m_" + nombre[:29]
+        with self._lock:
+            pend, err = self.promotor.preparar(nombre, codigo)
+            if err or not getattr(pend, "aprobable", False):
+                motivo = err or self._motivo(pend)
+                return {"ok": False, "aplicada": False,
+                        "texto": f"No la meto: no pasa mis pruebas ({motivo}). Sigo intentándolo."}
+            if not am.encendido(self._dir_auto()):
+                # pasa todo, pero la auto-mejora está APAGADA: la dejo pendiente de tus dos toques (como siempre)
+                self._poner_pendiente(pend, pedido or f"el código «{nombre}»")
+                return {"ok": True, "aplicada": False,
+                        "texto": f"«{nombre}» pasa mis pruebas. La auto-mejora está apagada, así que la dejo pendiente "
+                                 "de tus dos toques en la Sala Hacker ▸ Mejoras."}
+            ok, msg = self.promotor.aplicar(pend, pend.frase_confirmacion())   # hace copia de seguridad
+            if not ok:
+                return {"ok": False, "aplicada": False, "texto": f"Intenté aplicarla sola pero no pude: {msg}"}
+            self.core.cargar_modulos()
+            self._aprender_habilidad(pend.nombre, pedido)
+            ruta = os.path.join(self.promotor.dir_modulos, pend.nombre + ".py")
+            am.marcar_aplicada(self._dir_auto(), pend.nombre, (pedido or nombre)[:400], ruta)
+            uso = self.como_se_usa(pend.nombre)
+            return {"ok": True, "aplicada": True, "nombre": pend.nombre,
+                    "texto": (f"Lo he implementado yo sola: «{pend.nombre}» (pasó todas mis pruebas)."
+                              + (f" Úsala diciendo: {uso}." if uso else "")
+                              + " Está en la Sala Hacker ▸ Biblioteca ▸ Módulos; di «llévame al código» para verlo. "
+                              "Si al reiniciar algo falla, la quito yo sola y vuelvo a como estaba (retorno).")}
+
+    def verificar_auto_mejora(self, hubo_crash):
+        """Al arrancar: si la vez anterior se aplicó sola una mejora y la app se CAYÓ, la revierte (retorno) y avisa;
+        si arrancó bien, la confirma. Devuelve un aviso para el dueño ('' si no hay nada que contar)."""
+        import auto_mejora_kira as am
+        accion, nombre = am.decidir_al_arrancar(self._dir_auto(), bool(hubo_crash))
+        if accion == "revertir":
+            try:
+                self.promotor.revertir(nombre)
+                self.core.cargar_modulos()
+            except Exception:
+                pass
+            am.revertida(self._dir_auto(), nombre, "la app se cerró de golpe tras aplicarla")
+            return (f"La mejora «{nombre}» que puse yo sola me hacía cerrar al arrancar, así que la he quitado y he "
+                    "vuelto a como estaba (retorno). Queda una copia en respaldos por si quieres mirarla.")
+        if accion == "confirmar":
+            am.confirmar(self._dir_auto(), nombre)
+            return f"La mejora «{nombre}» que puse yo sola funciona: la dejo puesta (está en Módulos)."
+        return ""
+
+    def llevar_al_codigo(self, nombre=None):
+        """«llévame al código»: nombre + código del módulo (el último que implementó, o el que digas), para que la
+        interfaz abra la Sala Hacker ▸ Biblioteca ▸ Módulos en él."""
+        import auto_mejora_kira as am
+        if not nombre:
+            u = am.ultima_hecha(self._dir_auto())
+            nombre = u.get("nombre") if u else None
+        if not nombre:
+            return {"ok": False, "texto": "Todavía no he implementado nada yo sola.", "nombre": ""}
+        r = self.ver_modulo(nombre)
+        if not r.get("ok"):
+            return {"ok": False, "texto": f"No encuentro el código de «{nombre}».", "nombre": nombre}
+        return {"ok": True, "nombre": nombre, "texto": r["texto"], "destino": "modulo"}
+
+    def auto_hechas_texto(self):
+        import auto_mejora_kira as am
+        return am.texto_hechas(self._dir_auto())
+
     def como_se_usa(self, nombre):
         """«convierte euros …», «juega a naves»… de un módulo instalado ('' si no tiene órdenes)."""
         ordenes = sorted(p for p, v in getattr(self.core, "comandos_modulos", {}).items()
@@ -526,6 +613,14 @@ def construir_panel(core, consola=None, pantalla=None):
         pass
 
     ctl = PanelControl(core)
+    try:
+        core._panel = ctl                       # para que el núcleo pueda pedirle la auto-mejora (v2.79)
+        # al arrancar: si la vez anterior se aplicó sola una mejora y la app se cayó, la revierte (retorno) y avisa
+        av = ctl.verificar_auto_mejora(bool(getattr(core, "hubo_crash", False)))
+        if av:
+            core.aviso_auto_mejora = av
+    except Exception:
+        pass
     # paleta "sala hacker": negro verdoso + verde neón
     TXT, NEON, TENUE = (0.72, 1.0, 0.82, 1), (0.1, 0.9, 0.4, 1), (0.5, 0.7, 0.6, 1)
     AZUL, VERDE, ROJO, GRIS = (0.05, 0.34, 0.24, 1), (0.1, 0.5, 0.28, 1), (0.55, 0.15, 0.18, 1), (0.12, 0.2, 0.17, 1)

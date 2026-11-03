@@ -1882,6 +1882,47 @@ class KiraGodCore:
             out.append(("sol:" + tema, "✔ " + cab, cuerpo))
         return out
 
+    # ---------- AUTO-MEJORA (v2.79): el núcleo delega en el panel (que tiene el promotor) ----------
+    def _auto_mejora(self, encender):
+        p = getattr(self, "_panel", None)
+        if p is None:
+            return "La auto-mejora solo está disponible desde la pantalla principal de Kira."
+        on = p.auto_mejora(encender)
+        if on:
+            return ("[OK] Auto-mejora ENCENDIDA. Cuando una mejora pase TODAS mis pruebas la aplico yo sola (con copia "
+                    "de seguridad); si al reiniciar algo falla, la quito y vuelvo atrás (retorno), y te aviso. Di "
+                    "«llévame al código» para ver lo que implemente. «Desactiva la auto-mejora» para apagarla.")
+        return "[OK] Auto-mejora APAGADA. Las mejoras vuelven a quedar pendientes de tus dos toques (Sala Hacker ▸ Mejoras)."
+
+    def _auto_llevar_codigo(self):
+        p = getattr(self, "_panel", None)
+        if p is None:
+            return "Eso solo está disponible desde la pantalla principal de Kira."
+        r = p.llevar_al_codigo()
+        cb = getattr(self, "al_ver_codigo", None)
+        if r.get("ok") and callable(cb):
+            try:
+                cb(r["nombre"])                 # la interfaz abre Sala Hacker ▸ Biblioteca ▸ Módulos en ese módulo
+            except Exception:
+                pass
+        if not r.get("ok"):
+            return r.get("texto", "") + "\n\n" + p.auto_hechas_texto()
+        return f"Te llevo al código de «{r['nombre']}» (Sala Hacker ▸ Biblioteca ▸ Módulos).\n\n" + p.auto_hechas_texto()
+
+    def auto_implementar(self, nombre, codigo, pedido=""):
+        """Puente para que la interfaz (o el foco) pida al panel implementar algo sola. Sin panel, no hace nada."""
+        p = getattr(self, "_panel", None)
+        if p is None:
+            return {"ok": False, "aplicada": False, "texto": "No puedo implementar nada sin la pantalla principal."}
+        return p.auto_implementar(nombre, codigo, pedido)
+
+    def auto_mejora_encendida(self):
+        p = getattr(self, "_panel", None)
+        try:
+            return bool(p.auto_mejora()) if p is not None else False
+        except Exception:
+            return False
+
     # ---------- FOCO: pensar en algo CONCRETO sin parar hasta resolverlo ----------
     def _ruta_foco(self):
         return os.path.join(self.dir, "foco.json")
@@ -1960,9 +2001,24 @@ class KiraGodCore:
             return (f"Para una web con esto: dime «diséñame una web de {tema}» y la monto con lo aprendido; el código "
                     "de la solución lo tienes en la Biblioteca ▸ Soluciones para apoyarte.")
         if destino.startswith("app"):
-            return (f"Para una app: si es un juego, dime «conviértelo en una app»; si es otra cosa, aún no fabrico una "
-                    f"app completa sola de cualquier código (sería mentira decir que sí). El código de «{tema}» está en "
-                    "la Biblioteca ▸ Soluciones para seguir.")
+            codigo = (s.get("codigo") or "").strip()
+            if not codigo:
+                return (f"«{tema}» todavía no tiene un programa que convertir en app; cuando lo resuelva con código, te "
+                        "hago la app web.")
+            try:
+                import app_web_kira as aw
+                pagina = aw.html_app(codigo, titulo=tema)
+                carpeta = os.path.join(self.dir, "apps")
+                os.makedirs(carpeta, exist_ok=True)
+                ruta = os.path.join(carpeta, aw.nombre_archivo(tema))
+                with open(ruta, "w", encoding="utf-8") as f:
+                    f.write(pagina)
+            except Exception as e:
+                return (f"No pude hacer la app web de «{tema}»: {e}. (La app web ejecuta el programa; si usa cosas que "
+                        "aún no van en web, mejor como módulo de Kira con «implementa este código».)")
+            return (f"He hecho una APP WEB de «{tema}» (un solo archivo .html, sin compilar nada): {ruta}. Ábrela y, "
+                    "en el navegador, «Añadir a la pantalla de inicio» para tenerla como app en el móvil. (Es web de "
+                    "verdad: se abre como app, sin instalar nada.)")
         return "Dime si quieres hacer una app, una web, o integrarla en mí."
 
     def probar_permiso(self):
@@ -2222,6 +2278,15 @@ class KiraGodCore:
         if re.match(r"^prueba (?:la ventana de |el )?permiso$|^prueba de permiso$|"
                     r"^(?:mu[eé]strame|ens[eé][ñn]ame) la ventana de permiso$", cmd_lower):
             return self.probar_permiso()
+        # ---- AUTO-MEJORA (v2.79): aplicar mejoras sola SOLO si pasan TODO, con retorno; y «llévame al código» ----
+        if re.match(r"^(?:activa|enciende|pon)\s+(?:la\s+)?auto[\s-]?mejora\b|^mej[oó]rate\s+(?:sola|t[uú]\s+sola)\b|"
+                    r"^impl?em[eé]ntal[oa]s?\s+t[uú]\s+sola\b", cmd_lower):
+            return self._auto_mejora(True)
+        if re.match(r"^(?:desactiva|apaga|quita)\s+(?:la\s+)?auto[\s-]?mejora\b|^no te mejores sola\b", cmd_lower):
+            return self._auto_mejora(False)
+        if re.match(r"^ll[eé]vame al c[oó]digo\b|^ens[eé][ñn]ame (?:el c[oó]digo|lo que (?:has )?implementado)\b|"
+                    r"^d[oó]nde est[aá] el c[oó]digo\b|^qu[eé] has implementado\b|^tus implementaciones\b", cmd_lower):
+            return self._auto_llevar_codigo()
         # ---- FOCO: centrarse en un tema concreto hasta resolverlo / dejarlo / retomarlo ----
         if re.match(r"^d[eé]jal[oa](?: para otro d[ií]a| por hoy| para luego| para ma[ñn]ana)?$|"
                     r"^aparca(?: el tema| eso)?$|^deja (?:el tema|eso|el foco) para otro d[ií]a$|"
@@ -2850,7 +2915,9 @@ class KiraGodCore:
                       r"mis soluciones|qu[eé] has resuelto|tus mejoras|prueba (?:la ventana de |el )?permiso|"
                       r"mu[eé]strame la ventana de permiso|ens[eé][ñn]ame la ventana de permiso|c[eé]ntrate|"
                       r"conc[eé]ntrate|enf[oó]cate|resu[eé]lveme|d[eé]jalo|aparca|retoma|ret[oó]malo|"
-                      r"vuelve al tema|vuelve a centrarte|deja el tema|deja de centrarte)\b", cmd_lower):
+                      r"vuelve al tema|vuelve a centrarte|deja el tema|deja de centrarte|auto[\s-]?mejora|"
+                      r"mej[oó]rate|impl?em[eé]ntal|no te mejores sola|ll[eé]vame al c[oó]digo|"
+                      r"d[oó]nde est[aá] el c[oó]digo|qu[eé] has implementado|tus implementaciones)\b", cmd_lower):
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)

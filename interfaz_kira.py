@@ -323,6 +323,27 @@ def construir_interfaz(core, consola=None):
     sol_st = {"abierta": False}
 
     def mostrar_solucion(tema, resumen="", codigo=""):
+        # v2.79: con la AUTO-MEJORA encendida, Kira lo implementa SOLA (si pasa todo); si no puede, te pregunta igual.
+        try:
+            auto_on = bool(core.auto_mejora_encendida()) and bool((codigo or "").strip())
+        except Exception:
+            auto_on = False
+        if auto_on:
+            def _intentar():
+                return core.auto_implementar(tema, codigo, tema)
+
+            def _hecho(r):
+                if isinstance(r, dict) and r.get("aplicada"):
+                    decir(r.get("texto", f"He implementado «{tema}» yo sola."))
+                else:
+                    if isinstance(r, dict) and r.get("texto"):
+                        decir(r["texto"])
+                    Clock.schedule_once(lambda _dt: _abrir_popup_solucion(tema, resumen, codigo), 0)
+            en_hilo(_intentar, _hecho)
+            return
+        _abrir_popup_solucion(tema, resumen, codigo)
+
+    def _abrir_popup_solucion(tema, resumen="", codigo=""):
         if sol_st["abierta"]:
             return
         from kivy.uix.popup import Popup
@@ -361,6 +382,14 @@ def construir_interfaz(core, consola=None):
     # si el dueño dejó el pensar encendido, reanudarlo al abrir (suave: piensa cuando lleve 5 min sin pedir nada)
     try:
         Clock.schedule_once(lambda _dt: core.reanudar_pensar(), 3)
+    except Exception:
+        pass
+    # aviso de la auto-mejora al arrancar (si revirtió algo por un cierre, o confirmó una mejora que puso sola)
+    try:
+        _av_am = getattr(core, "aviso_auto_mejora", "")
+        if _av_am:
+            core.aviso_auto_mejora = ""
+            Clock.schedule_once(lambda _dt: decir(_av_am), 4)
     except Exception:
         pass
 

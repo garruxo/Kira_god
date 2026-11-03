@@ -334,6 +334,7 @@ if KIVY_AVAILABLE:
                     self.kira_god.registrar_error("android", texto[:300])
             except Exception:
                 pass                                    # en el PC, o Android sin ese dato
+            self.kira_god.hubo_crash = bool(aviso)         # para la auto-mejora: si se cayó, revierte lo que puso sola
             if aviso:
                 self.kira_god.aviso_cierre = aviso         # la portada lo enseña (y la bitácora lo apunta)
                 try:
