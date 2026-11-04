@@ -5,6 +5,9 @@
 #   bash instalar_portatil.sh --sin-grande     sin el cerebro grande (ahorra 23 GB de descarga)
 #   bash instalar_portatil.sh --sin-escritorio además, que el portátil arranque SIN escritorio (todo para Kira)
 #   bash instalar_portatil.sh --prueba         sin gráfica y con modelos pequeños (para comprobarlo en otro equipo)
+#   bash instalar_portatil.sh --ligero         portátil VIEJO sin gráfica (p. ej. 4 GB de RAM, i5 de 1.ª gen.): KiraOS completo
+#                                              al encender, cerebro pequeño (2B) en el procesador, SIN pintor, con memoria
+#                                              de intercambio. Mejor sobre Xubuntu/Lubuntu 24.04 (escritorio más ligero).
 #   bash instalar_portatil.sh --sin-servicios  no dejarlo arrancando solo (para probar a mano)
 #
 # Se puede lanzar las veces que haga falta: lo que ya está hecho se salta (y las descargas siguen donde se quedaron).
@@ -16,10 +19,11 @@ AQUI="$(cd "$(dirname "$0")" && pwd)"
 RAIZ="$(cd "$AQUI/.." && pwd)"
 DATOS="${KIRA_PORTATIL:-$HOME/kira_portatil}"
 BIN="$DATOS/bin"; MOD="$DATOS/modelos"; OBRA="$DATOS/obra"
-PRUEBA=0; SIN_GRANDE=0; SIN_ESCRITORIO=0; SERVICIOS=1
+PRUEBA=0; LIGERO=0; SIN_GRANDE=0; SIN_ESCRITORIO=0; SERVICIOS=1
 for a in "$@"; do
   case "$a" in
     --prueba) PRUEBA=1 ;;
+    --ligero) LIGERO=1 ;;
     --sin-grande) SIN_GRANDE=1 ;;
     --sin-escritorio) SIN_ESCRITORIO=1 ;;
     --sin-servicios) SERVICIOS=0 ;;
@@ -29,6 +33,19 @@ done
 paso() { echo; echo "=== $* ==="; }
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 mkdir -p "$BIN" "$MOD" "$OBRA"
+TRABAJOS="$(nproc)"
+if [ "$LIGERO" = "1" ]; then
+  TRABAJOS=2                                   # compilar con poca RAM: 2 a la vez para no quedarse sin memoria
+  RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+  SWAP_MB=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo)
+  echo "Modo LIGERO: ${RAM_MB} MB de RAM y ${SWAP_MB} MB de intercambio."
+  if [ "$SWAP_MB" -lt 3000 ] && [ ! -f /kira_swap ]; then
+    echo "Creo 4 GB de memoria de intercambio en el disco (/kira_swap) para que no se quede sin memoria…"
+    $SUDO fallocate -l 4G /kira_swap || $SUDO dd if=/dev/zero of=/kira_swap bs=1M count=4096 status=none
+    $SUDO chmod 600 /kira_swap && $SUDO mkswap /kira_swap >/dev/null && $SUDO swapon /kira_swap
+    grep -q '^/kira_swap ' /etc/fstab || echo '/kira_swap none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null
+  fi
+fi
 
 paso "1. Herramientas para compilar"
 $SUDO apt-get update -qq
@@ -40,7 +57,7 @@ $SUDO apt-get install -y -qq gir1.2-webkit2-4.1 >/dev/null 2>&1 || $SUDO apt-get
 python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || echo "  (aviso: no pude instalar pywebview; KiraOS entrará con un PIN sencillo hasta que se instale)"
 
 GPU=0
-if [ "$PRUEBA" = "0" ]; then
+if [ "$PRUEBA" = "0" ] && [ "$LIGERO" = "0" ]; then
   paso "2. Tarjeta gráfica NVIDIA (driver y CUDA)"
   if ! command -v nvidia-smi >/dev/null || ! nvidia-smi >/dev/null 2>&1; then
     echo "Instalo el driver de NVIDIA (el que recomienda Ubuntu para tu tarjeta)…"
@@ -69,7 +86,7 @@ compilar() {   # $1 = nombre, $2 = carpeta fuente, $3 = objetivo, $4.. = opcione
   local build="$OBRA/build-$nombre"
   rm -rf "$build"
   cmake -S "$src" -B "$build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF "$@" >/dev/null
-  cmake --build "$build" --target "$objetivo" -j "$(nproc)" >"$OBRA/$nombre.log" 2>&1
+  cmake --build "$build" --target "$objetivo" -j "$TRABAJOS" >"$OBRA/$nombre.log" 2>&1
   cp "$build/bin/$objetivo" "$BIN/$objetivo"
 }
 
@@ -90,7 +107,9 @@ fi
 echo "llama-server listo."
 
 paso "4. El pintor (stable-diffusion.cpp $SD_TAG)"
-if [ ! -x "$BIN/sd-cli" ] || [ "$(cat "$BIN/.sd" 2>/dev/null)" != "$SD_TAG-$GPU" ]; then
+if [ "$LIGERO" = "1" ]; then
+  echo "Modo ligero: sin pintor (con 4 GB no caben el cerebro y el pintor, y tardaría minutos por dibujo)."
+elif [ ! -x "$BIN/sd-cli" ] || [ "$(cat "$BIN/.sd" 2>/dev/null)" != "$SD_TAG-$GPU" ]; then
   if [ ! -d "$OBRA/sd.cpp/ggml/src" ]; then
     rm -rf "$OBRA/sd.cpp"
     git clone -q --depth 1 --branch "$SD_TAG" https://github.com/leejet/stable-diffusion.cpp "$OBRA/sd.cpp"
@@ -108,10 +127,10 @@ if [ ! -x "$BIN/sd-cli" ] || [ "$(cat "$BIN/.sd" 2>/dev/null)" != "$SD_TAG-$GPU"
   fi
   echo "$SD_TAG-$GPU" > "$BIN/.sd"
 fi
-echo "sd-cli listo."
+[ "$LIGERO" = "1" ] || echo "sd-cli listo."
 
 paso "5. Los modelos (se descargan una vez; si se corta, sigue donde iba)"
-OPC=(); [ "$PRUEBA" = "1" ] && OPC+=(--prueba); [ "$SIN_GRANDE" = "1" ] && OPC+=(--sin-grande)
+OPC=(); [ "$PRUEBA" = "1" ] && OPC+=(--prueba); [ "$LIGERO" = "1" ] && OPC+=(--ligero); [ "$SIN_GRANDE" = "1" ] && OPC+=(--sin-grande)
 python3 "$AQUI/servidor_portatil.py" --lista-descargas "${OPC[@]}" | while read -r archivo url bytes; do
   destino="$MOD/$archivo"
   if [ -f "$destino" ] && { [ "$bytes" = "0" ] || [ "$(stat -c %s "$destino")" = "$bytes" ]; }; then
@@ -151,7 +170,7 @@ chmod 600 "$RAIZ/kira_laboratorio/token_lab.txt"
 
 if [ "$SERVICIOS" = "1" ]; then
   paso "7. Que arranque solo al encender el portátil"
-  OPC_SRV=""; [ "$PRUEBA" = "1" ] && OPC_SRV="--prueba"
+  OPC_SRV=""; [ "$PRUEBA" = "1" ] && OPC_SRV="--prueba"; [ "$LIGERO" = "1" ] && OPC_SRV="--ligero"
   $SUDO tee /etc/systemd/system/kira-laboratorio.service >/dev/null <<EOF
 [Unit]
 Description=Laboratorio de Kira (prueba mejoras y empareja el móvil)

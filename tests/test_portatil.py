@@ -153,6 +153,16 @@ lista = sp.descargas()
 ok(len(lista) == 6 and sum(b for _, _, b in lista) > 35e9 and all(u.startswith("https://huggingface.co/") for _, u, _ in lista),
    "descargas: 2 cerebros con ojos + pintor con VAE (~37 GB)")
 ok(len(sp.descargas(sin_grande=True)) == 4 and len(sp.descargas(prueba=True)) == 2, "sin el grande / modo prueba")
+# v2.82: modo LIGERO (portátil viejo sin gráfica): solo el 2B, poca memoria, sin pintor
+lig = sp.descargas(ligero=True)
+ok(len(lig) == 1 and lig[0][0].startswith("Qwen_Qwen3.5-2B"), "modo ligero: solo baja el cerebro 2B")
+cl, pl = sp.config(ligero=True)
+ok("-c" in cl["rapido"]["args"] and cl["rapido"]["args"][cl["rapido"]["args"].index("-c") + 1] == "4096",
+   "modo ligero: poca memoria de conversación")
+ok(not sp.Pintor("", "/tmp", pl, None).listo(), "modo ligero: sin pintor (y no peta)")
+sh = open(os.path.join(RAIZ, "kira_portatil", "instalar_portatil.sh"), encoding="utf-8").read()
+ok("--ligero) LIGERO=1" in sh and "/kira_swap" in sh and 'TRABAJOS=2' in sh, "el instalador tiene --ligero con intercambio")
+ok('[ "$LIGERO" = "1" ] && OPC_SRV="--ligero"' in sh, "el servicio arranca en modo ligero")
 r = subprocess.run(["bash", "-n", os.path.join(RAIZ, "kira_portatil", "instalar_portatil.sh")], capture_output=True)
 ok(r.returncode == 0, "instalar_portatil.sh está bien escrito")
 

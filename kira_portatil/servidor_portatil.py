@@ -75,7 +75,16 @@ PRUEBA_PINTOR = {"nombre": "SDXS (prueba)", "archivo": "sdxs-512-tinySDdistilled
                  "vae": None, "pasos": 1, "cfg": 1.0, "metodo": "euler_a", "lado": 512}
 
 
-def config(prueba=False):
+# Modo LIGERO (portátiles viejos sin gráfica, p. ej. 4 GB de RAM y un i5 de 1.ª generación): el cerebro pequeño del
+# móvil en el procesador, poca memoria de conversación y SIN pintor (en 4 GB no caben los dos y tardaría minutos).
+LIGERO_CEREBRO = dict(PRUEBA_CEREBRO, nombre="Qwen3.5 2B (ligero)", args=["-c", "4096", "-b", "256", "-ub", "256"])
+LIGERO_PINTOR = dict(PRUEBA_PINTOR, nombre="sin pintor (modo ligero)", archivo="", url="")
+
+
+def config(prueba=False, ligero=False):
+    if ligero:
+        return {"rapido": dict(LIGERO_CEREBRO), "grande": dict(LIGERO_CEREBRO, nombre="Qwen3.5 2B (ligero, grande)")}, \
+            dict(LIGERO_PINTOR)
     if prueba:
         return {"rapido": dict(PRUEBA_CEREBRO), "grande": dict(PRUEBA_CEREBRO, nombre="Qwen3.5 2B (prueba, grande)")}, \
             dict(PRUEBA_PINTOR)
@@ -467,9 +476,9 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
     return ThreadingHTTPServer((host, puerto), Manejador)
 
 
-def descargas(prueba=False, sin_grande=False):
+def descargas(prueba=False, sin_grande=False, ligero=False):
     """[(archivo, url, bytes|None)] de todo lo que hay que bajar (lo usa instalar_portatil.sh)."""
-    cerebros, pintor = config(prueba)
+    cerebros, pintor = config(prueba, ligero)
     sal, vistos = [], set()
     for k, c in cerebros.items():
         if sin_grande and k == "grande":
@@ -479,7 +488,7 @@ def descargas(prueba=False, sin_grande=False):
                 vistos.add(m["archivo"])
                 sal.append((m["archivo"], m["url"], m.get("bytes")))
     for m in (pintor, pintor.get("vae")):
-        if m and m["archivo"] not in vistos:
+        if m and m.get("archivo") and m["archivo"] not in vistos:
             vistos.add(m["archivo"])
             sal.append((m["archivo"], m["url"], m.get("bytes")))
     return sal
@@ -500,19 +509,20 @@ def main(argv=None):
     ap.add_argument("--datos", default=os.path.expanduser("~/kira_portatil"), help="carpeta de modelos y programas")
     ap.add_argument("--token", default=os.path.join(os.path.dirname(AQUI), "kira_laboratorio", "token_lab.txt"))
     ap.add_argument("--prueba", action="store_true", help="modelos pequeños (para probar sin gráfica)")
+    ap.add_argument("--ligero", action="store_true", help="portátil viejo sin gráfica (2B, poca memoria, sin pintor)")
     ap.add_argument("--sin-faro", action="store_true")
     ap.add_argument("--sin-precarga", action="store_true", help="no cargar el cerebro rápido al arrancar")
     ap.add_argument("--lista-descargas", action="store_true", help="solo escribe qué modelos hay que bajar")
     ap.add_argument("--sin-grande", action="store_true", help="(con --lista-descargas) sin el cerebro grande")
     a = ap.parse_args(argv)
     if a.lista_descargas:
-        for archivo, url, tam in descargas(a.prueba, a.sin_grande):
+        for archivo, url, tam in descargas(a.prueba, a.sin_grande, a.ligero):
             print(archivo, url, tam or 0)
         return
     token = leer_token(a.token)
     if len(token) < 16:
         sys.exit("No encuentro el token del laboratorio (arranca antes el laboratorio una vez: lo crea él).")
-    cerebros, pintor_cfg = config(a.prueba)
+    cerebros, pintor_cfg = config(a.prueba, a.ligero)
     modelos = os.path.join(a.datos, "modelos")
     binarios = os.path.join(a.datos, "bin")
     cerebro = Cerebro(os.path.join(binarios, "llama-server"), modelos, cerebros, avisar=lambda t: print(t, flush=True))
