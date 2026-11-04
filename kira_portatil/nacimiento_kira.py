@@ -28,7 +28,7 @@ import time
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(AQUI)
 RUTA = os.environ.get("KIRA_NACIMIENTO") or os.path.expanduser("~/.kira_nacimiento.json")
-BAUL = os.environ.get("KIRA_BAUL_PORTATIL") or os.path.expanduser("~/kira_portatil/baul")
+BAUL = os.environ.get("KIRA_BAUL_PORTATIL") or os.path.expanduser("~/kira_portatil/kira_datos/recuerdos")  # el baúl del núcleo
 
 _MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
           "noviembre", "diciembre")

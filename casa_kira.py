@@ -12,6 +12,12 @@ de dirección, Kira lo vuelve a buscar solo.
   Casa().chat(msgs, grande=…, …)      -> respuesta del cerebro de casa (rápido o grande); puede ir a trozos
   Casa().pintar(prompt, …)            -> los bytes del PNG que pinta el portátil
   Casa.buscar()                       -> portátiles que hay en la WiFi [{'url','ip','nombre'}]
+
+v2.84 — el MÓVIL COMO MANDO: en el portátil corre también la Kira completa (kira_portatil/nucleo_portatil.py, puerto
+8771). El móvil le manda la orden y ve cómo va:
+  Casa().nucleo_disponible()          -> True si la Kira completa del portátil responde
+  Casa().orden("estudia Python", al_paso=…, parar=…) -> la tarea final {estado, respuesta, codigo, nombre}
+  Casa().enviar_memoria("memoria.zip") -> le pasa la memoria del móvil (memoria_kira)
 """
 import json
 import socket
@@ -23,6 +29,7 @@ import urllib.request
 import pasarela_cliente as pc
 
 PUERTO_HTTP = 8770
+PUERTO_NUCLEO = 8771
 PUERTO_FARO = 8767
 PREGUNTA = b"KIRA_BUSCA_PORTATIL 1"
 
@@ -233,3 +240,97 @@ class Casa:
             raise
         except Exception as e:
             raise CasaError(f"No se pudo pintar en casa: {e}")
+
+    # ---- v2.84: la Kira COMPLETA del portátil (el móvil solo le manda órdenes) ----
+    @property
+    def nucleo_url(self):
+        u = self.url
+        if not u:
+            return ""
+        try:
+            esquema, resto = u.split("//", 1)
+            host = resto.split("/", 1)[0].rsplit(":", 1)[0]
+            return f"{esquema}//{host}:{PUERTO_NUCLEO}"
+        except (ValueError, IndexError):
+            return ""
+
+    def _nucleo(self, ruta, datos=None, timeout=10, crudo=None, tipo="application/json"):
+        if not self.nucleo_url or not self.token:
+            raise CasaError("No sé dónde está el portátil.")
+        cuerpo = crudo if crudo is not None else (None if datos is None else json.dumps(datos).encode("utf-8"))
+        req = urllib.request.Request(self.nucleo_url + ruta, data=cuerpo, method="GET" if cuerpo is None else "POST",
+                                     headers={"X-Kira-Token": self.token, "Content-Type": tipo})
+        try:
+            with self._abrir(req, timeout=timeout) as r:
+                return json.loads(r.read(4_000_000).decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                d = json.loads(e.read(20000).decode("utf-8"))
+            except Exception:
+                d = {}
+            if e.code == 409:
+                raise CasaError("El portátil está ocupado con: " + (d.get("haciendo") or "otra cosa") + ".")
+            raise CasaError(d.get("error") or f"El portátil respondió {e.code}.")
+        except CasaError:
+            raise
+        except Exception as e:
+            raise CasaError(f"No llego al portátil: {e}")
+
+    def nucleo_disponible(self):
+        """¿Está la Kira completa del portátil? (cache 20 s, como el cerebro)."""
+        t, ok = getattr(self, "_cache_nucleo", (0.0, None))
+        if ok is not None and self._reloj() - t < 20:
+            return ok
+        ok = False
+        if self.disponible():
+            try:
+                ok = self._nucleo("/hola", timeout=2).get("kira_nucleo") == 1
+            except CasaError:
+                ok = False
+        self._cache_nucleo = (self._reloj(), ok)
+        return ok
+
+    def nucleo_hola(self):
+        try:
+            return self._nucleo("/hola", timeout=3)
+        except CasaError:
+            return None
+
+    def orden(self, texto, al_paso=None, parar=None, cada=1.0, espera_max=6 * 3600, dormir=time.sleep):
+        """Manda la orden a la Kira del portátil y espera: al_paso(fraccion, texto) con cada paso; parar() -> True
+        la cancela allí. Devuelve la tarea final {estado, respuesta, codigo, nombre}. Lanza CasaError."""
+        tid = self._nucleo("/orden", {"orden": str(texto)})["id"]
+        vistos, fin, cancelada = 0, self._reloj() + espera_max, False
+        while self._reloj() < fin:
+            t = self._nucleo("/tarea?id=" + tid)
+            av = t.get("avance") or []
+            for linea in av[vistos:]:
+                if al_paso:
+                    al_paso(t.get("fraccion"), linea)
+            vistos = len(av)
+            if t.get("estado") != "en curso":
+                return t
+            if parar is not None and not cancelada and parar():
+                cancelada = True
+                try:
+                    self._nucleo("/cancelar", {})
+                except CasaError:
+                    pass
+            dormir(cada)
+        return {"estado": "error", "respuesta": "El portátil ha tardado demasiado."}
+
+    def cancelar_nucleo(self):
+        try:
+            self._nucleo("/cancelar", {})
+            return True
+        except CasaError:
+            return False
+
+    def enviar_memoria(self, ruta_zip, timeout=1800):
+        """Le pasa al portátil el paquete de memoria (.zip). Devuelve el texto de lo que recibió."""
+        with open(ruta_zip, "rb") as f:
+            datos = f.read()
+        r = self._nucleo("/memoria", crudo=datos, timeout=timeout, tipo="application/zip")
+        if not r.get("ok"):
+            raise CasaError(r.get("error") or "El portátil no pudo guardar la memoria.")
+        return r.get("texto") or "Memoria recibida."

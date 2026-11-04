@@ -31,7 +31,7 @@ src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
            encoding="utf-8").read()
 i = src.index("wj_.pedido_app(orden)")
 ok(i < src.index("ex_.pedido_experimento(orden)") < src.index("pk_.pedido_programa(orden)")
-   < src.index("dk_.pedido_diseno(orden)"), "la orden de app se mira antes que programas, experimentos y diseños")
+   < src.index("dis = dk_.pedido_diseno(orden)"), "la orden de app se mira antes que programas, experimentos y diseños")
 ok('"kira_juego"' in src and "AppsKira" in src, "el icono abre Kira en ese juego (extra kira_juego)")
 java = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "android_src", "org", "kira",
                          "servicio", "AppsKira.java"), encoding="utf-8").read()

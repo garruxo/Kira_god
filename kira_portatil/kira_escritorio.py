@@ -24,7 +24,14 @@ import kira_consola as kc
 # =====================================================================================
 #  LÓGICA (sin ventana: se puede probar)
 # =====================================================================================
-def manejar(cli, texto, escribir, al_trozo):
+def nucleo_para(cli):
+    """El cliente de la Kira COMPLETA del portátil (nucleo_portatil, puerto 8771) en el mismo equipo que el cerebro."""
+    import nucleo_portatil as np_
+    host = cli.url.split("//", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0]
+    return np_.ClienteNucleo(f"http://{host}:{np_.PUERTO}", cli.token)
+
+
+def manejar(cli, texto, escribir, al_trozo, nucleo=None):
     """Decide qué hacer con lo que escribe el usuario. `escribir(texto)` pone una línea; `al_trozo(t)` añade a la
     respuesta que va llegando. Devuelve una etiqueta de lo que hizo ('charla'|'defensa'|'cerebro'|'vacio'|'error')."""
     t = texto.strip()
@@ -56,6 +63,12 @@ def manejar(cli, texto, escribir, al_trozo):
             escribir(f"Mirando el tráfico de tu red {seg} s…")
             escribir(kc.formato_defensa(cli.defensa("trafico", segundos=seg)))
             return "defensa"
+        if nucleo is not None and nucleo.disponible():     # v2.84: la Kira COMPLETA (estudia, piensa, programa…)
+            r = nucleo.orden(t, al_paso=lambda _fr, linea: escribir("· " + linea))
+            al_trozo(r.get("respuesta") or "Hecho.")
+            if r.get("codigo"):
+                escribir("── código (" + (r.get("nombre") or "programa") + ") ──\n" + r["codigo"])
+            return "kira"
         cli.charla(t, al_trozo=al_trozo)
         return "charla"
     except kc.ConsolaError as e:
@@ -75,7 +88,7 @@ def bienvenida(cli):
 # =====================================================================================
 #  LA VENTANA (Tkinter)
 # =====================================================================================
-def construir(cli, pantalla_completa=False, raiz=None):
+def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
     """Monta la ventana y la devuelve (sin arrancar el bucle): así se puede probar con una pantalla virtual."""
     import tkinter as tk
     from tkinter import scrolledtext
@@ -151,7 +164,7 @@ def construir(cli, pantalla_completa=False, raiz=None):
 
         def tarea():
             r = manejar(cli, t, lambda x: raiz.after(0, lambda: poner("\n" + x, "sis")),
-                        lambda tr: raiz.after(0, lambda: añadir_trozo(tr)))
+                        lambda tr: raiz.after(0, lambda: añadir_trozo(tr)), nucleo=nucleo)
             raiz.after(0, lambda: poner("", "kira"))      # salto final
         en_hilo(tarea)
 
@@ -181,8 +194,13 @@ def construir(cli, pantalla_completa=False, raiz=None):
     return raiz
 
 
-def ventana(cli, pantalla_completa=False):
-    construir(cli, pantalla_completa).mainloop()
+def ventana(cli, pantalla_completa=False, nucleo=None):
+    if nucleo is None:
+        try:
+            nucleo = nucleo_para(cli)
+        except Exception:
+            nucleo = None
+    construir(cli, pantalla_completa, nucleo=nucleo).mainloop()
 
 
 def main(argv=None):

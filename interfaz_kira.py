@@ -384,6 +384,12 @@ def construir_interfaz(core, consola=None):
         Clock.schedule_once(lambda _dt: core.reanudar_pensar(), 3)
     except Exception:
         pass
+    # v2.84: mira en segundo plano si está la Kira completa del portátil (modo mando), sin trabar la pantalla
+    try:
+        Clock.schedule_once(lambda _dt: threading.Thread(target=lambda: core.mando_listo(esperar=True),
+                                                         daemon=True).start(), 4)
+    except Exception:
+        pass
     # aviso de la auto-mejora al arrancar (si revirtió algo por un cierre, o confirmó una mejora que puso sola)
     try:
         _av_am = getattr(core, "aviso_auto_mejora", "")
@@ -513,6 +519,20 @@ def construir_interfaz(core, consola=None):
         if dfj_.es_orden(orden):                        # «entrena tus defensas», «juega al laberinto de defensa»
             defensa_por_voz(orden)
             return
+        import mando_kira as mdk_                      # v2.84: el MÓVIL COMO MANDO de la Kira del portátil
+        ctl_mando = mdk_.orden_control(orden)
+        if ctl_mando:
+            mando_control(ctl_mando)
+            return
+        if not mdk_.es_local(orden) and ik.pedido_mejora(orden) is None and dk_.pedido_diseno(orden) is None:
+            listo = False
+            try:
+                listo = core.mando_listo()
+            except Exception:
+                listo = False
+            if listo:                                   # el trabajo lo hace el portátil; aquí, barra y respuesta
+                mando_por_voz(orden)
+                return
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
         if exp is not None:                             # «experimenta con…», «inventa un algoritmo nuevo…»
@@ -750,6 +770,56 @@ def construir_interfaz(core, consola=None):
                 return
             decir(r if isinstance(r, str) else "He terminado de estudiar.")
         en_hilo(trabajo, hecho)
+
+    def mando_por_voz(orden):
+        """v2.84 MÓVIL COMO MANDO: le paso la orden a mi Kira completa del portátil; aquí solo enseño la barra y la
+        respuesta (y, si es un programa, te lo dejo en el editor). «para» la corta también allí."""
+        casa = core._casa()
+        tarea_empieza("portatil", orden, lambda o_=orden: mando_por_voz(o_), {"pedido": orden})
+        modelo.poner_estado("pensando")
+        decir("Se lo paso a mi Kira del portátil. Te enseño cómo va.", hablar=False)
+
+        def trabajo():
+            return casa.orden(orden, al_paso=lambda fr, txt: avance(txt, fr if fr is not None else 0.5),
+                              parar=lambda: bool(getattr(core, "cancelado", lambda: False)()))
+
+        def hecho(r):
+            ok = not isinstance(r, Exception) and r.get("estado") == "hecho"
+            t = tarea_fin(ok)
+            if t is not None and t.interrumpida:
+                return
+            if isinstance(r, Exception):
+                decir(f"[x] No llego a mi Kira del portátil: {r}. Si quieres que lo haga aquí, di «trabaja en el móvil».",
+                      hablar=False)
+                return
+            resp = r.get("respuesta") or ("Parado." if r.get("estado") == "cancelado" else "Hecho.")
+            if r.get("codigo"):
+                codigo_ui["cargar_en_editor"](r["codigo"], r.get("nombre") or "",
+                                              "Escrito y probado por mi Kira del portátil en modo seguro. "
+                                              "Pulsa «Ejecutar». Si quieres que sea parte de mí, «implementa este código».\n\n"
+                                              + resp)
+                decir("Listo: mi Kira del portátil lo ha escrito y probado. Te lo dejo en el editor.")
+            else:
+                decir(resp)
+        en_hilo(trabajo, hecho)
+
+    def mando_control(que):
+        """«modo mando» / «trabaja en el móvil» / «pasa tu memoria al portátil» / «estado del portátil»."""
+        if que == "on":
+            core.modo_mando(True)
+            decir("Hecho: cuando mi Kira del portátil esté en casa, le paso el trabajo y yo te enseño cómo va. "
+                  + ("Ahora mismo la veo." if core.mando_listo() else "Ahora mismo no la veo en la WiFi."))
+        elif que == "off":
+            core.modo_mando(False)
+            decir("Vale: lo hago todo aquí en el móvil. Para volver, di «modo mando».")
+        elif que == "estado":
+            decir(core.mando_estado(), hablar=False)
+        elif que == "memoria":
+            tarea_empieza("memoria", "pasar mi memoria al portátil", lambda: mando_control("memoria"))
+            decir("Empaqueto lo que he aprendido y se lo paso a mi Kira del portátil.")
+            en_hilo(lambda: core.pasar_memoria(al_paso=lambda fr, txt: avance(txt, fr)),
+                    lambda r: (tarea_fin(isinstance(r, str) and not r.startswith("[x]")),
+                               decir(r if isinstance(r, str) else f"[x] {r}", hablar=False)))
 
     def mejora_con_codigo(orden):
         """La mejora sale del código que tienes en el editor (o de lo último leído: captura o internet). Si ya es un

@@ -2385,6 +2385,94 @@ class KiraGodCore:
         pn.guardar(estado, ruta)
         return nota
 
+    # ---------- v2.84: el MÓVIL COMO MANDO de la Kira completa del portátil ----------
+    def _ruta_mando(self):
+        return os.path.join(self.dir, "mando.json")
+
+    def modo_mando(self, encender=None):
+        """¿Le paso el trabajo a la Kira del portátil cuando está en casa? Viene ENCENDIDO (lo pidió el dueño).
+        Con encender=True/False lo cambia y lo guarda."""
+        ruta = self._ruta_mando()
+        if encender is not None:
+            try:
+                with open(ruta, "w", encoding="utf-8") as f:
+                    json.dump({"on": bool(encender)}, f)
+            except OSError:
+                pass
+            return bool(encender)
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                return bool(json.load(f).get("on", True))
+        except (OSError, ValueError):
+            return True
+
+    def _casa(self):
+        cer = getattr(self, "cerebro_ia", None)
+        try:
+            return cer.casa() if cer is not None else None
+        except Exception:
+            return None
+
+    def _mirar_mando(self):
+        c = self._casa()
+        try:
+            ok = bool(c and c.nucleo_disponible())
+        except Exception:
+            ok = False
+        self._mando_cache = (time.time(), ok)
+        self._mando_mirando = False
+        return ok
+
+    def mando_listo(self, esperar=False):
+        """True si el modo mando está encendido y la Kira completa del portátil responde. Para no trabar la pantalla,
+        usa lo último que miró y lo refresca en segundo plano cada 20 s (la primera vez sí mira)."""
+        if not self.modo_mando():
+            return False
+        t, ok = getattr(self, "_mando_cache", (0.0, None))
+        if ok is None or esperar:
+            return self._mirar_mando()
+        if time.time() - t > 20 and not getattr(self, "_mando_mirando", False):
+            self._mando_mirando = True
+            threading.Thread(target=self._mirar_mando, daemon=True).start()
+        return ok
+
+    def mando_estado(self):
+        c = self._casa()
+        h = c.nucleo_hola() if c is not None else None
+        modo = "encendido" if self.modo_mando() else "apagado"
+        if not h:
+            return (f"Modo mando {modo}, pero no encuentro mi Kira del portátil en la WiFi de casa: "
+                    "¿está encendido y con el servicio kira-nucleo? Mientras, trabajo aquí.")
+        t = (f"Modo mando {modo}. Mi Kira del portátil está despierta (versión {h.get('version')}, "
+             f"{h.get('recuerdos', 0)} recuerdos)")
+        t += f" y ahora mismo está con: {h['haciendo']}." if h.get("ocupada") else " y libre."
+        return t
+
+    def pasar_memoria(self, al_paso=None):
+        """Empaqueta lo que he aprendido aquí y se lo pasa a la Kira del portátil. Devuelve el texto para ti."""
+        import memoria_kira as mk
+        paso = al_paso or (lambda _f, _t: None)
+        c = self._casa()
+        if c is None or not c.nucleo_disponible():
+            return ("No encuentro mi Kira del portátil en la WiFi de casa. Enciende el portátil (y que esté en la "
+                    "misma WiFi) y vuelve a decírmelo.")
+        zipr = os.path.join(self.dir, "memoria_para_portatil.zip")
+        try:
+            paso(0.1, "Empaqueto lo que he aprendido…")
+            r = mk.empaquetar(self.dir, zipr, origen="móvil")
+            paso(0.4, f"Se lo paso al portátil ({r['bytes'] / 1048576:.1f} MB)…")
+            texto = c.enviar_memoria(zipr)
+            paso(1.0, "Hecho.")
+            aviso = (" Me dejé: " + ", ".join(a for a, _m in r["saltados"][:4]) + ".") if r.get("saltados") else ""
+            return f"Listo: mi Kira del portátil ya tiene mi memoria. {texto}{aviso}"
+        except Exception as e:
+            return f"[x] No pude pasar la memoria: {e}"
+        finally:
+            try:
+                os.remove(zipr)
+            except OSError:
+                pass
+
     def registrar_actividad(self):
         """El dueño ha dado una orden: Kira le ATIENDE. Pausa el pensar un rato (vuelve sola tras `_inactivo_seg`)."""
         self._ultima_actividad = time.time()

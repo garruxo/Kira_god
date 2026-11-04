@@ -205,6 +205,27 @@ StandardOutput=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
+  # v2.84: la KIRA COMPLETA del portátil (el móvil solo le manda órdenes): mismo núcleo que el móvil, su memoria en
+  # $DATOS/kira_datos y como cerebro el de este portátil. Escucha en la red de casa (puerto 8771, con el token).
+  mkdir -p "$DATOS/kira_datos"
+  $SUDO tee /etc/systemd/system/kira-nucleo.service >/dev/null <<EOF
+[Unit]
+Description=Kira completa en el portátil (el móvil le manda órdenes)
+After=network-online.target kira-portatil.service
+Wants=network-online.target
+
+[Service]
+User=$USER
+WorkingDirectory=$AQUI
+Environment=KIRA_BAUL_PORTATIL=$DATOS/kira_datos/recuerdos
+ExecStart=/usr/bin/python3 $AQUI/nucleo_portatil.py --datos $DATOS/kira_datos
+Restart=always
+RestartSec=10
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF
   # La guardiana de tu red: vigila sola cada 10 min y solo AVISA (nada automático; solo defensa).
   $SUDO tee /etc/systemd/system/kira-vigilancia.service >/dev/null <<EOF
 [Unit]
@@ -368,10 +389,10 @@ AUTO
   fi
 
   $SUDO systemctl daemon-reload
-  $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service kira-vigilancia.service
+  $SUDO systemctl enable --now kira-laboratorio.service kira-portatil.service kira-vigilancia.service kira-nucleo.service
   if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
     for red in 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12; do
-      for p in 8765/tcp 8766/udp 8767/udp 8770/tcp; do
+      for p in 8765/tcp 8766/udp 8767/udp 8770/tcp 8771/tcp; do
         $SUDO ufw allow from "$red" to any port "${p%/*}" proto "${p#*/}" >/dev/null
       done
     done
