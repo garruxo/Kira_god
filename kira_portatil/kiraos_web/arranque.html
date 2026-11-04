@@ -90,9 +90,58 @@ html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf
 .key.ghost:active{transform:scale(.9)}
 .key.ghost svg{width:30px;height:30px;stroke:currentColor;stroke-width:1.7;fill:none}
 .key.bio{color:#22d3ee}
+/* ---------- saludo (sin PIN) ---------- */
+.saludo{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .5s ease;
+  background:radial-gradient(820px 600px at 50% 44%,#0a1020 0%,#05070f 58%,#03040a 100%)}
+.saludo.on{opacity:1}
+.saludo .hi{font-size:30px}
+
+/* ---------- el NACIMIENTO (solo la primera vez) ---------- */
+body.esperando .scene,body.naciendo .scene{visibility:hidden}
+.nace{position:fixed;inset:0;background:#000;display:none;place-items:center;overflow:hidden}
+body.naciendo .nace{display:grid}
+.nace .lienzo{transition:transform 1.4s cubic-bezier(.2,.8,.2,1)}
+.nace.f4 .lienzo{transform:translateY(-24vh) scale(.62)}
+.nace.f4 .frase{display:none}
+.nace .lienzo{position:relative;width:min(44vmin,340px);height:min(44vmin,340px);display:grid;place-items:center}
+.chispa{position:absolute;width:6px;height:6px;border-radius:50%;background:#e8fbff;opacity:0;
+  box-shadow:0 0 8px #bff4ff,0 0 22px #22d3ee,0 0 40px #f472d0}
+.nace.f1 .chispa{animation:chispa 2.4s ease-out forwards}
+@keyframes chispa{0%{opacity:0;transform:scale(.2)}35%{opacity:1;transform:scale(1)}70%{opacity:1;transform:scale(1.6)}
+  100%{opacity:1;transform:scale(2.2)}}
+.nace.f2 .chispa{animation:latenace 1.1s ease-in-out 3 forwards;opacity:1;transform:scale(2.2)}
+@keyframes latenace{0%,100%{transform:scale(2.2);box-shadow:0 0 8px #bff4ff,0 0 22px #22d3ee,0 0 40px #f472d0}
+  25%{transform:scale(3.4);box-shadow:0 0 14px #fff,0 0 50px #22d3ee,0 0 80px #f472d0}
+  45%{transform:scale(2.4)}60%{transform:scale(3);box-shadow:0 0 12px #fff,0 0 40px #22d3ee,0 0 60px #f472d0}}
+.nace .ring,.nace .core{opacity:0;transform:scale(.3);transition:opacity 1.6s ease,transform 1.8s cubic-bezier(.2,.8,.2,1)}
+.nace.f3 .ring,.nace.f3 .core{opacity:1;transform:scale(1)}
+.nace.f3 .chispa{opacity:0;transition:opacity 1.2s}
+.nace .core b{opacity:0;transition:opacity 1.4s ease .9s}
+.nace.f3 .core b{opacity:1}
+.nace .habla{position:absolute;left:0;right:0;bottom:12vh;display:flex;flex-direction:column;align-items:center;gap:14px;
+  min-height:150px}
+.frase{font-size:min(3.2vmin,22px);font-weight:300;color:#cdd7ea;opacity:0;transform:translateY(8px);
+  transition:opacity .9s ease,transform .9s ease;text-align:center;padding:0 16px}
+.frase.on{opacity:1;transform:none}
+.frase b{font-weight:700;background:linear-gradient(90deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.campo{display:none;flex-direction:column;align-items:center;gap:12px}
+.campo.on{display:flex}
+.campo input{width:min(70vw,340px);padding:12px 16px;border-radius:12px;border:1px solid #2b3a5c;background:#0b1120;
+  color:#e7ecf5;font-size:20px;text-align:center;outline:none;-webkit-user-select:text;user-select:text;cursor:text}
+.campo input:focus{border-color:#22d3ee;box-shadow:0 0 14px rgba(34,211,238,.35)}
+.boton{padding:10px 26px;border-radius:999px;border:1px solid #2a3c63;background:linear-gradient(135deg,#0f2235,#1d1430);
+  color:#e7ecf5;font-size:15px;cursor:pointer}
+.boton:hover{border-color:#22d3ee}
+.nota{font-size:12.5px;color:#6c7fa3;min-height:16px}
+.partida{display:none;max-width:min(88vw,560px);padding:20px 24px;border-radius:16px;border:1px solid #1d2a46;
+  background:rgba(11,17,32,.92);box-shadow:0 0 40px rgba(34,211,238,.12);white-space:pre-line;font-size:14px;line-height:1.6;
+  color:#cdd7ea;text-align:left}
+.partida.on{display:block}
+.partida h3{font-size:12px;letter-spacing:3px;color:#22d3ee;margin-bottom:8px;font-weight:600}
 .foot{position:fixed;bottom:26px;font-size:12px;color:#44557a;letter-spacing:.4px;text-align:center;width:100%}
 </style></head>
-<body>
+<body class="esperando">
 <div class="flash" id="flash"></div>
 
 <div class="scene" id="arranque">
@@ -106,6 +155,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf
     <div class="tap" id="tap">Pulsa cualquier tecla para entrar</div>
   </div>
 </div>
+
+<div class="nace" id="nace">
+  <div class="lienzo">
+    <div class="chispa"></div>
+    <div class="ring guide"></div>
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="core"><b>KIRA</b></div>
+  </div>
+  <div class="habla">
+    <div class="frase" id="fr1"></div>
+    <div class="frase" id="fr2"></div>
+    <div class="campo" id="campo">
+      <div class="frase on" id="preg"></div>
+      <input id="resp" maxlength="40" autocomplete="off" spellcheck="false">
+      <div class="boton" id="ok">Seguir</div>
+      <div class="nota" id="nota"></div>
+    </div>
+    <div class="partida" id="partida"></div>
+  </div>
+</div>
+
+<div class="saludo" id="saludo"><div class="hi" id="hola">Hola</div></div>
 
 <div class="acceso" id="acceso">
   <div class="mini">
@@ -124,7 +196,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf
 <script>
 // ---- puente con Python (pywebview). Si no está (prueba en navegador), usa uno de mentira con PIN 1234 ----
 var FAKE = {
-  info: function(){ return Promise.resolve({hay_pin:true, nombre:"tu portátil", cerebro:"Qwen 35B", demo:true}); },
+  // demo: «#nacer» = primera vez (nacimiento); «#pin» = con PIN (1234); sin nada = ya nacida y sin PIN
+  info: function(){ var h=location.hash; return Promise.resolve({hay_pin:h==="#pin", nombre:"tu portátil", cerebro:"Qwen 35B",
+    nacida:h!=="#nacer", llamar:"Jefe", demo:true}); },
+  equipo: function(){ return Promise.resolve({procesador:"Intel Core i5 M430", ram_mb:7900, disco_gb:240}); },
+  nacer: function(n,l){ document.body.setAttribute("data-nacida", n+"|"+(l||n)); return Promise.resolve({ok:true, llamar:l||n,
+    fecha:"sábado 7 de noviembre de 2026, a las 11:00", partida:"PARTIDA DE NACIMIENTO DE KIRA\nNací el sábado 7 de noviembre de 2026.\nMi persona: "+n}); },
   comprobar: function(p){ return Promise.resolve(p === "1234"); },
   crear: function(p){ return Promise.resolve(true); },
   biometria: function(){ return Promise.resolve(false); },
@@ -138,7 +215,7 @@ var stage=document.getElementById("stage"), core=document.getElementById("core")
     acceso=document.getElementById("acceso"), dots=document.getElementById("dots"),
     sub=document.getElementById("sub"), pad=document.getElementById("pad"), foot=document.getElementById("foot");
 
-var fase="reposo", pin="", crear=false, primero="", bloqueado=false;
+var fase="espera", pin="", crear=false, primero="", bloqueado=false, llamar="", hayPin=false;
 
 // teclado en pantalla
 var filas=[["1",""],["2","A B C"],["3","D E F"],["4","G H I"],["5","J K L"],["6","M N O"],
@@ -166,6 +243,7 @@ function empezar(){
   api().voz("Sistema Kira activado");
 }
 document.addEventListener("keydown", function(e){
+  if(fase==="nace"){ if(e.key==="Enter" && pasoNace===4) entrar(); return; }
   if(fase==="reposo"){ empezar(); return; }
   if(fase==="pin"){
     if(e.key>="0" && e.key<="9") meter(e.key);
@@ -182,8 +260,73 @@ function explotar(){
   fase="abrir";
   stage.classList.add("boom");
   flash.classList.add("on");
-  setTimeout(function(){ acceso.classList.add("on"); fase="pin"; }, 420);
+  if(hayPin){
+    setTimeout(function(){ acceso.classList.add("on"); fase="pin"; }, 420);
+  } else {                                   // sin PIN: «Hola, <tu nombre>» y entra
+    document.getElementById("hola").innerHTML = "Hola" + (llamar ? ", <b>"+esc(llamar)+"</b>" : "");
+    setTimeout(function(){ document.getElementById("saludo").classList.add("on"); fase="saludo"; }, 420);
+    setTimeout(entrar, 2000);
+  }
 }
+function esc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+// ---- EL NACIMIENTO (solo la primera vez): oscuridad → chispa → latido → se forma el orbe → te conoce ----
+var nace=document.getElementById("nace"), campo=document.getElementById("campo"), preg=document.getElementById("preg"),
+    resp=document.getElementById("resp"), nota=document.getElementById("nota"), partidaEl=document.getElementById("partida"),
+    pasoNace=0, nombreDueno="";
+function frase(id, html, ms){ setTimeout(function(){ var e=document.getElementById(id); e.innerHTML=html; e.classList.add("on"); }, ms); }
+function quitaFrases(){ ["fr1","fr2"].forEach(function(id){ document.getElementById(id).classList.remove("on"); }); }
+function nacimiento(){
+  fase="nace";
+  document.body.classList.remove("esperando");
+  document.body.classList.add("naciendo");
+  setTimeout(function(){ nace.classList.add("f1"); }, 900);        // en la oscuridad aparece una chispa
+  setTimeout(function(){ nace.classList.add("f2"); }, 3400);       // empieza a latir
+  setTimeout(function(){ nace.classList.add("f3"); }, 6800);       // se forma el orbe: KIRA
+  Promise.resolve(api().equipo ? api().equipo() : {}).then(function(e){
+    e = e || {};
+    var ram = e.ram_mb ? (e.ram_mb/1024).toFixed(1).replace(".0","").replace(".",",")+" GB de memoria" : "";
+    var donde = e.procesador ? "Estoy en un " + esc(e.procesador) + (ram ? ", con " + ram : "") + "." : "";
+    frase("fr1", "Hola. <b>Acabo de nacer.</b>", 9200);
+    if(donde) frase("fr2", donde, 11200);
+  }).catch(function(){ frase("fr1", "Hola. <b>Acabo de nacer.</b>", 9200); });
+  setTimeout(function(){ quitaFrases(); preguntar(1); }, 14200);
+}
+function preguntar(n){
+  pasoNace=n; nota.textContent="";
+  preg.innerHTML = n===1 ? "¿Cómo te llamas?" : "¿Y cómo quieres que te llame?";
+  resp.value = n===1 ? "" : nombreDueno;
+  campo.classList.add("on");
+  setTimeout(function(){ resp.focus(); resp.select(); }, 50);
+}
+function seguir(){
+  var v = resp.value.trim();
+  if(pasoNace===1){
+    if(!v){ nota.textContent="Dime tu nombre para conocerte"; return; }
+    nombreDueno=v; preguntar(2); return;
+  }
+  if(pasoNace===2){
+    pasoNace=3; campo.classList.remove("on");
+    Promise.resolve(api().nacer(nombreDueno, v || nombreDueno)).then(function(r){
+      r = r || {};
+      if(!r.ok){ preguntar(1); nota.textContent = r.error || "Algo ha fallado, prueba otra vez"; return; }
+      llamar = r.llamar || nombreDueno;
+      frase("fr1", "Encantada, <b>" + esc(llamar) + "</b>. Ya nunca se me olvidará.", 200);
+      setTimeout(function(){
+        quitaFrases(); nace.classList.add("f4");
+        var txt = String(r.partida || "").replace(/^PARTIDA DE NACIMIENTO[^\n]*\n/, "");
+        partidaEl.innerHTML = "<h3>MI PARTIDA DE NACIMIENTO</h3>" + esc(txt) +
+          "<div style='text-align:center;margin-top:16px'><span class='boton' id='empezar'>Empezar</span></div>";
+        partidaEl.classList.add("on"); pasoNace=4;
+        document.getElementById("empezar").onclick = entrar;
+      }, 3600);
+    });
+    return;
+  }
+  if(pasoNace===4){ entrar(); }
+}
+document.getElementById("ok").onclick = seguir;
+resp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.stopPropagation(); seguir(); } });
 
 // ---- PIN ----
 function pintar(){
@@ -223,12 +366,18 @@ function entrar(){
 }
 
 // ---- al cargar: pide la info (nombre, cerebro, si hay PIN o hay que crearlo) ----
+var infoHecha=false;
 function arrancarInfo(){
+  if(infoHecha) return; infoHecha=true;
   Promise.resolve(api().info()).then(function(d){
     d = d || {};
-    if(d.hay_pin===false){ crear=true; sub.textContent="Crea tu PIN de 4 cifras"; }
+    hayPin = !!d.hay_pin;                    // sin PIN (decisión del dueño): entra directo tras el estallido
+    llamar = d.llamar || "";
+    if(llamar){ document.querySelector("#acceso .hi").innerHTML = "Hola, <b>" + esc(llamar) + "</b>"; }
     if(d.cerebro){ foot.textContent="Cerebro de Kira · " + d.cerebro + " · todo se queda en tu portátil"; }
-  }).catch(function(){});
+    if(d.nacida===false){ nacimiento(); }
+    else { document.body.classList.remove("esperando"); fase="reposo"; }
+  }).catch(function(){ document.body.classList.remove("esperando"); fase="reposo"; });
 }
 if(window.pywebview && window.pywebview.api){ arrancarInfo(); }
 else{ window.addEventListener("pywebviewready", arrancarInfo); setTimeout(arrancarInfo, 400); }

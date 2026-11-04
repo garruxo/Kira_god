@@ -11,8 +11,10 @@ de inicio es un archivo HTML del disco que se dibuja con el motor que ya trae el
   python kiraos.py                 ventana
   python kiraos.py --pantalla      a pantalla completa (lo normal en el portátil)
 
-Flujo: reposo (orbe latiendo + «pulsa cualquier tecla») → al pulsar, la cuenta atrás estalla → PIN (o huella/cara) →
-ventana de Kira (kira_escritorio). Si el motor gráfico no estuviera, hay una reserva por PIN sencilla para entrar igual.
+Flujo: la PRIMERA vez, el NACIMIENTO (oscuridad → chispa → latido → se forma el orbe → te pregunta tu nombre y cómo
+llamarte → partida de nacimiento; nacimiento_kira.py). Las demás: reposo (orbe latiendo + «pulsa cualquier tecla») →
+cuenta atrás que estalla → «Hola, <tu nombre>» → ventana de Kira (kira_escritorio). SIN PIN por decisión del dueño
+(v2.83); si se pone uno (`--poner-pin`), se pide tras el estallido. Sin motor gráfico, hay una reserva sencilla.
 
 La lógica (el puente `Api`) se prueba sin ventana (tests/test_kiraos.py). El PIN lo lleva bloqueo_kira.py.
 """
@@ -27,6 +29,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 import bloqueo_kira as bl
 import kira_consola as kc
+import nacimiento_kira as nk
 
 ARRANQUE = os.path.join(AQUI, "kiraos_web", "arranque.html")
 MAPA = os.path.join(AQUI, "kiraos_web", "mapa.html")
@@ -58,8 +61,10 @@ def voz_portatil(texto, correr=None):
 #  EL PUENTE con la pantalla (lo llama el HTML). Sin ventana: se puede probar.
 # =====================================================================================
 class Api:
-    def __init__(self, ruta_pin=None, cli=None, hablar=None):
+    def __init__(self, ruta_pin=None, cli=None, hablar=None, ruta_nacimiento=None, baul=None):
         self.ruta_pin = ruta_pin
+        self.ruta_nac = ruta_nacimiento
+        self.baul = baul
         self.cli = cli
         self.entrado = False
         self._ventana = None
@@ -72,7 +77,21 @@ class Api:
                 nombre = (self.cli.hola() or {}).get("nombre", nombre)
             except Exception:
                 pass
-        return {"hay_pin": bl.hay_pin(self.ruta_pin), "nombre": nombre, "cerebro": CEREBRO_NOMBRE}
+        p = nk.cargar(self.ruta_nac)
+        return {"hay_pin": bl.hay_pin(self.ruta_pin), "nombre": nombre, "cerebro": CEREBRO_NOMBRE,
+                "nacida": bool(p), "llamar": (p or {}).get("llamar", ""), "fecha": (p or {}).get("fecha", "")}
+
+    def equipo(self):
+        """Lo que se ve del equipo en la escena del nacimiento."""
+        return nk.equipo()
+
+    def nacer(self, nombre, llamar=""):
+        """El nacimiento: guarda la partida y su primer recuerdo. Devuelve lo que enseña la pantalla."""
+        try:
+            p = nk.nacer(nombre, llamar, ruta=self.ruta_nac, baul=self.baul)
+        except nk.NacimientoError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "llamar": p["llamar"], "fecha": p["fecha"], "partida": nk.texto_partida(p)}
 
     def comprobar(self, pin):
         return bl.comprobar(pin, self.ruta_pin)
@@ -140,15 +159,21 @@ def _reserva(api, pantalla=True):
         return _reserva_consola(api)
     raiz = tk.Tk()
     raiz.withdraw()
-    if not api.info()["hay_pin"]:
-        while True:
-            a = simpledialog.askstring("KiraOS", "Crea tu PIN (4 cifras):", show="*", parent=raiz)
-            if a is None:
+    inf = api.info()
+    if not inf["nacida"]:
+        nombre = None
+        while not nombre:
+            nombre = simpledialog.askstring("KiraOS", "Acabo de nacer. ¿Cómo te llamas?", parent=raiz)
+            if nombre is None:
                 raiz.destroy(); return False
-            b = simpledialog.askstring("KiraOS", "Repite el PIN:", show="*", parent=raiz)
-            if a == b and api.crear(a):
-                break
-            messagebox.showerror("KiraOS", "No coincide o no son 4 cifras.")
+        llamar = simpledialog.askstring("KiraOS", "¿Cómo quieres que te llame?", initialvalue=nombre, parent=raiz)
+        r = api.nacer(nombre, llamar or "")
+        if r.get("ok"):
+            messagebox.showinfo("KiraOS", r["partida"])
+        inf = api.info()
+    if not inf["hay_pin"]:
+        api.entrado = True
+        raiz.destroy(); return True
     for _ in range(10):
         p = simpledialog.askstring("KiraOS", "Introduce tu PIN:", show="*", parent=raiz)
         if p is None:
@@ -163,12 +188,19 @@ def _reserva(api, pantalla=True):
 
 def _reserva_consola(api):
     import getpass
-    if not api.info()["hay_pin"]:
-        while True:
-            a = getpass.getpass("Crea tu PIN (4 cifras): ")
-            if a == getpass.getpass("Repítelo: ") and api.crear(a):
-                break
-            print("No coincide o no son 4 cifras.")
+    inf = api.info()
+    if not inf["nacida"]:
+        nombre = ""
+        while not nombre.strip():
+            nombre = input("Acabo de nacer. ¿Cómo te llamas? ")
+        llamar = input(f"¿Cómo quieres que te llame? [{nombre.strip()}] ")
+        r = api.nacer(nombre, llamar)
+        if r.get("ok"):
+            print(r["partida"])
+        inf = api.info()
+    if not inf["hay_pin"]:
+        api.entrado = True
+        return True
     for _ in range(10):
         if api.comprobar(getpass.getpass("PIN: ")):
             api.entrado = True
@@ -216,8 +248,28 @@ def main(argv=None):
     ap.add_argument("--mapa", action="store_true", help="abre el mapa de ataques y sale")
     ap.add_argument("--programando", nargs="?", const="", metavar="ARCHIVO",
                     help="abre la pantalla «Kira programando» (opcional: un archivo .py que explicar)")
+    ap.add_argument("--poner-pin", action="store_true", help="pone (o cambia) un PIN para entrar")
+    ap.add_argument("--quitar-pin", action="store_true", help="quita el PIN: entra directo")
+    ap.add_argument("--partida", action="store_true", help="enseña la partida de nacimiento de Kira")
     a = ap.parse_args(argv)
 
+    if a.partida:
+        print(nk.texto_partida(nk.cargar()))
+        return
+    if a.quitar_pin:
+        print("PIN quitado: KiraOS entrará directo." if bl.quitar_pin() else "No había PIN.")
+        return
+    if a.poner_pin:
+        import getpass
+        p1 = getpass.getpass("PIN nuevo (4 cifras): ")
+        if p1 != getpass.getpass("Repítelo: "):
+            sys.exit("No coincide.")
+        try:
+            bl.crear_pin(p1)
+        except bl.BloqueoError as e:
+            sys.exit(str(e))
+        print("PIN puesto: KiraOS lo pedirá al entrar.")
+        return
     if a.mapa:
         abrir_mapa(pantalla=a.pantalla)
         return

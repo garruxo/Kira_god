@@ -115,6 +115,15 @@ def estado(ruta=None):
     return {"hay_pin": True, "fallos": d.get("fallos", 0), "espera": _espera_restante(d)}
 
 
+def quitar_pin(ruta=None):
+    """Quita el PIN (KiraOS entra directo). Devuelve True si había uno."""
+    ruta = ruta or RUTA
+    if os.path.isfile(ruta):
+        os.remove(ruta)
+        return True
+    return False
+
+
 def biometria_disponible():
     """Hueco para la huella/cara (lo pone el sistema). De momento, no en esta reserva por PIN."""
     return False
