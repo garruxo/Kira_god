@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Instala el «cerebro de casa» de Kira en un portátil con Ubuntu 24.04 y tarjeta NVIDIA (probado para RTX serie 50).
 #
-#   bash instalar_portatil.sh                  todo: drivers, CUDA, cerebro, pintor, modelos (~38 GB) y que al ENCENDER aparezca Kira sola (orbe + PIN)
+#   bash instalar_portatil.sh                  todo: drivers, CUDA, cerebro, pintor, modelos (~38 GB) y que al ENCENDER aparezca Kira sola (el orbe; la 1.ª vez, su nacimiento)
 #   bash instalar_portatil.sh --sin-grande     sin el cerebro grande (ahorra 23 GB de descarga)
 #   bash instalar_portatil.sh --sin-escritorio además, que el portátil arranque SIN escritorio (todo para Kira)
 #   bash instalar_portatil.sh --prueba         sin gráfica y con modelos pequeños (para comprobarlo en otro equipo)
@@ -54,7 +54,7 @@ $SUDO apt-get install -y -qq build-essential cmake git curl python3 python3-tk p
 # puente de Python (pywebview). Y el lector de voz para «Sistema Kira activado». Todo local, nada de internet.
 $SUDO apt-get install -y -qq python3-gi gir1.2-gtk-3.0 speech-dispatcher >/dev/null
 $SUDO apt-get install -y -qq gir1.2-webkit2-4.1 >/dev/null 2>&1 || $SUDO apt-get install -y -qq gir1.2-webkit2-4.0 >/dev/null 2>&1 || true
-python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || echo "  (aviso: no pude instalar pywebview; KiraOS entrará con un PIN sencillo hasta que se instale)"
+python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || echo "  (aviso: no pude instalar pywebview; KiraOS entrará con una ventana sencilla hasta que se instale)"
 
 GPU=0
 if [ "$PRUEBA" = "0" ] && [ "$LIGERO" = "0" ]; then
@@ -274,7 +274,7 @@ KIRAWIN
   $SUDO chmod +x /usr/local/bin/kira-ventana
   $SUDO tee /usr/local/bin/kiraos >/dev/null <<KIRAOS
 #!/usr/bin/env bash
-# KiraOS: pantalla de inicio (orbe que late) + PIN y, al entrar, la ventana de Kira.
+# KiraOS: pantalla de inicio (orbe que late) (la 1.ª vez, su nacimiento) y, al entrar, la ventana de Kira.
 exec /usr/bin/python3 "$AQUI/kiraos.py" --pantalla "\$@"
 KIRAOS
   $SUDO chmod +x /usr/local/bin/kiraos
@@ -384,13 +384,13 @@ KIRADESK
 
   # --- Que al ENCENDER el portátil aparezca Kira directamente (como Windows), sin escribir comandos ---
   if [ "$SIN_ESCRITORIO" = "0" ] && [ "$PRUEBA" = "0" ]; then
-    paso "7b. Al encender, arrancar Kira sola (orbe + PIN), sin comandos"
+    paso "7b. Al encender, arrancar Kira sola (el orbe), sin comandos"
     $SUDO systemctl set-default graphical.target >/dev/null 2>&1 || true
-    # 1) Entrar en la sesión sin pedir la contraseña de Linux (el candado de verdad es el PIN de Kira)
+    # 1) Entrar en la sesión sin pedir la contraseña de Linux (sin PIN por decisión del dueño; se puede poner con kiraos --poner-pin)
     if systemctl list-unit-files 2>/dev/null | grep -q '^gdm3\?\.service'; then
       $SUDO mkdir -p /etc/gdm3
       $SUDO tee /etc/gdm3/custom.conf >/dev/null <<GDM
-# Kira: entrar directo en la sesión al encender (el candado es el PIN de Kira).
+# Kira: entrar directo en la sesión al encender (PIN opcional: kiraos --poner-pin).
 [daemon]
 AutomaticLoginEnable=true
 AutomaticLogin=$USER
@@ -416,7 +416,7 @@ Exec=/usr/local/bin/kiraos
 X-GNOME-Autostart-enabled=true
 Terminal=false
 AUTO
-    echo "  Al encender el portátil aparecerá Kira (orbe + PIN). No hay que escribir nada."
+    echo "  Al encender el portátil aparecerá Kira (el orbe). No hay que escribir nada."
   fi
 
   $SUDO systemctl daemon-reload
@@ -438,8 +438,9 @@ fi
 paso "Listo"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "El cerebro de casa de Kira está en este portátil (${IP:-sin red})."
-echo "REINICIA el portátil: al encender aparecerá Kira sola (el orbe y el PIN), sin escribir nada."
-echo "La primera vez te pedirá crear tu PIN de 4 cifras."
-echo "Si quieres abrirla a mano:  kiraos  (inicio con orbe + PIN)  ·  kira-ventana / kira  (directo a la charla)."
+echo "REINICIA el portátil: al encender aparecerá Kira sola (el orbe), sin escribir nada."
+echo "La primera vez NACERÁ: chispa, latido, te preguntará tu nombre y te enseñará su partida de nacimiento."
+echo "Si quieres abrirla a mano:  kiraos  (inicio con el orbe)  ·  kira-ventana / kira  (directo a la charla)."
+echo "Su máquina virtual:  kira-maquina --ver   ·   PIN opcional:  kiraos --poner-pin"
 echo "Si además quieres usarla desde el móvil: dile «Kira, conéctate al ordenador» y escríbele el código."
 echo "Para ver el código aquí:  kira-codigo     ·  para ver cómo va:  journalctl -u kira-portatil -f"

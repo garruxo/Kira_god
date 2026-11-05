@@ -31,6 +31,19 @@ Descarga total: unos 38 GB (23 GB menos con `--sin-grande`). SDXL-Turbo es de us
 
 Opcional: `bash instalar_portatil.sh --sin-escritorio` hace que el portátil arranque sin escritorio, con todo para Kira.
 
+### Portátil viejo sin gráfica NVIDIA (p. ej. el Packard Bell: 8 GB de RAM, i5 de 1.ª generación)
+Instala **Xubuntu 24.04 LTS** (más ligero) y usa el modo ligero (cerebro pequeño en el procesador, sin pintor, con
+memoria de intercambio). No pide reiniciar a mitad (no hay driver de NVIDIA):
+
+```
+sudo apt install -y git
+git clone https://github.com/garruxo/Kira_god
+cd Kira_god/kira_portatil
+bash instalar_portatil.sh --ligero
+```
+Al terminar, **reinicia**: Kira nace (la primera vez) y después aparece sola al encender. Para usarla desde el móvil:
+«Kira, conéctate al ordenador» + el código de `kira-codigo`, y luego «pasa tu memoria al portátil».
+
 ## Para ver cómo va
 - `journalctl -u kira-portatil -f` (lo que hace el cerebro de casa)
 - `nvidia-smi` (cuánta gráfica usa)
