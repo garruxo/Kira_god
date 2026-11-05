@@ -151,6 +151,17 @@ if [ "$PRUEBA" = "0" ]; then
   # Aislamiento de verdad para el ESPACIO AISLADO de Kira (experimenta sin tocar nada): firejail (y bubblewrap).
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq firejail bubblewrap >/dev/null 2>&1 || \
     echo "  (sin firejail/bubblewrap el espacio aislado funcionará con límites, pero no como caja fuerte)"
+  # v2.85: la MÁQUINA VIRTUAL de Kira (Linux ligero): QEMU + su disco, la semilla (cloud-init) y un visor para verla.
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils \
+    openssh-client tigervnc-viewer >/dev/null 2>&1 || \
+    echo "  (no pude instalar QEMU ahora; la máquina de Kira esperará a la próxima vez)"
+  if getent group kvm >/dev/null; then
+    $SUDO usermod -aG kvm "$USER" || true                # para que vaya rápida (KVM) sin ser administrador
+  fi
+  if [ ! -e /dev/kvm ]; then
+    echo "  OJO: este procesador no tiene la virtualización encendida. Entra en la BIOS (F2 al encender) y activa"
+    echo "       «Intel Virtualization Technology» (VT-x): la máquina de Kira irá MUCHO más rápida."
+  fi
   if getent group wireshark >/dev/null; then
     $SUDO usermod -aG wireshark "$USER" || true          # para capturar tráfico sin ser administrador
     echo "  Nmap y Wireshark listos (solo se usan sobre TU red). Para capturar tráfico, vuelve a iniciar sesión una vez."
@@ -280,6 +291,17 @@ exec /usr/bin/python3 "$AQUI/espacio_kira.py" "\$@"
 KIRAESP
   $SUDO chmod +x /usr/local/bin/kira-espacio
   mkdir -p "$DATOS/espacio"
+  $SUDO tee /usr/local/bin/kira-maquina >/dev/null <<KIRAMAQ
+#!/usr/bin/env bash
+# La máquina virtual de Kira (Linux ligero, sin internet, sin tus archivos). Sin argumentos: su estado.
+# kira-maquina --ver  (la enciende si hace falta y te la enseña) · --apagar · --ejecutar "comando"
+exec /usr/bin/python3 "$AQUI/maquina_kira.py" "\$@"
+KIRAMAQ
+  $SUDO chmod +x /usr/local/bin/kira-maquina
+  # La deja preparada ya (baja el Linux ligero, ~350 MB, una vez). Si falla, se prepara cuando se la pidas.
+  if [ "$PRUEBA" = "0" ]; then
+    /usr/bin/python3 "$AQUI/maquina_kira.py" --preparar || echo "  (la máquina de Kira se preparará más tarde)"
+  fi
   $SUDO tee /usr/local/bin/kira-cebo >/dev/null <<KIRACEBO
 #!/usr/bin/env bash
 # El cebo (honeypot) DEFENSIVO de Kira. Sin argumentos: enseña lo que ha picado.
@@ -332,6 +354,15 @@ StandardOutput=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
+  $SUDO tee /usr/share/applications/kira-maquina.desktop >/dev/null <<MAQDESK
+[Desktop Entry]
+Name=Máquina de Kira
+Comment=El ordenador virtual donde Kira prueba sus programas y aprende Linux
+Exec=/usr/local/bin/kira-maquina --ver
+Terminal=false
+Type=Application
+Categories=Utility;Development;
+MAQDESK
   $SUDO tee /usr/share/applications/kira-mapa.desktop >/dev/null <<MAPADESK
 [Desktop Entry]
 Name=Mapa de ataques (Kira)

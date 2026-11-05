@@ -68,6 +68,20 @@ def preparar_datos(datos, token, cerebro_url="http://127.0.0.1:8770", lab_url="h
 # =====================================================================================
 #  QUÉ HACER CON CADA ORDEN (lo mismo que hace la pantalla del móvil, pero sin pantalla)
 # =====================================================================================
+_MAQUINA = {"m": None}
+
+
+def maquina():
+    """La máquina virtual de Kira (v2.85), una para todo el núcleo."""
+    if _MAQUINA["m"] is None:
+        import maquina_kira as mq
+        _MAQUINA["m"] = mq.Maquina()
+    return _MAQUINA["m"]
+
+
+_Y_PRUEBALO = r"\s*,?\s*y\s+pru[eé]balo\s+en\s+(?:tu|la|mi)\s+m[aá]quina(?:\s+virtual)?\s*$"
+
+
 def ejecutar(core, orden, paso):
     """Hace la orden con el núcleo. `paso(fraccion|None, texto)` va contando. Devuelve {texto, codigo?, nombre?}."""
     import re
@@ -83,6 +97,20 @@ def ejecutar(core, orden, paso):
     import experimentos_kira as ex
     import programar_kira as pk
     import internet_kira as net
+    import maquina_kira as mq
+    om = mq.orden_maquina(o)                      # v2.85: su MÁQUINA VIRTUAL (Linux ligero)
+    if om:
+        accion, carga = om
+        paso(0.0, f"Mi máquina: {accion}…")
+        rec = getattr(core, "recuerdos", None)
+        guardar = (lambda tema, texto: rec.guardar(texto, tema=tema, fuente="mi máquina virtual")) if rec else None
+        try:
+            return mq.hacer(maquina(), accion, carga, al_paso=lambda fr, t: paso(fr, t), guardar_ficha=guardar)
+        except mq.MaquinaError as e:
+            return {"texto": f"[x] {e}", "ok": False}
+    en_maquina = bool(re.search(_Y_PRUEBALO, o, flags=re.I))
+    if en_maquina:
+        o = re.sub(_Y_PRUEBALO, "", o, flags=re.I).strip()
     tema = None
     try:
         tema = core.es_estudia_general(o)
@@ -95,6 +123,8 @@ def ejecutar(core, orden, paso):
     if exp is not None:
         paso(0.0, f"Experimento con {exp}…")
         r = core.experimentar(exp, al_progreso=lambda fr, t: paso(fr, t), mejorar=ex.quiere_mejorar(o))
+        if r.get("ok") and r.get("codigo"):
+            maquina().ultimo_codigo = r.get("codigo")
         return {"texto": r.get("texto", ""), "codigo": r.get("codigo") if r.get("ok") else None,
                 "nombre": r.get("nombre"), "ok": bool(r.get("ok"))}
     prog = pk.pedido_programa(o)
@@ -103,8 +133,16 @@ def ejecutar(core, orden, paso):
         r = core.programa_acordado(prog, al_paso=lambda t: paso(None, t))
         if not r.get("ok"):
             return {"texto": str(r.get("texto", "No me salió el programa.")).split("\n")[0], "ok": False}
-        return {"texto": "Programa escrito y probado en modo seguro en el portátil.", "codigo": r.get("codigo"),
-                "nombre": r.get("nombre"), "ok": True}
+        maquina().ultimo_codigo = r.get("codigo")
+        texto = "Programa escrito y probado en modo seguro en el portátil."
+        if en_maquina:
+            try:
+                c, salida = maquina().probar_python(r.get("codigo") or "")
+                texto += (" Y en mi máquina " + ("funciona" if c == 0 else f"falló (código {c})") + ":\n"
+                          + (salida.strip() or "(sin salida)"))
+            except mq.MaquinaError as e:
+                texto += f" En mi máquina no pude probarlo: {e}"
+        return {"texto": texto, "codigo": r.get("codigo"), "nombre": r.get("nombre"), "ok": True}
     cod = net.pedido_aprender_codigo(o)
     if cod is not None:
         return {"texto": core.aprender_codigo(cod, al_paso=lambda t: paso(None, t))}

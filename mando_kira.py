@@ -57,10 +57,17 @@ _LOCAL = re.compile(
     r"(?:cerebro|oido|voz) |descarga (?:el|tu) cerebro|configuracion|ajustes|config\b)")
 
 
+def es_de_maquina(texto):
+    """v2.85: ¿habla de la MÁQUINA VIRTUAL de Kira? Esa vive en el portátil: siempre se le pasa allí."""
+    return bool(re.search(r"\b(?:tu|la|mi)\s+maquina\b", _norm(texto)))
+
+
 def es_local(texto):
     t = _norm(texto)
     if not t:
         return True
     if orden_control(texto):
         return True
+    if es_de_maquina(texto):
+        return False
     return bool(_LOCAL.match(t))

@@ -533,6 +533,10 @@ def construir_interfaz(core, consola=None):
             if listo:                                   # el trabajo lo hace el portátil; aquí, barra y respuesta
                 mando_por_voz(orden)
                 return
+            if mdk_.es_de_maquina(orden):               # v2.85: la máquina virtual vive en el portátil
+                decir("Mi máquina virtual vive en el portátil y ahora no lo veo en la WiFi de casa. Enciéndelo "
+                      "(o «estado del portátil») y vuelve a pedírmelo.", hablar=False)
+                return
         import experimentos_kira as ex_
         exp = ex_.pedido_experimento(orden)
         if exp is not None:                             # «experimenta con…», «inventa un algoritmo nuevo…»
