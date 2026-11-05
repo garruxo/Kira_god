@@ -167,7 +167,7 @@ VOZ = VozMuda(); ik2.Voz = lambda *a, **k: VOZ
 core3 = kira_god.KiraGodCore()
 core3.internet = ik.Internet(os.path.join(T, "internet3"), abrir=red)
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core3)
+sm = construir_interfaz(core3, modo="completo")
 def correr(seg=3.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

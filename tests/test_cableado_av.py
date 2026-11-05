@@ -21,7 +21,7 @@ med = dk.Mediateca(os.path.join(T,"mediateca.json"))
 for t_,r in (("Tono A","a.wav"),("Tono B","b.wav"),("Clip 1","v1.mp4")): med.anadir(t_, os.path.join(D,r))
 core = kira_god.KiraGodCore(); core._leer_clave = lambda: ""
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 n = 0
 def ok(c, m):
     global n; n += 1; assert c, "FALLA: " + m

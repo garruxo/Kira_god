@@ -100,7 +100,7 @@ def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
     return "NOMBRE: rapido\n```python\nprint('soy el RAPIDO')\n```"
 core2._llamar_api = api
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core2)
+sm = construir_interfaz(core2, modo="completo")
 def correr(seg=3.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

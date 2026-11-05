@@ -46,6 +46,9 @@ class Widget:
 
 class ScreenManager(Widget):
     def __init__(self, **kw): super().__init__(**kw); self.current = None
+    @property
+    def screen_names(self): return [getattr(s, "name", None) for s in self.children]
+    def has_screen(self, n): return n in self.screen_names
 class Screen(Widget): pass
 
 class Evento:

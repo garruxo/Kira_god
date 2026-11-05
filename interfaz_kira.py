@@ -12,13 +12,40 @@ La lógica (conversación, búsqueda, notas, estado, voz) está en inicio_kira.p
 Aquí solo hay pantallas finas. Botón "atrás" de Android / tecla Esc: vuelve al menú y luego al orbe.
 """
 import datetime
+import json
 import os
 import re
 import threading
 import time
 
 
-def construir_interfaz(core, consola=None):
+class _Nada(dict):
+    """En el modo sencillo, las salas no se montan: cualquier llamada a ellas no hace nada (y no rompe)."""
+    def __missing__(self, _clave):
+        return lambda *a, **kw: None
+
+
+def leer_modo_app(dir_datos):
+    """v2.87: 'sencillo' (DOS pantallas: hablar con Kira y el panel; el trabajo lo hace KiraOS) o 'completo' (las
+    pantallas y salas de antes). Viene en SENCILLO: lo pidió el dueño. Se cambia con «modo completo» / «modo sencillo»."""
+    try:
+        with open(os.path.join(dir_datos, "modo_app.json"), encoding="utf-8") as f:
+            m = json.load(f).get("modo")
+        return m if m in ("sencillo", "completo") else "sencillo"
+    except (OSError, ValueError, AttributeError):
+        return "sencillo"
+
+
+def guardar_modo_app(dir_datos, modo):
+    try:
+        with open(os.path.join(dir_datos, "modo_app.json"), "w", encoding="utf-8") as f:
+            json.dump({"modo": modo}, f)
+        return True
+    except OSError:
+        return False
+
+
+def construir_interfaz(core, consola=None, modo=None):
     from kivy import kivy_data_dir
     from kivy.animation import Animation
     from kivy.clock import Clock
@@ -61,6 +88,7 @@ def construir_interfaz(core, consola=None):
     panel_raiz = panel_kira.construir_panel(core, consola=consola)   # si esto falla, main.py usa el plan B
     ctl = panel_raiz.control
     dir_datos = ctl.pc.carpeta_datos()
+    SENCILLO = (modo or leer_modo_app(dir_datos)) == "sencillo"     # v2.87: dos pantallas; KiraOS hace el trabajo
 
     ajustes = mk.AjustesInterfaz(os.path.join(dir_datos, "interfaz_ajustes.json"))
     notas = mk.Notas(os.path.join(dir_datos, "notas.json"))
@@ -132,6 +160,25 @@ def construir_interfaz(core, consola=None):
                    "TXT": OSCURA["TXT"], "NEON": OSCURA["NEON"], "TENUE": OSCURA["TENUE"], "GRIS": OSCURA["GRIS"],
                    "VERDE": OSCURA["VERDE"], "ROJO": OSCURA["ROJO"], "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO}
 
+    import sincronia_kira as sc_
+    _tema = sc_.tema_del_movil(getattr(core, "dir", dir_datos)) or {"nombre": "noche", "colores": sc_.TEMAS["noche"]}
+
+    def _rgb(h, a=1.0):
+        return (int(h[1:3], 16) / 255.0, int(h[3:5], 16) / 255.0, int(h[5:7], 16) / 255.0, a)
+
+    def _mezcla(c1, c2, f):
+        return tuple(c1[i] * (1 - f) + c2[i] * f for i in range(3)) + (1,)
+    _col = {k: _rgb(v) for k, v in _tema["colores"].items()}
+    TEMA = {"TXT": _col["texto"], "NEON": _col["neon"], "VERDE": _col["acento"], "FONDO": _col["fondo"],
+            "TENUE": _mezcla(_col["texto"], _col["fondo"], 0.42), "GRIS": _mezcla(_col["fondo"], _col["texto"], 0.16),
+            "CAMPO": _mezcla(_col["fondo"], _col["texto"], 0.07), "ROJO": (0.86, 0.3, 0.36, 1),
+            "TARJETA": _mezcla(_col["fondo"], _col["texto"], 0.06)}
+    boton_t, entrada_t, texto_largo_t = hacer_piezas(TEMA)
+    try:
+        Window.clearcolor = TEMA["FONDO"] if SENCILLO else Window.clearcolor
+    except Exception:
+        pass
+
     def fondo_claro(widget):
         """Pinta un fondo claro detrás de una pantalla (las salas siguen con el suyo)."""
         with widget.canvas.before:
@@ -194,7 +241,8 @@ def construir_interfaz(core, consola=None):
     fila.add_widget(campo)
     btn_escucha = boton("", lambda: alternar_escucha(), GRIS, alto=48, size_hint_x=None, width=dp(88), font_size=tam(13))
     fila.add_widget(btn_escucha)
-    fila.add_widget(boton("Enviar", lambda: enviar(), VERDE, alto=48, size_hint_x=None, width=dp(78)))
+    fila.add_widget(boton("Enviar", lambda: enviar(), TEMA["VERDE"] if SENCILLO else VERDE, alto=48,
+                          size_hint_x=None, width=dp(78)))
     capa.add_widget(fila)
     p_ini.add_widget(capa)
     sm.add_widget(p_ini)
@@ -472,6 +520,9 @@ def construir_interfaz(core, consola=None):
         import diseno_kira as dk_
         import programar_kira as pk_
         orden = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", texto, flags=re.I) or texto  # escrito «Kira, …»
+        if SENCILLO:                                    # v2.87: dos pantallas; el TRABAJO lo hace KiraOS
+            enviar_sencillo(texto, orden)
+            return
         if callable(getattr(core, "es_orden_de_modulo", None)) and core.es_orden_de_modulo(orden):
             hablar_con_kira(orden)                      # una MEJORA INSTALADA: se usa ella (nada la intercepta)
             return
@@ -623,8 +674,9 @@ def construir_interfaz(core, consola=None):
             return
         hablar_con_kira(texto)
 
-    def hablar_con_kira(texto):
-        """La charla de siempre (y las órdenes del núcleo y de las mejoras instaladas): la respuesta va apareciendo."""
+    def hablar_con_kira(texto, oid=None):
+        """La charla de siempre (y las órdenes del núcleo y de las mejoras instaladas): la respuesta va apareciendo.
+        `oid`: la orden apuntada (v2.87) para dejar en el panel cómo acabó."""
         try: core.registrar_actividad()       # me hablas: te atiendo y pauso el pensar (vuelve solo tras 5 min)
         except Exception: pass
         st["ocupado"] = True
@@ -654,6 +706,8 @@ def construir_interfaz(core, consola=None):
 
         def terminado(r):
             st["ocupado"] = False
+            if oid:
+                apuntar_fin(oid, r if isinstance(r, Exception) else r[0], not isinstance(r, Exception))
             if st.pop("charla_cortada", False):        # la cortaste con otra orden: no se dice
                 return
             if isinstance(r, Exception):
@@ -762,6 +816,7 @@ def construir_interfaz(core, consola=None):
         """«estudia X»: estudia de verdad (webs oficiales + cursos completos de YouTube) con BARRA animada; al acabar,
         sigue pensando sobre ello cuando no esté estudiando."""
         tarea_empieza("estudio", f"estudiar {tema}", lambda t_=tema: estudiar_por_voz(t_), {"tema": tema})
+        oid = apuntar(f"estudia {tema}", "movil")
         decir(f"Me pongo a estudiar «{tema}»: busco webs oficiales, tutoriales y cursos completos gratis de YouTube. "
               "Verás la barra mientras estudio; cuando acabe, sigo pensando sobre ello.")
 
@@ -770,6 +825,7 @@ def construir_interfaz(core, consola=None):
 
         def hecho(r):
             t = tarea_fin(True)
+            apuntar_fin(oid, r, not isinstance(r, Exception))
             if t is not None and t.interrumpida:
                 return
             decir(r if isinstance(r, str) else "He terminado de estudiar.")
@@ -780,8 +836,10 @@ def construir_interfaz(core, consola=None):
         respuesta (y, si es un programa, te lo dejo en el editor). «para» la corta también allí."""
         casa = core._casa()
         tarea_empieza("portatil", orden, lambda o_=orden: mando_por_voz(o_), {"pedido": orden})
+        oid = apuntar(orden, "kiraos")
         modelo.poner_estado("pensando")
-        decir("Se lo paso a mi Kira del portátil. Te enseño cómo va.", hablar=False)
+        decir(("Se lo paso a KiraOS. Te enseño cómo va." if SENCILLO else
+               "Se lo paso a mi Kira del portátil. Te enseño cómo va."), hablar=False)
 
         def trabajo():
             return casa.orden(orden, al_paso=lambda fr, txt: avance(txt, fr if fr is not None else 0.5),
@@ -793,10 +851,23 @@ def construir_interfaz(core, consola=None):
             if t is not None and t.interrumpida:
                 return
             if isinstance(r, Exception):
-                decir(f"[x] No llego a mi Kira del portátil: {r}. Si quieres que lo haga aquí, di «trabaja en el móvil».",
-                      hablar=False)
+                if SENCILLO and "ocupad" in str(r):     # KiraOS está con otra cosa: queda en la cola
+                    import ordenes_kira as ok_
+                    ok_.actualizar(core.dir, oid, estado="pendiente", respuesta=str(r))
+                    decir(f"{r} Te lo apunto: se lo doy en cuanto acabe.", hablar=False)
+                    return
+                apuntar_fin(oid, r, False)
+                decir(f"[x] No llego a mi Kira del portátil: {r}." + ("" if SENCILLO else
+                      " Si quieres que lo haga aquí, di «trabaja en el móvil»."), hablar=False)
                 return
             resp = r.get("respuesta") or ("Parado." if r.get("estado") == "cancelado" else "Hecho.")
+            apuntar_fin(oid, resp, r.get("estado") == "hecho",
+                        estado={"hecho": "hecha", "cancelado": "cancelada"}.get(r.get("estado"), "error"))
+            if SENCILLO:                                # no hay editor: el trabajo se ve en el panel
+                st["ultimo_trabajo"] = {"orden": orden, "respuesta": resp, "codigo": r.get("codigo"),
+                                        "nombre": r.get("nombre")}
+                decir(resp + (" El código lo tiene KiraOS; te lo enseño en el panel." if r.get("codigo") else ""))
+                return
             if r.get("codigo"):
                 codigo_ui["cargar_en_editor"](r["codigo"], r.get("nombre") or "",
                                               "Escrito y probado por mi Kira del portátil en modo seguro. "
@@ -818,12 +889,167 @@ def construir_interfaz(core, consola=None):
             decir("Vale: lo hago todo aquí en el móvil. Para volver, di «modo mando».")
         elif que == "estado":
             decir(core.mando_estado(), hablar=False)
+        elif que == "memoria" and SENCILLO:
+            sincronizar_ya()
         elif que == "memoria":
             tarea_empieza("memoria", "pasar mi memoria al portátil", lambda: mando_control("memoria"))
             decir("Empaqueto lo que he aprendido y se lo paso a mi Kira del portátil.")
             en_hilo(lambda: core.pasar_memoria(al_paso=lambda fr, txt: avance(txt, fr)),
                     lambda r: (tarea_fin(isinstance(r, str) and not r.startswith("[x]")),
                                decir(r if isinstance(r, str) else f"[x] {r}", hablar=False)))
+
+
+    # ---------- v2.87 MODO SENCILLO: hablar + panel; Kira app piensa y estudia; KiraOS (el cerebro central) trabaja ----
+    import ordenes_kira as ordk_
+
+    def apuntar(texto, destino, estado="en curso"):
+        try:
+            return ordk_.apuntar(core.dir, texto, destino, estado)
+        except Exception:
+            return None
+
+    def apuntar_fin(oid, r, ok=True, estado=None):
+        if not oid:
+            return
+        try:
+            ordk_.actualizar(core.dir, oid, estado=estado or ("hecha" if ok else "error"),
+                             respuesta=str(r if not isinstance(r, Exception) else f"[x] {r}"))
+        except Exception:
+            pass
+
+    def trabajo_a_kiraos(orden):
+        """Programar, juegos, apps, diseños, pintar, experimentar, mejoras, su máquina…: lo hace KiraOS. En casa se lo
+        paso ya (con la barra); fuera, lo apunto y se lo doy yo sola en cuanto la vea."""
+        listo = False
+        try:
+            listo = core.mando_listo()
+        except Exception:
+            listo = False
+        if listo:
+            mando_por_voz(orden)
+            return
+        apuntar(orden, "kiraos", "pendiente")
+        n = len(ordk_.pendientes_kiraos(core.dir))
+        decir("Eso lo hace KiraOS y ahora no la veo en la WiFi de casa. Te lo apunto"
+              + (f" (ya van {n})" if n > 1 else "") + " y se lo doy yo sola en cuanto llegue. Mientras, sigo "
+              "pensando y estudiando aquí.", hablar=True)
+
+    def sincronizar_ya():
+        tarea_empieza("memoria", "sincronizar con KiraOS", lambda: sincronizar_ya())
+        decir("Me sincronizo con KiraOS: le doy lo nuevo y me traigo lo suyo (se suma; no se borra nada).",
+              hablar=False)
+        en_hilo(lambda: core.sincronizar(al_paso=lambda fr, txt: avance(txt, fr)),
+                lambda r: (tarea_fin(isinstance(r, str) and not r.startswith("[x]")),
+                           decir(r if isinstance(r, str) else f"[x] {r}", hablar=False)))
+
+    def no_esta_en_sencillo(que="Esa pantalla"):
+        decir(f"{que} ya no está en el móvil: ahora la app tiene solo dos pantallas (hablar conmigo y el panel) y el "
+              "trabajo lo hace KiraOS. Pídemelo y se lo paso. Si quieres las pantallas de antes, di «modo completo».",
+              hablar=False)
+
+    def enviar_sencillo(texto, orden):
+        import mando_kira as mdk_
+        import inicio_kira as ik2_
+        import cierres_kira as ck_
+        m_app = mdk_.orden_modo_app(orden)
+        if m_app:
+            guardar_modo_app(dir_datos, m_app)
+            decir("Hecho: " + ("al volver a abrir la app tendrás otra vez todas las pantallas y salas de antes."
+                               if m_app == "completo" else "al volver a abrir la app tendrás solo las dos pantallas."))
+            return
+        ctl_mando = mdk_.orden_control(orden)
+        if ctl_mando:
+            mando_control(ctl_mando)
+            return
+        if re.match(r"^(?:sincron[ií]zate|sincroniza(?:te)?(?:\s+con\s+kiraos)?|sincron[ií]a)$",
+                    esk._norm(orden)):
+            sincronizar_ya()
+            return
+        if callable(getattr(core, "es_orden_de_modulo", None)) and core.es_orden_de_modulo(orden):
+            hablar_con_kira(orden, apuntar(orden, "movil"))   # una mejora INSTALADA en el móvil: se usa aquí
+            return
+        if ck_.pide_seguir(orden):
+            if not retomar_aparcada():
+                decir("No tengo nada a medias aquí. ¿Qué quieres que haga?")
+            return
+        tema_est = None
+        try:
+            tema_est = core.es_estudia_general(orden)    # ESTUDIAR: lo hace el móvil (y se lo pasa a KiraOS)
+        except Exception:
+            tema_est = None
+        if tema_est:
+            estudiar_por_voz(tema_est)
+            return
+        import pdf_kira as pdk_
+        o_pdf = pdk_.interpretar(orden)
+        if o_pdf is not None:
+            pdf_sencillo(o_pdf, orden)
+            return
+        if ik2_.pedido_con_codigo(orden):
+            decir("En el móvil ya no tengo editor: el código lo escribe y lo prueba KiraOS. Pídeme «mejora para el "
+                  "móvil: …» y KiraOS me la prepara; luego la instalas tú desde el panel con dos toques.", hablar=False)
+            return
+        pedido = ik2_.pedido_mejora(orden)
+        if pedido is not None:                          # una mejora para MÍ: la escribe y prueba KiraOS
+            trabajo_a_kiraos(mdk_.orden_de_mejora(pedido))
+            return
+        import experimentos_kira as ex_
+        import programar_kira as pk_
+        import diseno_kira as dk_
+        import web_juegos_kira as wj_
+        import librerias_kira as lbk_
+        import defensa_juego_kira as dfj_
+        es_t = mdk_.es_trabajo(orden)
+        if not es_t:
+            try:
+                import pintor_kira as pin_
+                es_t = bool(ex_.pedido_experimento(orden) is not None or pk_.pedido_programa(orden) is not None
+                            or dk_.pedido_diseno(orden) is not None or wj_.pedido_app(orden) is not None
+                            or lbk_.interpretar(orden) is not None or dfj_.es_orden(orden)
+                            or pin_.pedido_imagen(orden, siempre_dibuja=False) is not None)
+            except Exception:
+                es_t = False
+        if es_t:
+            trabajo_a_kiraos(orden)
+            return
+        acc = accion_de(texto)
+        if acc and acc["tipo"] == "juego":
+            no_esta_en_sencillo("Los juegos")
+            return
+        if acc and acc["tipo"] == "pantalla" and not existe_pantalla(
+                acc["destino"].split(":", 1)[0] if acc["destino"].startswith("panel:") else acc["destino"]):
+            no_esta_en_sencillo()
+            return
+        if moverse(texto):                              # abrir apps, atrás, el panel…
+            return
+        hablar_con_kira(texto, apuntar(orden, "movil"))   # charla, pensar, vídeos, internet, recuerdos…
+
+    def pdf_sencillo(o, orden):
+        """Los PDF son para ESTUDIAR: los lee, resume y estudia el móvil (y lo aprendido viaja a KiraOS)."""
+        if o["accion"] in ("leer", "abrir"):
+            decir("En el móvil ya no tengo pantalla de lectura. Dime «resume el pdf N», «estudia el pdf N» o "
+                  "pregúntame por él.", hablar=False)
+            return
+        if o["accion"] == "lista":
+            decir(core.pdfs.texto_lista(), hablar=False)
+            return
+        tarea_empieza("pdf", orden[:60], lambda o_=o, t_=orden: pdf_sencillo(o_, t_))
+        oid = apuntar(orden, "movil")
+        modelo.poner_estado("pensando")
+
+        def fin(r):
+            t = tarea_fin(not isinstance(r, Exception))
+            apuntar_fin(oid, r, not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
+            decir(f"[x] {r}" if isinstance(r, Exception) else str(r).replace("[OK] ", "").replace("[i] ", ""))
+        en_hilo(lambda: core.orden_pdf(orden, al_progreso=lambda f, t: avance(t, f)), fin)
+
+    def existe_pantalla(nombre):
+        try:
+            return sm.has_screen(nombre)
+        except AttributeError:
+            return True
 
     def mejora_con_codigo(orden):
         """La mejora sale del código que tienes en el editor (o de lo último leído: captura o internet). Si ya es un
@@ -1692,68 +1918,275 @@ def construir_interfaz(core, consola=None):
     # =================================================================================
     #  MENÚ
     # =================================================================================
-    p_menu = Screen(name="menu")
-    fondo_claro(p_menu)
-    raiz_menu = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
-    cab_m = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-    cab_m.add_widget(boton("‹ Kira", lambda: ir("inicio"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
-    cab_m.add_widget(est.ajustar(Label(text="Menú", color=NEON, font_size=tam(20), bold=True, halign="left", **FUENTE), lineas=1))
-    raiz_menu.add_widget(cab_m)
-    sv_m = ScrollView(do_scroll_x=False)
-    rejilla = GridLayout(cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(92), row_force_default=True)
-    rejilla.bind(minimum_height=rejilla.setter("height"))
-    menu_st = {"todos": False}
+    # =================================================================================
+    #  v2.87 EL PANEL (modo sencillo): cerebro, conversaciones, qué hacen Kira app y KiraOS, órdenes, equipos
+    # =================================================================================
+    def montar_tablero():
+        import tablero_kira as tbk
+        P = TEMA
+        modelo_movil = ""
+        if platform == "android":
+            try:
+                from jnius import autoclass                # en el hilo principal (regla del proyecto)
+                b = autoclass("android.os.Build")
+                modelo_movil = f"{b.MANUFACTURER} {b.MODEL}".strip()
+            except Exception:
+                modelo_movil = ""
+        tab = {"hola": None, "cerebro": "", "mirando": False, "t_red": 0.0, "firma": None, "confirmar": None}
 
-    def ajustar_columnas(*_):
-        rejilla.cols = 2 if Window.width < dp(720) else (3 if Window.width < dp(1100) else 4)
-    Window.bind(width=ajustar_columnas)
-    ajustar_columnas()
+        p = Screen(name="menu")
+        with p.canvas.before:
+            Color(*P["FONDO"])
+            rect = Rectangle(pos=p.pos, size=p.size)
+        p.bind(pos=lambda w, v: setattr(rect, "pos", v), size=lambda w, v: setattr(rect, "size", v))
+        raiz = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+        cab = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        cab.add_widget(boton_t("‹ Hablar", lambda: ir("inicio"), P["GRIS"], alto=44, size_hint_x=None, width=dp(104)))
+        cab.add_widget(est.ajustar(Label(text="KIRA · panel", color=P["NEON"], font_size=tam(19), bold=True,
+                                         halign="left", **FUENTE), lineas=1))
+        cab.add_widget(boton_t("Actualizar", lambda: (mirar_red(), pintar(True)), P["GRIS"], alto=44,
+                               size_hint_x=None, width=dp(104), font_size=tam(13)))
+        raiz.add_widget(cab)
+        sv = ScrollView(do_scroll_x=False)
+        lista = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(10), padding=(0, 0, 0, dp(16)))
+        lista.bind(minimum_height=lista.setter("height"))
+        sv.add_widget(lista)
+        raiz.add_widget(sv)
+        p.add_widget(raiz)
+        sm.add_widget(p)
 
-    def baldosa(a):
-        """Tarjeta del menú: título arriba (una línea) y descripción corta debajo (hasta dos), cada uno en su sitio."""
-        tinta = mk.color_oscuro(a["color"])
-        t = Button(text=f"[b]{a['titulo']}[/b]", markup=True, halign="left", valign="top", background_normal="",
-                   background_down="", background_color=(0, 0, 0, 0), color=tinta, font_size=tam(15.5),
-                   shorten=True, shorten_from="right", **FUENTE)
-        fondo_c = est.fondo_redondeado(t, mk.color_claro(a["color"]), radio=14)
-        with t.canvas.before:                                     # franja de color a la izquierda
-            Color(*a["color"], 1)
-            franja = Rectangle(pos=t.pos, size=(dp(5), t.height))
-        desc = est.ajustar(Label(text=a["desc"], color=tinta[:3] + (0.8,), font_size=tam(13), halign="left",
-                                 size_hint=(None, None), **FUENTE), minimo=10.5, lineas=2, margen=0)
-        t.add_widget(desc)
+        def mirar_red():
+            """Lo que hay que preguntar por la red (KiraOS y el cerebro) va en segundo plano: la pantalla no se traba."""
+            if tab["mirando"]:
+                return
+            tab["mirando"], tab["t_red"] = True, time.time()
 
-        def colocar(*_):
-            t.text_size = (max(1, t.width - dp(28)), max(1, t.height - dp(22)))
-            franja.pos, franja.size = (t.x + dp(6), t.y + dp(12)), (dp(4), max(1, t.height - dp(24)))
-            desc.size = (max(1, t.width - dp(28)), max(1, t.height * 0.5))
-            desc.pos = (t.x + dp(14), t.y + dp(8))
-        t.bind(pos=colocar, size=colocar)
-        t.bind(on_press=lambda *_: setattr(fondo_c, "a", 0.75),
-               on_release=lambda _b, d=a["destino"]: (setattr(fondo_c, "a", 1),
-                                                      ir(d[1] if d[0] == "pantalla" else "panel",
-                                                         d[1] if d[0] == "panel" else None)))
-        return t
+            def trabajo():
+                c = core._casa()
+                h = None
+                try:
+                    h = c.nucleo_hola() if c is not None and c.nucleo_disponible() else None
+                except Exception:
+                    h = None
+                cer = ""
+                try:
+                    cer = core.cerebro_ia.estado_texto(core._leer_clave_api())
+                except Exception as e:
+                    cer = f"No he podido mirar el cerebro: {e}"
+                return h, cer
 
-    def pintar_menu():
-        rejilla.clear_widgets()
-        for a in mk.principales():
-            rejilla.add_widget(baldosa(a))
-        if menu_st["todos"]:
-            for a in mk.secundarios():
+            def hecho(r):
+                tab["mirando"] = False
+                if not isinstance(r, Exception):
+                    tab["hola"], tab["cerebro"] = r
+                    pintar()
+            en_hilo(trabajo, hecho)
+
+        def datos():
+            d = {"tarea": gestor.resumen(), "cerebro": tab["cerebro"], "kiraos": tab["hola"],
+                 "ultimo": st.get("ultimo_trabajo"), "charla": conv.turnos(8),
+                 "equipo_movil": tbk.equipo_movil(core.dir, modelo_movil)}
+            for k, f in (("movil", lambda: core.actividad()), ("sinc", lambda: sc_.estado_movil(core.dir)),
+                         ("pendiente", lambda: sc_.pendiente_movil(core.dir, core.recuerdos)),
+                         ("ordenes", lambda: ordk_.ultimas(core.dir, 10)),
+                         ("mejoras", lambda: [m for m in sc_.mejoras_recibidas(core.dir, solo_pendientes=False)
+                                              if m.get("estado") in ("recibida", "probada")])):
+                try:
+                    d[k] = f()
+                except Exception:
+                    d[k] = None
+            return d
+
+        def etiqueta(texto, color, tamano, negrita=False):
+            lb = Label(text=texto, color=color, font_size=tam(tamano), bold=negrita, size_hint_y=None, halign="left",
+                       valign="top", line_height=1.12, **FUENTE)
+            lb.bind(width=lambda w, a: setattr(w, "text_size", (a, None)),
+                    texture_size=lambda w, ts: setattr(w, "height", ts[1] + dp(4)))
+            return lb
+
+        def tarjeta(sec):
+            caja = BoxLayout(orientation="vertical", size_hint_y=None, padding=(dp(12), dp(10)), spacing=dp(6))
+            caja.bind(minimum_height=caja.setter("height"))
+            est.fondo_redondeado(caja, P["TARJETA"], radio=14)
+            caja.add_widget(etiqueta(sec["titulo"], P["NEON"], 13.5, True))
+            caja.add_widget(etiqueta(sec["texto"], P["TXT"], 14))
+            for etq, acc in sec.get("botones") or []:
+                conf = tab["confirmar"]
+                if conf and acc == "aplicar:" + conf[0] and time.time() - conf[1] < 8:
+                    etq = f"Toca OTRA VEZ para instalar «{conf[0]}»"
+                verde = acc.startswith(("aplicar:", "sincronizar", "probar:"))
+                caja.add_widget(boton_t(etq, lambda a_=acc: accion(a_), P["VERDE"] if verde else P["GRIS"], alto=42,
+                                        font_size=tam(13.5)))
+            return caja
+
+        def pintar(forzar=False):
+            secs = tbk.secciones(datos())
+            firma = repr([(x["titulo"], x["texto"], x.get("botones")) for x in secs]) + repr(tab["confirmar"])
+            if firma == tab["firma"] and not forzar:
+                return
+            tab["firma"] = firma
+            lista.clear_widgets()
+            for sec in secs:
+                lista.add_widget(tarjeta(sec))
+
+        def refrescar(_dt):
+            if sm.current != "menu":
+                return
+            if time.time() - tab["t_red"] > 10:
+                mirar_red()
+            pintar()
+        Clock.schedule_interval(refrescar, 3.0)
+        ganchos["menu"] = lambda: (mirar_red(), pintar(True))
+
+        # ---------- lo que hace cada botón ----------
+        def probar_mejora(nombre):
+            m = next((x for x in sc_.mejoras_recibidas(core.dir, solo_pendientes=False) if x["nombre"] == nombre), None)
+            if m is None:
+                return
+            tarea_empieza("mejora", f"probar «{nombre}» (de KiraOS)", lambda n_=nombre: probar_mejora(n_))
+            decir(f"Pruebo «{nombre}» en mi laboratorio del móvil, tal cual me la manda KiraOS…", hablar=False)
+
+            def fin(r):
+                tarea_fin(not isinstance(r, Exception) and bool(r.get("aprobable")))
+                if isinstance(r, Exception):
+                    decir(f"[x] No he podido probarla: {r}", hablar=False)
+                elif r.get("aprobable"):
+                    sc_.marcar_mejora(core.dir, nombre, "probada")
+                    decir(f"«{nombre}» pasa mi laboratorio. Si quieres instalarla, toca «Instalar» DOS veces en el panel.")
+                else:
+                    decir(f"«{nombre}» no pasa mi laboratorio del móvil:\n" + str(r.get("texto", ""))[:400], hablar=False)
+                pintar(True)
+            en_hilo(lambda: ctl.probar_modulo(m["codigo"], nombre, "mejora de KiraOS: " + m.get("descripcion", "")),
+                    fin)
+
+        def aplicar_mejora(nombre):
+            pend = ctl.pendiente
+            if pend is None or getattr(pend, "nombre", "") != nombre:
+                decir("Primero la vuelvo a probar en mi laboratorio (esa prueba ya no la tengo a mano).", hablar=False)
+                tab["confirmar"] = None
+                probar_mejora(nombre)
+                return
+            conf = tab["confirmar"]
+            if not conf or conf[0] != nombre or time.time() - conf[1] > 8:
+                tab["confirmar"] = (nombre, time.time())       # PRIMER toque: pide el segundo
+                pintar(True)
+                return
+            tab["confirmar"] = None                             # SEGUNDO toque: ahora sí
+            r = ctl.aplicar(confirmado=True)
+            if r.get("ok"):
+                sc_.marcar_mejora(core.dir, nombre, "instalada")
+            decir(str(r.get("texto", "")).replace("[OK] ", "").replace("[x] ", ""), hablar=False)
+            pintar(True)
+
+        def accion(a):
+            if a == "pensar":
+                on = bool(getattr(core, "_pensar_on", False))
+                core.pensar_sola(not on)
+                decir("Vale, dejo de pensar sola." if on else
+                      "Me pongo a pensar. Cuando me hables, paro para atenderte y vuelvo cuando lleves un rato sin "
+                      "pedirme nada.", hablar=False)
+            elif a == "buscar_kiraos":
+                decir("Busco a KiraOS en la WiFi de casa…", hablar=False)
+                en_hilo(lambda: core.mando_listo(esperar=True),
+                        lambda r: (mirar_red(), decir("¡La veo! Me sincronizo sola." if r is True else
+                                                      "No la veo: ¿está el portátil encendido y en la misma WiFi?",
+                                                      hablar=False)))
+            elif a == "parar_kiraos":
+                en_hilo(lambda: core._casa().cancelar_nucleo(),
+                        lambda r: decir("Le he dicho a KiraOS que pare." if r is True else "No he podido llegar a KiraOS.",
+                                        hablar=False))
+            elif a == "sincronizar":
+                sincronizar_ya()
+            elif a == "ir_cerebro":
+                ir("cerebro_kira")
+                return
+            elif a == "ir_ajustes":
+                ir("panel")
+                return
+            elif a == "ir_inicio":
+                ir("inicio")
+                return
+            elif a == "ir_lector":
+                ir("lector")
+                return
+            elif a.startswith("probar:"):
+                probar_mejora(a[7:])
+            elif a.startswith("aplicar:"):
+                aplicar_mejora(a[8:])
+                return
+            elif a.startswith("descartar:"):
+                sc_.marcar_mejora(core.dir, a[10:], "rechazada")
+                decir(f"Descartada «{a[10:]}». No se instala nada.", hablar=False)
+            pintar(True)
+
+        pintar(True)
+        return {"pintar": pintar, "accion": accion, "mirar_red": mirar_red, "tab": tab}
+
+    if SENCILLO:
+        tablero = montar_tablero()
+    else:
+        p_menu = Screen(name="menu")
+        fondo_claro(p_menu)
+        raiz_menu = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        cab_m = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        cab_m.add_widget(boton("‹ Kira", lambda: ir("inicio"), GRIS, alto=44, size_hint_x=None, width=dp(100)))
+        cab_m.add_widget(est.ajustar(Label(text="Menú", color=NEON, font_size=tam(20), bold=True, halign="left", **FUENTE), lineas=1))
+        raiz_menu.add_widget(cab_m)
+        sv_m = ScrollView(do_scroll_x=False)
+        rejilla = GridLayout(cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(92), row_force_default=True)
+        rejilla.bind(minimum_height=rejilla.setter("height"))
+        menu_st = {"todos": False}
+
+        def ajustar_columnas(*_):
+            rejilla.cols = 2 if Window.width < dp(720) else (3 if Window.width < dp(1100) else 4)
+        Window.bind(width=ajustar_columnas)
+        ajustar_columnas()
+
+        def baldosa(a):
+            """Tarjeta del menú: título arriba (una línea) y descripción corta debajo (hasta dos), cada uno en su sitio."""
+            tinta = mk.color_oscuro(a["color"])
+            t = Button(text=f"[b]{a['titulo']}[/b]", markup=True, halign="left", valign="top", background_normal="",
+                       background_down="", background_color=(0, 0, 0, 0), color=tinta, font_size=tam(15.5),
+                       shorten=True, shorten_from="right", **FUENTE)
+            fondo_c = est.fondo_redondeado(t, mk.color_claro(a["color"]), radio=14)
+            with t.canvas.before:                                     # franja de color a la izquierda
+                Color(*a["color"], 1)
+                franja = Rectangle(pos=t.pos, size=(dp(5), t.height))
+            desc = est.ajustar(Label(text=a["desc"], color=tinta[:3] + (0.8,), font_size=tam(13), halign="left",
+                                     size_hint=(None, None), **FUENTE), minimo=10.5, lineas=2, margen=0)
+            t.add_widget(desc)
+
+            def colocar(*_):
+                t.text_size = (max(1, t.width - dp(28)), max(1, t.height - dp(22)))
+                franja.pos, franja.size = (t.x + dp(6), t.y + dp(12)), (dp(4), max(1, t.height - dp(24)))
+                desc.size = (max(1, t.width - dp(28)), max(1, t.height * 0.5))
+                desc.pos = (t.x + dp(14), t.y + dp(8))
+            t.bind(pos=colocar, size=colocar)
+            t.bind(on_press=lambda *_: setattr(fondo_c, "a", 0.75),
+                   on_release=lambda _b, d=a["destino"]: (setattr(fondo_c, "a", 1),
+                                                          ir(d[1] if d[0] == "pantalla" else "panel",
+                                                             d[1] if d[0] == "panel" else None)))
+            return t
+
+        def pintar_menu():
+            rejilla.clear_widgets()
+            for a in mk.principales():
                 rejilla.add_widget(baldosa(a))
-        btn_mas.text = "Menos apartados" if menu_st["todos"] else f"Más apartados ({len(mk.secundarios())})"
+            if menu_st["todos"]:
+                for a in mk.secundarios():
+                    rejilla.add_widget(baldosa(a))
+            btn_mas.text = "Menos apartados" if menu_st["todos"] else f"Más apartados ({len(mk.secundarios())})"
 
-    def alternar_mas():
-        menu_st["todos"] = not menu_st["todos"]
+        def alternar_mas():
+            menu_st["todos"] = not menu_st["todos"]
+            pintar_menu()
+        btn_mas = boton("", alternar_mas, GRIS, alto=44)
+        sv_m.add_widget(rejilla)
+        raiz_menu.add_widget(sv_m)
+        raiz_menu.add_widget(btn_mas)
+        p_menu.add_widget(raiz_menu)
+        sm.add_widget(p_menu)
         pintar_menu()
-    btn_mas = boton("", alternar_mas, GRIS, alto=44)
-    sv_m.add_widget(rejilla)
-    raiz_menu.add_widget(sv_m)
-    raiz_menu.add_widget(btn_mas)
-    p_menu.add_widget(raiz_menu)
-    sm.add_widget(p_menu)
-    pintar_menu()
 
     # =================================================================================
     #  PANEL (Sala, Mejoras, Módulos, Consola, Ajustes) dentro de la interfaz
@@ -2102,11 +2535,16 @@ def construir_interfaz(core, consola=None):
         for nombre, clase in sorted(getattr(core, "juegos_modulos", {}).items()):
             lista.append((nombre, lambda c=clase: codigo_ui["empezar_juego"]("", volver="juegos", juego=c())))
         return lista
-    codigo_ui = montar_codigo(sm, {
-        "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
-        "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
-        "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO, "dir_datos": dir_datos, "ganchos": ganchos,
-        "juegos_extra": juegos_de_mejoras, "como_app": lambda: app_por_voz("app")})
+    if SENCILLO:                                   # sin editor: el código lo tiene KiraOS; aquí se enseña en el panel
+        codigo_ui = _Nada(cargar_en_editor=lambda codigo, nombre="", aviso="": st.__setitem__(
+                              "ultimo_trabajo", {"orden": nombre or "código", "respuesta": aviso, "codigo": codigo}),
+                          codigo_actual=lambda: ("", ""))
+    else:
+        codigo_ui = montar_codigo(sm, {
+            "boton": boton, "entrada": entrada, "texto_largo": texto_largo, "en_hilo": en_hilo, "pantalla": pantalla,
+            "ir": lambda *a, **k: ir(*a, **k), "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
+            "FUENTE": FUENTE, "FUENTE_MONO": FUENTE_MONO, "dir_datos": dir_datos, "ganchos": ganchos,
+            "juegos_extra": juegos_de_mejoras, "como_app": lambda: app_por_voz("app")})
 
     # =================================================================================
     #  CEREBRO Y OÍDO PROPIOS
@@ -2130,24 +2568,29 @@ def construir_interfaz(core, consola=None):
     # =================================================================================
     #  PINTOR (imágenes con su propia IA) e INTERNET (buscar, leer y aprender)
     # =================================================================================
-    pintor_ui = montar_pintor(sm, {"boton": boton, "entrada": entrada, "pantalla": pantalla, "en_hilo": en_hilo,
-                                   "ganchos": ganchos, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE,
-                                   "ROJO": ROJO, "NEON": NEON, "FUENTE": FUENTE, "core": core, "voz": voz,
-                                   "ajustes": ajustes})
-    internet_ui = montar_internet(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
-                                       "pantalla": pantalla, "en_hilo": en_hilo, "ganchos": ganchos, "TXT": TXT,
-                                       "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "NEON": NEON, "FUENTE": FUENTE,
-                                       "core": core,
-                                       "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
+    if SENCILLO:                                   # pintar = trabajo de KiraOS; internet y PDF, por el núcleo
+        pintor_ui, internet_ui, librerias_ui = _Nada(), _Nada(), _Nada()
+        pdf_ui = _Nada(descargar=lambda url, al_terminar=None: en_hilo(
+            lambda: core.orden_pdf("descarga este pdf: " + url), al_terminar or (lambda r: decir(str(r)))))
+    else:
+        pintor_ui = montar_pintor(sm, {"boton": boton, "entrada": entrada, "pantalla": pantalla, "en_hilo": en_hilo,
+                                       "ganchos": ganchos, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE,
+                                       "ROJO": ROJO, "NEON": NEON, "FUENTE": FUENTE, "core": core, "voz": voz,
+                                       "ajustes": ajustes})
+        internet_ui = montar_internet(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
+                                           "pantalla": pantalla, "en_hilo": en_hilo, "ganchos": ganchos, "TXT": TXT,
+                                           "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "NEON": NEON, "FUENTE": FUENTE,
+                                           "core": core,
+                                           "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
-    pdf_ui = montar_pdf(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo, "pantalla": pantalla,
-                             "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
-                             "FUENTE": FUENTE, "core": core, "avance": lambda t: avance(t)})
+        pdf_ui = montar_pdf(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo, "pantalla": pantalla,
+                                 "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS, "VERDE": VERDE, "ROJO": ROJO,
+                                 "FUENTE": FUENTE, "core": core, "avance": lambda t: avance(t)})
 
-    librerias_ui = montar_librerias(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
-                                         "pantalla": pantalla, "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS,
-                                         "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE, "core": core,
-                                         "avance": lambda t, f=None: avance(t, f), "decir": lambda t: decir(t)})
+        librerias_ui = montar_librerias(sm, {"boton": boton, "entrada": entrada, "texto_largo": texto_largo,
+                                             "pantalla": pantalla, "en_hilo": en_hilo, "TXT": TXT, "TENUE": TENUE, "GRIS": GRIS,
+                                             "VERDE": VERDE, "ROJO": ROJO, "FUENTE": FUENTE, "core": core,
+                                             "avance": lambda t, f=None: avance(t, f), "decir": lambda t: decir(t)})
 
     def libreria_por_voz(o, orden):
         """«instala la librería X»: la enseña en «Librerías» y espera tus dos toques; «mis librerías»; «quita…»."""
@@ -2271,63 +2714,68 @@ def construir_interfaz(core, consola=None):
     # =================================================================================
     #  SALA HACKER (habitación 3D, terminal, biblioteca)
     # =================================================================================
-    hacker = montar_sala_hacker(sm, {
-        **PIEZAS_SALA, "en_hilo": en_hilo,
-        "ir": lambda *a, **k: ir(*a, **k), "ctl": ctl, "core": core, "cerebro": cerebro, "voz": voz,
-        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes, "consola": con_trab,
-        "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
+    if SENCILLO:                                   # v2.87: las salas ya no se montan en el móvil
+        hacker, diseno, ciber, defensa_pant = _Nada(), _Nada(atras={}), _Nada(atras={}), None
+    else:
+        hacker = montar_sala_hacker(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo,
+            "ir": lambda *a, **k: ir(*a, **k), "ctl": ctl, "core": core, "cerebro": cerebro, "voz": voz,
+            "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes, "consola": con_trab,
+            "abrir_en_editor": lambda codigo, aviso="": codigo_ui["cargar_en_editor"](codigo, "", aviso)})
 
-    # =================================================================================
-    #  SALA DE DISEÑO, SALA DE CINE, MEDIATECA, REPRODUCTOR
-    # =================================================================================
-    diseno = montar_sala_diseno(sm, {
-        **PIEZAS_SALA, "en_hilo": en_hilo,
-        "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz,
-        "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
+        # =================================================================================
+        #  SALA DE DISEÑO, SALA DE CINE, MEDIATECA, REPRODUCTOR
+        # =================================================================================
+        diseno = montar_sala_diseno(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo,
+            "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz,
+            "ganchos": ganchos, "dir_datos": dir_datos, "ajustes": ajustes})
 
-    # =================================================================================
-    #  JUEGO DE DEFENSA (laberinto Matrix en 1ª persona)
-    # =================================================================================
-    try:
-        defensa_pant = montar_defensa(sm, {
-            **PIEZAS_SALA, "en_hilo": en_hilo, "ir": lambda *a, **k: ir(*a, **k),
-            "core": core, "voz": voz, "ganchos": ganchos, "dir_datos": dir_datos, "consola": con_trab})
-    except Exception:
-        defensa_pant = None
+        # =================================================================================
+        #  JUEGO DE DEFENSA (laberinto Matrix en 1ª persona)
+        # =================================================================================
+        try:
+            defensa_pant = montar_defensa(sm, {
+                **PIEZAS_SALA, "en_hilo": en_hilo, "ir": lambda *a, **k: ir(*a, **k),
+                "core": core, "voz": voz, "ganchos": ganchos, "dir_datos": dir_datos, "consola": con_trab})
+        except Exception:
+            defensa_pant = None
 
-    # =================================================================================
-    #  SALA DE CIBERSEGURIDAD (búnker de solo lectura y aprendizaje)
-    # =================================================================================
-    ciber = montar_sala_ciber(sm, {
-        **PIEZAS_SALA, "en_hilo": en_hilo,
-        "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz, "ganchos": ganchos,
-        "dir_datos": dir_datos, "ajustes": ajustes})
+        # =================================================================================
+        #  SALA DE CIBERSEGURIDAD (búnker de solo lectura y aprendizaje)
+        # =================================================================================
+        ciber = montar_sala_ciber(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo,
+            "ir": lambda *a, **k: ir(*a, **k), "core": core, "voz": voz, "ganchos": ganchos,
+            "dir_datos": dir_datos, "ajustes": ajustes})
 
-    # =================================================================================
-    #  MESA DE MEZCLA Y EDITOR DE VÍDEO
-    # =================================================================================
-    montar_av(sm, {
-        **PIEZAS_SALA, "en_hilo": en_hilo,
-        "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos, "dir_datos": dir_datos})
+        # =================================================================================
+        #  MESA DE MEZCLA Y EDITOR DE VÍDEO
+        # =================================================================================
+        montar_av(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo,
+            "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos, "dir_datos": dir_datos})
 
-    # =================================================================================
-    #  BITÁCORA (pasos, guías, fallos y notas)
-    # =================================================================================
-    montar_bitacora(sm, {"boton": boton_o, "entrada": entrada_o, "texto_largo": texto_largo_o, "NEON": OSCURA["NEON"],
-                         "GRIS": OSCURA["GRIS"], "VERDE": OSCURA["VERDE"], "FUENTE": FUENTE, "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos})
+        # =================================================================================
+        #  BITÁCORA (pasos, guías, fallos y notas)
+        # =================================================================================
+        montar_bitacora(sm, {"boton": boton_o, "entrada": entrada_o, "texto_largo": texto_largo_o, "NEON": OSCURA["NEON"],
+                             "GRIS": OSCURA["GRIS"], "VERDE": OSCURA["VERDE"], "FUENTE": FUENTE, "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos})
 
-    # =================================================================================
-    #  TALLER (qué sabe hacer Kira y qué le falta)
-    # =================================================================================
-    montar_taller(sm, {
-        **PIEZAS_SALA, "en_hilo": en_hilo,
-        "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos,
-        "preparar_mejora": hacker["preparar_mejora"]})
+        # =================================================================================
+        #  TALLER (qué sabe hacer Kira y qué le falta)
+        # =================================================================================
+        montar_taller(sm, {
+            **PIEZAS_SALA, "en_hilo": en_hilo,
+            "ir": lambda *a, **k: ir(*a, **k), "core": core, "ganchos": ganchos,
+            "preparar_mejora": hacker["preparar_mejora"]})
 
     # =================================================================================
     #  NAVEGACIÓN
     # =================================================================================
     def ir(nombre, sub=None):
+        if not existe_pantalla(nombre):                # modo sencillo: esa pantalla ya no está -> al panel
+            nombre, sub = "menu", None
         if nombre != "panel":
             panel_raiz.detener_efectos()
         if nombre != "sala_hacker":
@@ -2400,4 +2848,23 @@ def construir_interfaz(core, consola=None):
     else:
         empezar_kira()
     Clock.schedule_interval(revisar_avisos, 1.0)
+
+    if SENCILLO:
+        def _arrancar_sencillo(_dt):
+            try:
+                ordk_.cerrar_huerfanas(core.dir)       # las que se cortaron al cerrar la app
+            except Exception:
+                pass
+            core.al_sincronia = lambda texto: Clock.schedule_once(lambda _d, t_=texto: decir(t_, hablar=False), 0)
+            try:
+                core.vigilar_casa(True)                 # al llegar a casa, se sincroniza sola con KiraOS
+            except Exception:
+                pass
+            try:                                        # Kira app es para PENSAR y estudiar: si nunca lo decidiste,
+                if not os.path.exists(os.path.join(core.dir, "pensar_sola.json")):   # piensa (suave, en tus pausas)
+                    core.pensar_sola(True, ya=False)
+            except Exception:
+                pass
+        Clock.schedule_once(_arrancar_sencillo, 6)
+    sm.modo = "sencillo" if SENCILLO else "completo"
     return sm

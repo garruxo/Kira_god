@@ -9,7 +9,7 @@ T = tempfile.mkdtemp(); os.environ["KIRA_DATA_DIR"] = T
 import kira_god, diseno_kira as dk, salas_kira as sk, habitacion_kira as hk
 core = kira_god.KiraGodCore(); core._leer_clave = lambda: ""
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 from kivy.core.window import Window as W2
 tecla = W2._b["on_keyboard"][0]
 n = 0

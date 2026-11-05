@@ -136,7 +136,7 @@ cancelados = []
 core2.cancelar = lambda: (cancelados.append(1), "Vale, lo cancelo.")[1]
 preguntas = []
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core2)
+sm = construir_interfaz(core2, modo="completo")
 def correr(seg=1.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

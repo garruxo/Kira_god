@@ -11,7 +11,7 @@ core = kira_god.KiraGodCore(); core._leer_clave = lambda: ""
 hechos = {"prefijos": [], "ffmpeg": None, "lab": False, "lab_instalar": False}
 core.hechos_capacidades = lambda consultar_laboratorio=True: dict(hechos)
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 n = 0
 def ok(c, m):
     global n; n += 1; assert c, "FALLA: " + m

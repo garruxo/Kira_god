@@ -54,7 +54,7 @@ ok("def registrar" in core.procesar_orden("receta cubo 3d"), "«receta cubo 3d»
 ok("[x]" in core.procesar_orden("receta zzzz"), "receta desconocida")
 # «abre la receta» la lleva al editor
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 for _ in range(10): Clock.correr(1, 0.1)
 sm.ir("inicio")
 campo = next(w for w in sm.walk() if type(w).__name__ == "TextInput" and "Escríbele" in getattr(w, "hint_text", ""))

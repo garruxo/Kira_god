@@ -2473,6 +2473,181 @@ class KiraGodCore:
             except OSError:
                 pass
 
+    # ---------- v2.87 SISTEMA NERVIOSO: el móvil (una neurona más) y KiraOS (el cerebro central) ----------
+    def sincronizar(self, al_paso=None, viajes=50):
+        """Le da a KiraOS lo NUEVO del móvil (recuerdos, pensamientos, soluciones, encargos, foco) y recibe lo nuevo de
+        KiraOS (lo que aprendió, sus soluciones, el aspecto que le pone al móvil y las mejoras que le preparó).
+        Se SUMA: no se borra nada en ningún lado. Las mejoras que llegan NO se instalan (laboratorio + tus dos toques,
+        o la auto-mejora si tú la encendiste). Devuelve el texto para ti."""
+        import sincronia_kira as sc
+        paso = al_paso or (lambda _f, _t: None)
+        c = self._casa()
+        if c is None or not c.nucleo_disponible():
+            return "No veo a KiraOS en la WiFi de casa: lo guardo todo y se lo paso en cuanto llegue."
+        rec = getattr(self, "recuerdos", None)
+        if rec is None:
+            return "[x] No tengo el baúl a mano."
+        with self._lock_sinc():
+            tot_env, tot_rec, mejoras, tema = 0, 0, 0, False
+            for i in range(max(1, int(viajes))):
+                if self.cancelado():
+                    break
+                paso(min(0.9, 0.05 + i * 0.1), "Le paso a KiraOS lo nuevo…" if i == 0 else f"Sigo pasando (viaje {i + 1})…")
+                paquete, marcas = sc.paquete_movil(self.dir, rec)
+                try:
+                    _res, resp = c.sincronizar(paquete)
+                    r = sc.aplicar_en_movil(self.dir, rec, resp, marcas)
+                except Exception as e:
+                    return f"[x] La sincronía con KiraOS se cortó: {e}. Lo que no llegó se reintenta solo."
+                tot_env += marcas.get("enviados", 0)
+                tot_rec += r.get("recuerdos", 0) + r.get("soluciones", 0)
+                mejoras += r.get("mejoras", 0)
+                tema = tema or r.get("tema", False)
+                if not paquete.get("hay_mas") and not resp.get("hay_mas"):
+                    break
+            est = sc.estado_movil(self.dir)
+            est["resumen"] = sc.texto_resumen({"enviados": tot_env}, {"recuerdos": tot_rec, "mejoras": mejoras,
+                                                                       "tema": tema})
+            sc.guardar_estado_movil(self.dir, est)
+        paso(0.95, "Miro las órdenes que te tenía apuntadas…")
+        ordenes = self.ordenes_a_kiraos()
+        paso(1.0, "Hecho.")
+        texto = est["resumen"] + ((" " + ordenes) if ordenes else "")
+        if mejoras and self.auto_mejora_encendida():
+            texto += " " + self._auto_mejoras_recibidas()
+        if (mejoras or tema) and callable(getattr(self, "al_sincronia", None)):
+            try:
+                self.al_sincronia(texto)
+            except Exception:
+                pass
+        return texto
+
+    def _lock_sinc(self):
+        if getattr(self, "_sinc_lock", None) is None:
+            self._sinc_lock = threading.Lock()
+        return self._sinc_lock
+
+    def _auto_mejoras_recibidas(self):
+        """Con la auto-mejora ENCENDIDA (la enciendes tú): prueba las mejoras de KiraOS y aplica SOLO las que pasan
+        todo, con copia de seguridad y retorno. Apagada, esperan tus dos toques en el panel."""
+        import sincronia_kira as sc
+        hechas = []
+        for m in sc.mejoras_recibidas(self.dir):
+            r = self.auto_implementar(m["nombre"], m["codigo"], "mejora de KiraOS: " + m.get("descripcion", ""))
+            if r.get("aplicada"):
+                sc.marcar_mejora(self.dir, m["nombre"], "instalada")
+                hechas.append(m["nombre"])
+        return ("Con la auto-mejora encendida he instalado: " + ", ".join(hechas) + ".") if hechas else ""
+
+    def ordenes_a_kiraos(self):
+        """Las órdenes de trabajo que apunté fuera de casa: le pregunto a KiraOS cómo van las que ya tiene y le doy la
+        siguiente (una cada vez: KiraOS hace un trabajo cada vez). Devuelve un texto corto (o "")."""
+        import casa_kira
+        import ordenes_kira as ok_
+        c = self._casa()
+        if c is None:
+            return ""
+        acabadas = 0
+        for o in ok_.en_kiraos(self.dir):
+            try:
+                t = c.tarea(o["tarea"])
+            except casa_kira.CasaError as e:
+                ok_.actualizar(self.dir, o["id"], estado="error",
+                               respuesta=f"KiraOS ya no tiene esta orden (¿se reinició?): {e}")
+                acabadas += 1
+                continue
+            est = t.get("estado")
+            if est == "en curso":
+                av = t.get("avance") or []
+                ok_.actualizar(self.dir, o["id"], estado="en curso", fraccion=t.get("fraccion"),
+                               respuesta=(av[-1] if av else ""))
+                continue
+            ok_.actualizar(self.dir, o["id"], estado={"hecho": "hecha", "cancelado": "cancelada"}.get(est, "error"),
+                           respuesta=t.get("respuesta") or "", codigo=(t.get("codigo") or "")[:20000] or None,
+                           nombre=t.get("nombre"))
+            acabadas += 1
+        mandada = ""
+        if not ok_.en_kiraos(self.dir):
+            pend = ok_.pendientes_kiraos(self.dir)
+            if pend:
+                o = pend[0]
+                try:
+                    tid = c.orden_empezar(o["texto"])
+                    ok_.actualizar(self.dir, o["id"], estado="enviada", tarea=tid)
+                    mandada = o["texto"]
+                except casa_kira.CasaError:
+                    pass                                  # ocupada con otra cosa: se la doy en la siguiente vuelta
+        partes = []
+        if mandada:
+            partes.append(f"Le he dado a KiraOS lo que me pediste fuera de casa: «{mandada[:60]}».")
+        if acabadas:
+            partes.append(f"KiraOS ha terminado {acabadas} orden(es): míralas en el panel.")
+        return " ".join(partes)
+
+    def vigilar_casa(self, encender=True, cada_seg=60, cada_sinc=900, dormir=time.sleep):
+        """Hilo suave: cada minuto mira si estoy en casa (KiraOS en la WiFi). Al LLEGAR, sincroniza sola; luego, cada
+        15 min si hay algo nuevo, y va dándole las órdenes apuntadas. Fuera de casa no hace nada (ni gasta)."""
+        self._vigilando_casa = bool(encender)
+        if not encender or getattr(self, "_hilo_casa", None) is not None:
+            return self._vigilando_casa
+
+        def bucle():
+            import sincronia_kira as sc
+            import ordenes_kira as ok_
+            en_casa_antes, ultima = False, 0.0
+            while getattr(self, "_vigilando_casa", False):
+                c = self._casa()
+                try:
+                    en_casa = bool(c is not None and c.nucleo_disponible())
+                except Exception:
+                    en_casa = False
+                if en_casa:
+                    nuevo = False
+                    try:
+                        nuevo = sc.pendiente_movil(self.dir, self.recuerdos) > 0
+                    except Exception:
+                        pass
+                    if not en_casa_antes or (nuevo and time.time() - ultima > cada_sinc) or \
+                            time.time() - ultima > 4 * cada_sinc:
+                        try:
+                            self.sincronizar()
+                        except Exception:
+                            pass
+                        ultima = time.time()
+                    elif ok_.pendientes_kiraos(self.dir) or ok_.en_kiraos(self.dir):
+                        try:
+                            self.ordenes_a_kiraos()
+                        except Exception:
+                            pass
+                en_casa_antes = en_casa
+                dormir(cada_seg)
+            self._hilo_casa = None
+
+        self._hilo_casa = threading.Thread(target=bucle, daemon=True)
+        self._hilo_casa.start()
+        return True
+
+    def actividad(self):
+        """Qué está haciendo esta Kira (para el panel)."""
+        import pensador_kira as pn
+        d = {"pensando": bool(getattr(self, "_pensar_on", False)), "estudiando": bool(getattr(self, "_estudiando", False)),
+             "pausada": False, "foco": "", "pensamientos": 0, "soluciones": 0}
+        if d["pensando"]:
+            d["pausada"] = time.time() - getattr(self, "_ultima_actividad", 0) < getattr(self, "_inactivo_seg", 300)
+        try:
+            with open(os.path.join(self.dir, "foco.json"), encoding="utf-8") as f:
+                foco = json.load(f)
+            if foco.get("activo"):
+                d["foco"] = str(foco.get("tema", ""))[:80]
+        except (OSError, ValueError, AttributeError):
+            pass
+        try:
+            est = pn.cargar(os.path.join(self.dir, "pensamientos.json"))
+            d["pensamientos"], d["soluciones"] = len(est.get("notas", [])), len(est.get("soluciones", {}))
+        except Exception:
+            pass
+        return d
+
     def registrar_actividad(self):
         """El dueño ha dado una orden: Kira le ATIENDE. Pausa el pensar un rato (vuelve sola tras `_inactivo_seg`)."""
         self._ultima_actividad = time.time()

@@ -44,7 +44,7 @@ ik.Voz = lambda *a, **k: VOZ
 import cerebro_ia_kira as ci, kira_god
 core = kira_god.KiraGodCore()
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 
 def correr(seg=3.0, cond=None):
     t = time.time()

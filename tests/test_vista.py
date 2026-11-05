@@ -120,7 +120,7 @@ class OidoFalso:
     def oye(s, texto): threading.Thread(target=s.cb, args=(texto,)).start()
 OIDO = OidoFalso(); core.oido = OIDO
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 def correr(seg=2.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

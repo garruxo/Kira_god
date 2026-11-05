@@ -170,7 +170,7 @@ ok("No encuentro el laboratorio" in core.procesar_orden("conecta con el pc") and
 core.enlace = el.Enlace(buscar_fn=EN2._buscar)
 core.conversar = lambda t, h=(), al_trozo=None: "charla"
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 def correr(seg=3.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

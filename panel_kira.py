@@ -394,6 +394,26 @@ class PanelControl:
         return self.enviar_orden((pedido or "Convierte este código en una mejora de Kira (una orden nueva) que haga lo "
                                   "mismo") + ":\n```python\n" + codigo[:6000] + "```")
 
+    def probar_modulo(self, codigo, nombre, pedido="") -> dict:
+        """v2.87: prueba TAL CUAL un módulo que llega de KiraOS (no lo reescribe ni lo «arregla» el cerebro del
+        móvil). Si pasa el laboratorio del móvil, queda pendiente de tus dos toques (aplicar(confirmado=True))."""
+        import re as _re
+        codigo = str(codigo or "").strip("\n") + "\n"
+        if "def registrar" not in codigo:
+            return {"ok": False, "aprobable": False, "texto": "[x] Eso no es un módulo de Kira (le falta registrar())."}
+        nombre = _re.sub(r"[^a-z0-9_]+", "_", (nombre or "").lower()).strip("_")[:31] or "mejora_de_kiraos"
+        if not nombre[0].isalpha():
+            nombre = "m_" + nombre[:29]
+        with self._lock:
+            self.pendiente = None
+            pend, err = self.promotor.preparar(nombre, codigo)
+            if err:
+                return {"ok": False, "aprobable": False, "texto": "[x] " + err}
+            if pend.aprobable:
+                self._poner_pendiente(pend, pedido or f"la mejora «{nombre}» de KiraOS")
+                return {"ok": True, "aprobable": True, "texto": pend.resumen(), "nombre": pend.nombre}
+            return {"ok": False, "aprobable": False, "texto": pend.resumen()}
+
     def aplicar(self, confirmado=False) -> dict:
         """Solo desde un botón, después de que la persona confirme. Sin confirmado=True no hace nada."""
         if confirmado is not True:

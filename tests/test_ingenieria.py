@@ -129,7 +129,7 @@ ok(len(ca.CURSO_INGENIERIA) == len(ri.RECETAS) and all(l["nivel"] == "ingenierí
    "una lección por receta")
 ok(ca.buscar("ing_dijkstra") is not None, "se encuentran por id")
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 for _ in range(10):
     Clock.correr(1, 0.1)
 def boton(txt, raiz):

@@ -116,7 +116,7 @@ ok("listo" in core.procesar_orden("lector"), "estado del lector")
 
 # ---------- pantalla ----------
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 sm.ir("menu"); ok(any("Lector" in w.text for w in sm.walk() if type(w).__name__ == "Button" and "[b]" in w.text), "Lector en el menú")
 sm.ir("lector"); pl = sm.get_screen("lector")
 def boton(t): return next(w for w in pl.walk() if type(w).__name__ == "Button" and w.text == t)

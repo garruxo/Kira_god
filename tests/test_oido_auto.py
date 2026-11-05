@@ -30,7 +30,7 @@ import kira_god
 core = kira_god.KiraGodCore()
 OIDO = OidoSinModelo(); core.oido = OIDO
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 n = 0
 def ok(c, m):
     global n; n += 1; assert c, "FALLA: " + m

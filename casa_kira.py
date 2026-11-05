@@ -254,7 +254,7 @@ class Casa:
         except (ValueError, IndexError):
             return ""
 
-    def _nucleo(self, ruta, datos=None, timeout=10, crudo=None, tipo="application/json"):
+    def _nucleo(self, ruta, datos=None, timeout=10, crudo=None, tipo="application/json", maximo=4_000_000):
         if not self.nucleo_url or not self.token:
             raise CasaError("No sé dónde está el portátil.")
         cuerpo = crudo if crudo is not None else (None if datos is None else json.dumps(datos).encode("utf-8"))
@@ -262,7 +262,7 @@ class Casa:
                                      headers={"X-Kira-Token": self.token, "Content-Type": tipo})
         try:
             with self._abrir(req, timeout=timeout) as r:
-                return json.loads(r.read(4_000_000).decode("utf-8"))
+                return json.loads(r.read(maximo).decode("utf-8"))
         except urllib.error.HTTPError as e:
             try:
                 d = json.loads(e.read(20000).decode("utf-8"))
@@ -318,6 +318,21 @@ class Casa:
                     pass
             dormir(cada)
         return {"estado": "error", "respuesta": "El portátil ha tardado demasiado."}
+
+    def orden_empezar(self, texto):
+        """v2.87: manda la orden y NO espera (para las órdenes que el móvil apuntó fuera de casa). Devuelve el id."""
+        return self._nucleo("/orden", {"orden": str(texto)})["id"]
+
+    def tarea(self, tid):
+        """Cómo va una orden mandada antes: {estado, fraccion, avance, respuesta, codigo…}."""
+        return self._nucleo("/tarea?id=" + str(tid))
+
+    def sincronizar(self, paquete, timeout=300):
+        """v2.87: le da a KiraOS lo nuevo del móvil y recibe lo nuevo de KiraOS. Devuelve (resumen, respuesta)."""
+        r = self._nucleo("/sincronizar", {"paquete": paquete}, timeout=timeout, maximo=40_000_000)
+        if not r.get("ok"):
+            raise CasaError(r.get("error") or "KiraOS no pudo sincronizar.")
+        return r.get("resumen") or {}, r.get("respuesta") or {}
 
     def cancelar_nucleo(self):
         try:

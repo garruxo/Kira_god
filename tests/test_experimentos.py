@@ -116,7 +116,7 @@ core2._llamar_api = api
 core2.reparto = lambda tarea: ("local", None)
 core2.cerebro_para_codigo = lambda: "local"
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core2)
+sm = construir_interfaz(core2, modo="completo")
 def correr(seg=3.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

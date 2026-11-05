@@ -129,7 +129,7 @@ class VozMuda:
     def parar_escucha(s): pass
 VOZ = VozMuda(); ik.Voz = lambda *a, **k: VOZ
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 def correr(seg=3.0, cond=None):
     t = time.time()
     while time.time() - t < seg:

@@ -81,6 +81,31 @@ def maquina():
 
 _Y_PRUEBALO = r"\s*,?\s*y\s+pru[eé]balo\s+en\s+(?:tu|la|mi)\s+m[aá]quina(?:\s+virtual)?\s*$"
 
+# v2.87: KiraOS, cerebro central, también le cambia el ASPECTO al móvil y le prepara MEJORAS de sistema
+_TEMA_MOVIL = (r"^(?:cambia|pon|ponle|cambiale)\s+(?:el\s+)?(?:aspecto|tema|color(?:es)?|estetica|estética)\s+"
+               r"(?:del|al|de\s+la\s+kira\s+del)\s+m[oó]vil\s+(?:a|en)\s+(?:color\s+)?(?P<t>[\wáéíóú]+)$")
+_MEJORA_MOVIL = (r"^(?:prepara|crea|hazle|haz)\s+(?:una\s+)?(?:mejora|funci[oó]n|orden\s+nueva)\s+"
+                 r"(?:para\s+(?:el|la\s+kira\s+del)\s+m[oó]vil)\s*(?:que|:|para)?\s*(?P<p>.+)$")
+
+
+def mejora_para_movil(core, pedido, paso):
+    """KiraOS escribe una mejora de sistema para el móvil, la prueba en SU laboratorio y la deja lista para la
+    próxima sincronía. El móvil la vuelve a probar en el suyo y espera los dos toques del dueño."""
+    import laboratorio_movil_kira as lab
+    import sincronia_kira as sc
+    paso(0.1, "Escribo la mejora para el móvil…")
+    nombre, codigo = core.generar_mejora(pedido)
+    paso(0.6, f"La pruebo en mi laboratorio ({nombre})…")
+    res = lab.LaboratorioMovil().probar(nombre, codigo)
+    if not res.get("ok"):
+        mal = next((e for e in res.get("etapas", []) if not e.get("ok")), {})
+        return {"texto": f"[x] La mejora «{nombre}» no pasa mi laboratorio ({mal.get('nombre', '?')}: "
+                         f"{mal.get('detalle', '')}). No se la mando al móvil.", "ok": False}
+    sc.guardar_para_movil(core.dir, nombre, codigo, descripcion=pedido, prueba=res)
+    return {"texto": f"Mejora «{nombre}» lista y probada en mi laboratorio. Se la daré al móvil en la próxima "
+                     "sincronía; allí la volverá a probar y esperará tus dos toques.", "codigo": codigo,
+            "nombre": nombre, "ok": True}
+
 
 def ejecutar(core, orden, paso):
     """Hace la orden con el núcleo. `paso(fraccion|None, texto)` va contando. Devuelve {texto, codigo?, nombre?}."""
@@ -108,6 +133,19 @@ def ejecutar(core, orden, paso):
             return mq.hacer(maquina(), accion, carga, al_paso=lambda fr, t: paso(fr, t), guardar_ficha=guardar)
         except mq.MaquinaError as e:
             return {"texto": f"[x] {e}", "ok": False}
+    o_limpia = o.rstrip(" .!¡?¿")
+    m_t = re.match(_TEMA_MOVIL, o_limpia, flags=re.I)
+    if m_t:
+        import sincronia_kira as sc
+        try:
+            tema = sc.poner_tema_movil(core.dir, m_t.group("t"))
+        except ValueError as e:
+            return {"texto": f"[x] {e}", "ok": False}
+        return {"texto": f"Hecho: el móvil se verá en «{tema['nombre']}» después de la próxima sincronía "
+                         "(al volver a abrir la app)."}
+    m_m = re.match(_MEJORA_MOVIL, o_limpia, flags=re.I)
+    if m_m:
+        return mejora_para_movil(core, m_m.group("p").strip(), paso)
     en_maquina = bool(re.search(_Y_PRUEBALO, o, flags=re.I))
     if en_maquina:
         o = re.sub(_Y_PRUEBALO, "", o, flags=re.I).strip()
@@ -214,6 +252,7 @@ class Nucleo:
         self._crear = crear or self._crear_real
         self.core = self._crear()
         self.trabajos = Trabajos(lambda orden, paso: ejecutar(self.core, orden, paso))
+        self._lock_sinc = threading.Lock()
 
     @staticmethod
     def _crear_real():
@@ -265,7 +304,71 @@ class Nucleo:
             pass
         t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
         return {"kira_nucleo": 1, "version": ver, "recuerdos": n, "llamar": llamar,
-                "ocupada": self.trabajos.ocupado(), "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else ""}
+                "ocupada": self.trabajos.ocupado(), "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
+                "actividad": actividad(self.core), "equipo": equipo_corto(), "sincronia": sincronia_corta(self.datos)}
+
+    def sincronizar(self, paquete):
+        """v2.87: lo nuevo del móvil entra en KiraOS (se suma, no se borra) y le devuelve lo nuevo de KiraOS."""
+        import sincronia_kira as sc
+        with self._lock_sinc:
+            return sc.aplicar_en_kiraos(self.datos, self.core.recuerdos, paquete)
+
+
+def actividad(core):
+    """Qué está haciendo la Kira del portátil (para el panel del móvil)."""
+    d = {"pensando": bool(getattr(core, "_pensar_on", False)), "estudiando": bool(getattr(core, "_estudiando", False)),
+         "foco": "", "pensamientos": 0, "soluciones": 0, "maquina": False}
+    try:
+        foco = json.load(open(os.path.join(core.dir, "foco.json"), encoding="utf-8"))
+        if foco.get("activo"):
+            d["foco"] = str(foco.get("tema", ""))[:80]
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        import pensador_kira as pn
+        est = pn.cargar(os.path.join(core.dir, "pensamientos.json"))
+        d["pensamientos"], d["soluciones"] = len(est.get("notas", [])), len(est.get("soluciones", {}))
+    except Exception:
+        pass
+    m = _MAQUINA.get("m")
+    try:
+        d["maquina"] = bool(m and m.encendida())
+    except Exception:
+        pass
+    return d
+
+
+def equipo_corto():
+    try:
+        import nacimiento_kira as nk
+        e = nk.equipo()
+        try:
+            import shutil as _sh
+            e["disco_libre_gb"] = _sh.disk_usage("/").free // (1000 ** 3)
+        except OSError:
+            pass
+        try:
+            with open("/proc/loadavg") as f:
+                e["carga"] = f.read().split()[0]
+        except OSError:
+            pass
+        try:
+            with open("/proc/uptime") as f:
+                e["encendido_h"] = round(float(f.read().split()[0]) / 3600, 1)
+        except (OSError, ValueError):
+            pass
+        return e
+    except Exception:
+        return {}
+
+
+def sincronia_corta(datos):
+    try:
+        import sincronia_kira as sc
+        est = sc.estado_kiraos(datos)
+        return {"ultima": est.get("ultima", 0), "recibidos": est.get("recibidos_total", 0)}
+    except Exception:
+        return {}
 
 
 # =====================================================================================
@@ -329,6 +432,13 @@ def crear_servidor(host, puerto, token, nucleo):
                 if tid is None:
                     return self._json(409, {"error": "ocupada", **nucleo.hola()})
                 return self._json(200, {"id": tid})
+            if u.path == "/sincronizar":
+                d = self._cuerpo_json(maximo=40_000_000)
+                try:
+                    resumen, respuesta = nucleo.sincronizar(d.get("paquete") or {})
+                except (ValueError, TypeError) as e:
+                    return self._json(400, {"error": str(e)})
+                return self._json(200, {"ok": True, "resumen": resumen, "respuesta": respuesta})
             if u.path == "/cancelar":
                 try:
                     nucleo.core.cancelar()

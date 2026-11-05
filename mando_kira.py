@@ -9,6 +9,9 @@ el volumen, «para», las mejoras (laboratorio + dos toques), el pintor y los PD
 
   orden_control(texto) -> 'on' | 'off' | 'memoria' | 'estado' | None
   es_local(texto)      -> True si esa orden se hace SIEMPRE en el móvil
+  es_trabajo(texto)    -> v2.87: True si es TRABAJO para KiraOS (programar, juegos, apps, diseños, pintar, experimentar,
+                          mejoras, librerías, su máquina). Fuera de casa, el móvil lo APUNTA y se lo pasa al volver.
+  orden_modo_app(texto)-> 'sencillo' | 'completo' | None («modo completo» = las pantallas de antes, por si acaso)
 """
 import re
 import unicodedata
@@ -71,3 +74,46 @@ def es_local(texto):
     if es_de_maquina(texto):
         return False
     return bool(_LOCAL.match(t))
+
+
+# ---------- v2.87: la app del móvil en DOS pantallas; el trabajo lo hace KiraOS ----------
+_SIEMPRE = re.compile(
+    r"^(?:experimenta|inventa(?:me)?|implementa(?:me)?|compila(?:me)?|disena(?:me)?|pinta(?:me)?|dibuja(?:me)?|"
+    r"programa(?:me)?|desarrolla(?:me)?|conviertelo|conviertela|convierte(?:lo|la)?|exporta(?:lo|la)?|"
+    r"pon el juego|prepara(?:me)? una mejora|instala(?:me)?\s+(?:la\s+)?libreria|ilustra(?:me)?)\b")
+_OBJETO = (r"(?:programa|juego|app|aplicacion|apk|web|pagina|maqueta|diseno|videoclip|dibujo|imagen|foto de|"
+           r"ilustracion|logo|sprites?|algoritmo|script|codigo|funcion|calculadora|herramienta|mejora|modulo|"
+           r"libreria|bot|videojuego|interfaz)")
+_HAZ = re.compile(r"^(?:por favor\s+)?(?:haz(?:me)?|crea(?:me)?|escribe(?:me)?|genera(?:me)?|construye(?:me)?|"
+                  r"monta(?:me)?|fabrica(?:me)?|prepara(?:me)?|quiero)\s+(?:que\s+hagas\s+)?(?:un|una|unos|unas|"
+                  r"el|la|mi|otro|otra)?\s*(?:[a-z]+\s+){0,2}?" + _OBJETO + r"\b")
+_CAMARA = re.compile(r"^(?:haz(?:me)?|saca(?:me)?)\s+una\s+(?:foto|captura|llamada)(?:\s+(?:a|al|a la)\b.*)?$")
+_MODO_COMPLETO = re.compile(r"^(?:pon|activa|vuelve a)\s+(?:el\s+)?modo\s+completo$|^modo completo$|"
+                            r"^(?:pon|devuelveme|vuelve a poner)\s+(?:las\s+)?(?:pantallas|salas)\s+(?:antiguas|de antes)$")
+_MODO_SENCILLO = re.compile(r"^(?:pon|activa|vuelve a)\s+(?:el\s+)?modo\s+sencillo$|^modo sencillo$|"
+                            r"^(?:solo|deja solo)\s+(?:las\s+)?dos\s+pantallas$")
+
+
+def orden_modo_app(texto):
+    t = _norm(texto)
+    if _MODO_COMPLETO.match(t):
+        return "completo"
+    if _MODO_SENCILLO.match(t):
+        return "sencillo"
+    return None
+
+
+def es_trabajo(texto):
+    t = _norm(texto)
+    if not t or orden_control(texto) or orden_modo_app(texto):
+        return False
+    if es_de_maquina(texto):
+        return True
+    if _CAMARA.match(t):
+        return False
+    return bool(_SIEMPRE.match(t) or _HAZ.match(t))
+
+
+def orden_de_mejora(pedido):
+    """Una mejora para el móvil la escribe y la prueba KiraOS (la orden que entiende su núcleo)."""
+    return "prepara una mejora para el móvil: " + str(pedido or "").strip()

@@ -133,7 +133,7 @@ import kira_god
 core = kira_god.KiraGodCore()
 CER = Cerebro(); core.cerebro_propio = CER; core.oido = OidoFalso()
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 def correr(seg, cond):
     t = time.time()
     while time.time() - t < seg:
@@ -154,7 +154,7 @@ ok(correr(3, lambda: sm.current == "inicio"), "con todo listo, entra sola")
 ok(correr(2, lambda: any("Soy Kira" in d for d in VOZ.dichos)), "y entonces saluda")
 # «Entrar ya»
 core2 = kira_god.KiraGodCore(); core2.cerebro_propio = Cerebro(); core2.oido = OidoFalso()
-sm2 = construir_interfaz(core2)
+sm2 = construir_interfaz(core2, modo="completo")
 ok(sm2.current == "arranque", "otra vez preparando")
 next(w for w in sm2.walk() if type(w).__name__ == "Button" and w.text == "Entrar ya").press()
 ok(correr(1, lambda: sm2.current == "inicio"), "«Entrar ya» entra sin esperar")

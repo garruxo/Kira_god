@@ -38,7 +38,7 @@ def conversar(t, h=(), al_trozo=None):
     return "Claro, son las ocho."
 core.conversar = conversar
 from interfaz_kira import construir_interfaz
-sm = construir_interfaz(core)
+sm = construir_interfaz(core, modo="completo")
 n = 0
 def ok(c, m):
     global n; n += 1; assert c, "FALLA: " + m
