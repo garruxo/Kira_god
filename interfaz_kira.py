@@ -850,6 +850,10 @@ def construir_interfaz(core, consola=None, modo=None):
             t = tarea_fin(ok)
             if t is not None and t.interrumpida:
                 return
+            if isinstance(r, Exception) and str(r).startswith("Por seguridad"):   # KiraOS dice que eso, allí
+                apuntar_fin(oid, r, False)
+                decir(str(r), hablar=False)
+                return
             if isinstance(r, Exception):
                 if SENCILLO and "ocupad" in str(r):     # KiraOS está con otra cosa: queda en la cola
                     import ordenes_kira as ok_
@@ -971,6 +975,23 @@ def construir_interfaz(core, consola=None, modo=None):
         if ck_.pide_seguir(orden):
             if not retomar_aparcada():
                 decir("No tengo nada a medias aquí. ¿Qué quieres que haga?")
+            return
+        if mdk_.es_wifi_kiraos(orden):                  # v2.88: la WiFi del PORTÁTIL la maneja KiraOS
+            if mdk_.wifi_solo_en_portatil(orden):
+                decir("Eso, en el portátil: si apago, desconecto u olvido su WiFi desde aquí te quedas sin hablar con "
+                      "KiraOS, y la clave de una red no debe viajar. En el portátil: botón «WiFi» de la ventana de Kira.",
+                      hablar=False)
+                return
+            try:
+                en_casa = core.mando_listo()
+            except Exception:
+                en_casa = False
+            if en_casa:
+                mando_por_voz(orden)
+            else:
+                decir("No veo a KiraOS en la WiFi de casa: quizá su WiFi está caída. Ella intenta volver a conectarse "
+                      "sola cada 2 minutos; si no, en el portátil toca «WiFi» en la ventana de Kira (o «arregla la wifi»).",
+                      hablar=False)
             return
         tema_est = None
         try:

@@ -123,6 +123,10 @@ def ejecutar(core, orden, paso):
     import programar_kira as pk
     import internet_kira as net
     import maquina_kira as mq
+    import wifi_kira as wk
+    if wk.orden_wifi(o) is not None:              # v2.88: la WiFi del portátil (la clave, solo en el portátil)
+        paso(0.2, "Miro la WiFi del portátil…")
+        return {"texto": wk.responder(o)}
     om = mq.orden_maquina(o)                      # v2.85: su MÁQUINA VIRTUAL (Linux ligero)
     if om:
         accion, carga = om
@@ -314,6 +318,11 @@ class Nucleo:
             return sc.aplicar_en_kiraos(self.datos, self.core.recuerdos, paquete)
 
 
+def es_local(ip):
+    """¿La petición viene de este mismo portátil (la ventana o la consola de Kira)?"""
+    return str(ip or "") in ("127.0.0.1", "::1", "localhost") or str(ip or "").startswith("127.")
+
+
 def actividad(core):
     """Qué está haciendo la Kira del portátil (para el panel del móvil)."""
     d = {"pensando": bool(getattr(core, "_pensar_on", False)), "estudiando": bool(getattr(core, "_estudiando", False)),
@@ -333,6 +342,11 @@ def actividad(core):
     m = _MAQUINA.get("m")
     try:
         d["maquina"] = bool(m and m.encendida())
+    except Exception:
+        pass
+    try:
+        import wifi_kira as wk
+        d["wifi"] = wk.resumen_corto()
     except Exception:
         pass
     return d
@@ -428,6 +442,11 @@ def crear_servidor(host, puerto, token, nucleo):
                 orden = str(self._cuerpo_json().get("orden") or "").strip()
                 if not orden:
                     return self._json(400, {"error": "falta la orden"})
+                if not es_local(self.client_address[0]):     # v2.88: desde el móvil, la WiFi con cuidado
+                    import wifi_kira as wk
+                    vale, porque = wk.permitida_remota(orden)
+                    if not vale:
+                        return self._json(403, {"error": porque})
                 tid = nucleo.trabajos.empezar(orden)
                 if tid is None:
                     return self._json(409, {"error": "ocupada", **nucleo.hola()})
@@ -522,6 +541,7 @@ def main(argv=None):
     ap.add_argument("--puerto", type=int, default=PUERTO)
     ap.add_argument("--datos", default=DATOS)
     ap.add_argument("--token", default=os.path.join(RAIZ, "kira_laboratorio", "token_lab.txt"))
+    ap.add_argument("--sin-wifi", action="store_true", help="no vigilar la WiFi")
     a = ap.parse_args(argv)
     sys.path.insert(0, AQUI)
     import servidor_portatil as sp
@@ -535,6 +555,9 @@ def main(argv=None):
         nucleo.core.reanudar_pensar()
     except Exception:
         pass
+    if not a.sin_wifi:                          # v2.88: si la WiFi se cae, vuelve a conectar sola (redes guardadas)
+        import wifi_kira as wk
+        threading.Thread(target=wk.vigilar, daemon=True).start()
     srv = crear_servidor(a.host, a.puerto, token, nucleo)
     print(f"[núcleo] Kira completa escuchando en {a.host}:{a.puerto} (datos en {a.datos}).", flush=True)
     try:

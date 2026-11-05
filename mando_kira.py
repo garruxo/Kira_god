@@ -117,3 +117,22 @@ def es_trabajo(texto):
 def orden_de_mejora(pedido):
     """Una mejora para el móvil la escribe y la prueba KiraOS (la orden que entiende su núcleo)."""
     return "prepara una mejora para el móvil: " + str(pedido or "").strip()
+
+
+# ---------- v2.88: la WiFi del PORTÁTIL (la maneja KiraOS) ----------
+_WIFI = re.compile(r"\b(?:wifi|wi-fi|wi fi|redes? inalambricas?|internet)\b")
+_DE_KIRAOS = re.compile(r"\b(?:portatil|kira ?os|ordenador|pc|packard)\b")
+_WIFI_PELIGRO = re.compile(r"\b(?:apaga|desactiva|desconecta|desconectate|olvida|borra|elimina|quita|clave|"
+                           r"contrasena|password)\b")
+
+
+def es_wifi_kiraos(texto):
+    """¿Habla de la WiFi del portátil? («qué wifi tiene el portátil», «arregla la wifi de KiraOS»…)."""
+    t = _norm(texto)
+    return bool(_WIFI.search(t) and _DE_KIRAOS.search(t))
+
+
+def wifi_solo_en_portatil(texto):
+    """Apagar, desconectar, olvidar o dar una clave: eso se hace EN el portátil (desde el móvil te quedarías sin
+    KiraOS, y la clave viajaría)."""
+    return bool(_WIFI_PELIGRO.search(_norm(texto)))

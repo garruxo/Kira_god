@@ -318,6 +318,35 @@ if [ \$# -eq 0 ]; then exec /usr/bin/python3 "$AQUI/pensador_kira.py" --cuaderno
 exec /usr/bin/python3 "$AQUI/pensador_kira.py" "\$@"
 KIRAPIENSA
   $SUDO chmod +x /usr/local/bin/kira-pensar
+  # v2.88: KiraOS controla la WiFi del portátil (con nmcli; la clave solo se escribe en el portátil).
+  $SUDO tee /usr/local/bin/kira-wifi >/dev/null <<KIRAWIFI
+#!/usr/bin/env bash
+# La WiFi del portátil desde Kira. Sin argumentos: cómo está. --redes · --conectar "NOMBRE" (te pide la clave sin eco)
+# · --desconectar · --apagar · --encender · --guardadas · --olvidar "NOMBRE" · --arreglar
+exec /usr/bin/python3 "$AQUI/wifi_kira.py" "\$@"
+KIRAWIFI
+  $SUDO chmod +x /usr/local/bin/kira-wifi
+  if [ "$PRUEBA" = "0" ]; then
+    command -v nmcli >/dev/null || DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq network-manager >/dev/null 2>&1 || true
+    # El servicio de Kira no tiene sesión abierta: este permiso le deja manejar la WiFi (solo eso, y solo a tu usuario).
+    if [ -d /etc/polkit-1 ]; then
+      $SUDO mkdir -p /etc/polkit-1/rules.d
+      $SUDO tee /etc/polkit-1/rules.d/50-kira-wifi.rules >/dev/null <<KIRAPOLKIT
+// KiraOS (el usuario $USER) puede manejar la WiFi del portátil desde su servicio. Nada más.
+polkit.addRule(function(action, subject) {
+    var permitidas = ["org.freedesktop.NetworkManager.network-control",
+                      "org.freedesktop.NetworkManager.enable-disable-wifi",
+                      "org.freedesktop.NetworkManager.wifi.scan",
+                      "org.freedesktop.NetworkManager.settings.modify.system",
+                      "org.freedesktop.NetworkManager.settings.modify.own"];
+    if (subject.user == "$USER" && permitidas.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+});
+KIRAPOLKIT
+      echo "WiFi: Kira ya puede manejarla (kira-wifi, botón «WiFi» de su ventana)."
+    fi
+  fi
   # El pensador como servicio: DEFINIDO pero NO se enciende solo (usa el cerebro grande sin parar; lo activa el
   # dueño con: sudo systemctl enable --now kira-pensador.service). Lo que piensa son notas; nada se aplica solo.
   $SUDO tee /etc/systemd/system/kira-pensador.service >/dev/null <<EOF

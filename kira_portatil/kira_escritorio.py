@@ -31,13 +31,31 @@ def nucleo_para(cli):
     return np_.ClienteNucleo(f"http://{host}:{np_.PUERTO}", cli.token)
 
 
-def manejar(cli, texto, escribir, al_trozo, nucleo=None):
+def manejar(cli, texto, escribir, al_trozo, nucleo=None, wifi=None, ctx=None):
     """Decide qué hacer con lo que escribe el usuario. `escribir(texto)` pone una línea; `al_trozo(t)` añade a la
-    respuesta que va llegando. Devuelve una etiqueta de lo que hizo ('charla'|'defensa'|'cerebro'|'vacio'|'error')."""
+    respuesta que va llegando. Devuelve una etiqueta de lo que hizo ('charla'|'defensa'|'cerebro'|'wifi'|'vacio'|
+    'error'). v2.88: la WiFi del portátil se maneja AQUÍ mismo (`wifi`, por defecto wifi_kira); si hace falta una
+    clave, deja `ctx["pedir_clave"] = red` para que la ventana la pida con puntitos."""
     t = texto.strip()
     if not t:
         return "vacio"
     bajo = t.lower()
+    if wifi is None:
+        import wifi_kira as wifi
+    o = wifi.orden_wifi(t)
+    if o is not None:
+        if wifi.trae_clave(t):
+            escribir(wifi.responder(t))
+            return "wifi"
+        try:
+            escribir(wifi.hacer(o[0], o[1]))
+        except wifi.WifiError as e:
+            if o[0] == "conectar" and o[1] and "tiene clave" in str(e) and ctx is not None:
+                ctx["pedir_clave"] = o[1]
+                escribir(f"«{o[1]}» tiene clave: te la pido en una ventanita (sale con puntitos y no la guardo).")
+            else:
+                escribir(f"[x] {e}")
+        return "wifi"
     if bajo in ("/rapido", "rápido", "/rápido", "cerebro rapido", "cerebro rápido"):
         cli.grande = False
         escribir("· Ahora uso el cerebro rápido.")
@@ -91,7 +109,8 @@ def bienvenida(cli):
 def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
     """Monta la ventana y la devuelve (sin arrancar el bucle): así se puede probar con una pantalla virtual."""
     import tkinter as tk
-    from tkinter import scrolledtext
+    from tkinter import scrolledtext, simpledialog
+    import wifi_kira as wk
 
     FONDO, TXT, KIRA, TU = "#0f172a", "#e2e8f0", "#38bdf8", "#a7f3d0"
     raiz = raiz or tk.Tk()
@@ -155,17 +174,21 @@ def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
         if not t:
             return
         campo.delete(0, "end")
-        poner("Tú: " + t, "tu")
+        poner("Tú: " + wk.ocultar_clave(t), "tu")
         poner("Kira: ", "kira", salto=False)
         trabajando["si"] = True
         boton.config(state="disabled")
         campo.config(state="disabled")
         estado.config(text="Kira está pensando… (" + ("cerebro grande" if cli.grande else "rápido") + ")")
 
+        ctx = {}
+
         def tarea():
             r = manejar(cli, t, lambda x: raiz.after(0, lambda: poner("\n" + x, "sis")),
-                        lambda tr: raiz.after(0, lambda: añadir_trozo(tr)), nucleo=nucleo)
+                        lambda tr: raiz.after(0, lambda: añadir_trozo(tr)), nucleo=nucleo, ctx=ctx)
             raiz.after(0, lambda: poner("", "kira"))      # salto final
+            if ctx.get("pedir_clave"):
+                raiz.after(50, lambda: pedir_clave_y_conectar(ctx["pedir_clave"]))
         en_hilo(tarea)
 
     boton = tk.Button(abajo, text="Enviar", command=enviar, bg="#0ea5e9", fg="white", bd=0,
@@ -176,7 +199,7 @@ def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
     barra = tk.Frame(raiz, bg=FONDO)
     barra.pack(fill="x", padx=10, pady=(0, 8))
     for texto, accion in (("Cerebro grande", lambda: cambia(True)), ("Rápido", lambda: cambia(False)),
-                          ("Mi red", lambda: comando("/red"))):
+                          ("Mi red", lambda: comando("/red")), ("WiFi", lambda: abrir_wifi())):
         tk.Button(barra, text=texto, command=accion, bg="#334155", fg=TXT, bd=0, font=("DejaVu Sans", 10),
                   padx=10, activebackground="#475569").pack(side="left", padx=(0, 6))
 
@@ -189,8 +212,94 @@ def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
         campo.insert(0, txt)
         enviar()
 
+    # ---------- v2.88: la WiFi del portátil (KiraOS va a pantalla completa: aquí se maneja) ----------
+    def wifi_en_hilo(fn, al_final=None):
+        def correr():
+            try:
+                txt = fn()
+            except wk.WifiError as e:
+                txt = f"[x] {e}"
+            except Exception as e:                       # noqa: BLE001 - que la ventana no se caiga nunca
+                txt = f"[x] La WiFi falló: {e}"
+            raiz.after(0, lambda: (poner("WiFi: " + str(txt), "sis"), al_final() if al_final else None))
+        threading.Thread(target=correr, daemon=True).start()
+
+    def pedir_clave_y_conectar(ssid, padre=None, al_final=None):
+        clave = simpledialog.askstring("Clave de la WiFi", f"Clave de «{ssid}»\n(no se ve al escribirla y no la "
+                                       "guardo en mi memoria; la guarda Linux):", show="*", parent=padre or raiz)
+        if not clave:
+            poner("WiFi: vale, no me conecto.", "sis")
+            return
+        poner(f"WiFi: me conecto a «{ssid}»…", "sis")
+        wifi_en_hilo(lambda c=clave: wk.conectar(ssid, c), al_final)
+
+    def abrir_wifi():
+        win = tk.Toplevel(raiz)
+        win.title("WiFi del portátil")
+        win.configure(bg=FONDO)
+        win.geometry("560x480")
+        try:
+            win.transient(raiz)
+            win.lift()
+            win.attributes("-topmost", True)            # que se vea encima de KiraOS a pantalla completa
+        except Exception:
+            pass
+        info = tk.Label(win, text="Mirando la WiFi…", bg=FONDO, fg=TXT, wraplength=520, justify="left",
+                        anchor="w", font=("DejaVu Sans", 11))
+        info.pack(fill="x", padx=12, pady=(12, 6))
+        lista = tk.Listbox(win, bg="#1e293b", fg=TXT, font=("DejaVu Sans", 12), selectbackground="#0ea5e9", bd=0,
+                           height=10, activestyle="none")
+        lista.pack(fill="both", expand=True, padx=12)
+        vistas = []
+
+        def refrescar():
+            info.config(text="Buscando redes…")
+
+            def leer():
+                try:
+                    return wk.estado(), wk.redes()
+                except wk.WifiError as e:
+                    return e, []
+
+            def pintar(r):
+                e, redes_ = r
+                info.config(text=f"[x] {e}" if isinstance(e, Exception) else wk.texto_estado(e))
+                lista.delete(0, "end")
+                vistas[:] = redes_
+                for x in redes_:
+                    lista.insert("end", ("► " if x["en_uso"] else "   ") + f"{x['ssid']}   —   {x['senal']} %, "
+                                 + ("con clave" if x["segura"] else "abierta") + (", la conozco" if x["guardada"] else ""))
+            threading.Thread(target=lambda: (lambda r: raiz.after(0, lambda: pintar(r)))(leer()), daemon=True).start()
+
+        def conectar_sel():
+            sel = lista.curselection()
+            if not sel:
+                info.config(text="Elige una red de la lista.")
+                return
+            red = vistas[sel[0]]
+            if red["segura"] and not red["guardada"]:
+                pedir_clave_y_conectar(red["ssid"], padre=win, al_final=refrescar)
+            else:
+                poner(f"WiFi: me conecto a «{red['ssid']}»…", "sis")
+                wifi_en_hilo(lambda s_=red["ssid"]: wk.conectar(s_), refrescar)
+
+        fila = tk.Frame(win, bg=FONDO)
+        fila.pack(fill="x", padx=12, pady=10)
+        for texto, accion in (("Conectar", conectar_sel), ("Buscar otra vez", refrescar),
+                              ("Arreglar", lambda: wifi_en_hilo(wk.reparar, refrescar)),
+                              ("Desconectar", lambda: wifi_en_hilo(wk.desconectar, refrescar)),
+                              ("Apagar", lambda: wifi_en_hilo(lambda: wk.radio(False), refrescar)),
+                              ("Encender", lambda: wifi_en_hilo(lambda: wk.radio(True), refrescar)),
+                              ("Cerrar", win.destroy)):
+            tk.Button(fila, text=texto, command=accion, bg="#0ea5e9" if texto == "Conectar" else "#334155", fg="white",
+                      bd=0, font=("DejaVu Sans", 10), padx=8, activebackground="#475569").pack(side="left", padx=(0, 5))
+        lista.bind("<Double-Button-1>", lambda _e: conectar_sel())
+        refrescar()
+        return win
+
     poner(bienvenida(cli), "sis")
     raiz._kira_enviar = enviar          # para las pruebas
+    raiz._kira_wifi = abrir_wifi
     return raiz
 
 

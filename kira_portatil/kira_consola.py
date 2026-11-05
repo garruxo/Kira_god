@@ -182,6 +182,42 @@ def formato_cebo(inf):
     return "\n".join(lin)
 
 
+def consola_wifi(tu, pedir_clave=None, wifi=None):
+    """v2.88: «/wifi …» o una orden de WiFi escrita → texto (None si no es de WiFi). La clave se pide sin eco."""
+    if wifi is None:
+        import wifi_kira as wifi
+    bajo = tu.strip().lower()
+    if bajo.startswith("/wifi"):
+        resto = tu.strip()[5:].strip()
+        accion, _, arg = resto.partition(" ")
+        accion = {"": "estado", "redes": "redes", "busca": "redes", "conecta": "conectar", "conectar": "conectar",
+                  "desconecta": "desconectar", "apaga": "apagar", "enciende": "encender", "olvida": "olvidar",
+                  "arregla": "reparar", "guardadas": "guardadas", "estado": "estado"}.get(accion.lower())
+        if accion is None:
+            return ("Usa: /wifi · /wifi redes · /wifi conecta NOMBRE · /wifi desconecta · /wifi apaga · "
+                    "/wifi enciende · /wifi olvida NOMBRE · /wifi arregla · /wifi guardadas")
+        o = (accion, arg.strip() or None)
+    else:
+        o = wifi.orden_wifi(tu)
+        if o is None:
+            return None
+        if wifi.trae_clave(tu):
+            return wifi.responder(tu)
+    try:
+        return wifi.hacer(o[0], o[1])
+    except wifi.WifiError as e:
+        if o[0] == "conectar" and o[1] and "tiene clave" in str(e):
+            import getpass
+            clave = (pedir_clave or getpass.getpass)(f"Clave de «{o[1]}» (no se ve al escribirla): ")
+            if not clave:
+                return "Vale, no me conecto."
+            try:
+                return wifi.conectar(o[1], clave)
+            except wifi.WifiError as e2:
+                return f"[x] {e2}"
+        return f"[x] {e}"
+
+
 def una_vez(cli, pregunta):
     print("Kira: ", end="", flush=True)
     print(cli.charla(pregunta, al_trozo=lambda t: print(t, end="", flush=True)))
@@ -190,7 +226,7 @@ def una_vez(cli, pregunta):
 def bucle(cli):
     h = cli.hola()
     cual = (h.get("cargado") and (h.get("cerebros") or {}).get(h["cargado"])) or "cerebro de casa"
-    print(f"Kira en «{h.get('nombre', 'el portátil')}» — {cual}. Escribe, o «/salir» para cerrar. «/red» para tu red.")
+    print(f"Kira en «{h.get('nombre', 'el portátil')}» — {cual}. Escribe, o «/salir» para cerrar. «/red» para tu red, «/wifi» para la WiFi.")
     while True:
         try:
             tu = input("\nTú: ").strip()
@@ -251,6 +287,10 @@ def bucle(cli):
                 continue
             if bajo in ("/cebo-informe", "/informe-cebo"):
                 print(formato_cebo(cli.defensa("cebo").get("informe", {})))
+                continue
+            w = consola_wifi(tu)
+            if w is not None:                         # v2.88: la WiFi del portátil
+                print(w)
                 continue
             if bajo in ("/cuaderno", "/pienso", "/pensamientos"):
                 r = cli.defensa("cuaderno")

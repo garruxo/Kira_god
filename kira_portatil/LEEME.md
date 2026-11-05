@@ -44,6 +44,16 @@ bash instalar_portatil.sh --ligero
 Al terminar, **reinicia**: Kira nace (la primera vez) y después aparece sola al encender. Para usarla desde el móvil:
 «Kira, conéctate al ordenador» + el código de `kira-codigo`, y luego «pasa tu memoria al portátil».
 
+## La WiFi (la maneja Kira)
+Conéctalo a la WiFi de casa al instalar Xubuntu (el instalador de Kira necesita internet). Después, desde Kira:
+- en su ventana, botón **«WiFi»**: ver redes, conectar (la clave sale con puntitos y no se queda en la memoria de
+  Kira; la guarda Linux), arreglar, desconectar, apagar/encender;
+- escribiendo «busca redes wifi», «conéctate a la wifi NOMBRE», «arregla la wifi», «qué wifi tienes»;
+- en una terminal: `kira-wifi` (estado), `kira-wifi --redes`, `kira-wifi --conectar "NOMBRE"`, `kira-wifi --arreglar`.
+Si la WiFi se cae, Kira intenta volver a conectarse sola cada 2 minutos a una red que ya conozca (salvo que la hayas
+apagado tú). Desde el móvil se puede mirar, buscar y arreglar; apagar, desconectar, olvidar o dar una clave, solo en
+el portátil.
+
 ## Para ver cómo va
 - `journalctl -u kira-portatil -f` (lo que hace el cerebro de casa)
 - `nvidia-smi` (cuánta gráfica usa)

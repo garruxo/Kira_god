@@ -42,13 +42,19 @@ def _guardar(dir_, lista):
     os.replace(tmp, _ruta(dir_))
 
 
+def ocultar_claves(texto):
+    """v2.88: una orden que traía una clave («…con la clave X») se apunta SIN la clave."""
+    import re
+    return re.sub(r"(\b(?:clave|contrase(?:ñ|n)a|password|pass)\b\s*(?:es|:|=)?\s*)\S+", r"\1••••", texto, flags=re.I)
+
+
 def apuntar(dir_, texto, destino="movil", estado="en curso", respuesta=""):
     """Apunta una orden. Devuelve su id."""
     if destino not in ("movil", "kiraos"):
         destino = "movil"
     if estado not in ESTADOS:
         estado = "en curso"
-    o = {"id": uuid.uuid4().hex[:10], "texto": str(texto or "")[:400], "destino": destino, "estado": estado,
+    o = {"id": uuid.uuid4().hex[:10], "texto": ocultar_claves(str(texto or ""))[:400], "destino": destino, "estado": estado,
          "cuando": int(time.time()), "respuesta": str(respuesta or "")[:600], "tarea": None}
     lista = _leer(dir_)
     lista.append(o)

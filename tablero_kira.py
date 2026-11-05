@@ -119,6 +119,12 @@ def tarjeta_kiraos(d):
               + (f" · me llama «{h['llamar']}»" if h.get("llamar") else "") + ".",
               f"Ahora: {_haciendo(act, haciendo)}.",
               f"Su cuaderno: {act.get('pensamientos', 0)} pensamientos · {act.get('soluciones', 0)} soluciones."]
+    w = act.get("wifi") or {}
+    if w.get("ssid"):
+        lineas.append(f"WiFi: «{w['ssid']}»" + (f" ({w['senal']} %)" if w.get("senal") is not None else "")
+                      + ("" if w.get("internet") in (None, "full", "unknown") else " · sin salida a internet") + ".")
+    elif w and not w.get("error"):
+        lineas.append("WiFi: " + ("apagada." if w.get("radio") is False else "sin conectar."))
     eq = h.get("equipo") or {}
     eqs = [x for x in (eq.get("procesador"),
                        f"{eq['ram_mb'] // 1024} GB de RAM" if eq.get("ram_mb") else "",
