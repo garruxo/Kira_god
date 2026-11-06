@@ -75,7 +75,7 @@ ENV_PUERTA = (f"export http_proxy={PUERTA} https_proxy={PUERTA} HTTP_PROXY={PUER
               "no_proxy=localhost,127.0.0.1 NO_PROXY=localhost,127.0.0.1")
 USUARIO_PRUEBA = "prueba"            # sin permisos: con él investiga y experimenta
 LIMITE_EXPERIMENTO = 60              # segundos de procesador por experimento
-MAX_WEB = 3_000_000
+MAX_WEB = 8_000_000                  # como lo más que lee Kira de una vez (la página de un vídeo)
 
 
 class MaquinaError(RuntimeError):
@@ -187,6 +187,7 @@ def guion_experimento(codigo, mostrar=True, limite=LIMITE_EXPERIMENTO, delim=Non
               f"exec timeout -k 5 {lim + 15} python3 -I programa.py' _ \"$D\" 2>&1")
     lineas = [
         "set -o pipefail",
+        "cd /tmp",                                   # «prueba» no puede entrar en la carpeta de kira
         f"D=$(sudo -n -u {USUARIO_PRUEBA} mktemp -d /tmp/kira_exp.XXXXXX) || "
         "{ echo '[kira] no pude preparar el sitio de pruebas (¿falta el usuario prueba?)'; exit 97; }",
         f"sudo -n -u {USUARIO_PRUEBA} tee \"$D/programa.py\" >/dev/null <<'{delim}'", codigo, delim,
@@ -238,6 +239,7 @@ def guion_web(url, datos=None, cabeceras=None, metodo=None, timeout=25, maximo=M
     visto = shlex.quote(str(url)[:160])
     return "\n".join([
         "set -o pipefail",
+        "cd /tmp",                                   # «prueba» no puede entrar en la carpeta de kira
         f"printf 'kira visita %s\\n' {visto} | (sudo -n tee /dev/tty1 >/dev/null 2>&1 || true)",
         f"sudo -n -u {USUARIO_PRUEBA} env {ENV_PUERTA.replace('export ', '')} HOME=/home/{USUARIO_PRUEBA} "
         f"python3 -I - <<'{delim}'", programa, delim,
@@ -569,13 +571,13 @@ class Maquina:
             self._dormir(4)
         else:
             raise MaquinaError("Encendió, pero no me deja entrar todavía. Prueba «estado de tu máquina» en un rato.")
+        self._ajustar_dentro()                   # antes de la foto: así la foto limpia ya trae a «prueba» y la puerta
         if primera:
             open(self._j("arrancada.ok"), "w").close()
             try:
                 self.foto(FOTO_NUEVA)            # para «deja tu máquina como nueva»
             except MaquinaError:
                 pass
-        self._ajustar_dentro()
         self._log(f"\n=== máquina encendida {time.strftime('%d/%m %H:%M')} "
                   f"({'internet por la puerta' if red else 'sin internet'}) ===")
         aviso = "" if kvm else (" Ojo: va sin aceleración (KVM). Activa «Intel VT» / «Virtualization» en la BIOS (F2) "
@@ -606,6 +608,9 @@ class Maquina:
                 pass
         if self.encendida():
             self.apagar(espera=20)
+            fin = self._reloj() + 20                 # que QEMU suelte el disco antes de tocarlo
+            while self._reloj() < fin and self.encendida():
+                self._dormir(1)
         if FOTO_NUEVA in [f["nombre"] for f in self.fotos()]:
             self._run(["qemu-img", "snapshot", "-a", FOTO_NUEVA, self._j("kira.qcow2")])
         self.encender(red=red)

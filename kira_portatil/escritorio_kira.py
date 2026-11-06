@@ -28,6 +28,13 @@ import uuid
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DATOS_NUCLEO = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_portatil/kira_datos"))
 
+# «busca …» que NO es buscar en internet: son órdenes de Kira (v2.92, revisando la v2.91)
+_NO_ES_WEB = re.compile(
+    r"\b(?:wi-?fi|aparatos?|dispositivos?|puertos?|pdfs?|recuerdos?|ba[uú]l|notas|cuaderno|soluciones|"
+    r"m[aá]quina|emparejar|c[oó]digo\s+de\s+emparejar|en\s+(?:mi|tu|la)\s+red|mis\s+documentos|tus\s+documentos|"
+    r"tus\s+recetas|tu\s+receta|recetas?\s+de\s+(?:ingenier|grafo|programaci|ciberseg|dise[nñ]|cadena|compresi|"
+    r"compilador|sistemas|redes\s+neuronales))", re.I)
+
 ICONOS = [
     {"id": "hablar", "titulo": "Hablar con Kira", "sub": "la conversación entera"},
     {"id": "buscador", "titulo": "Buscador", "sub": "internet, como Google"},
@@ -254,9 +261,19 @@ class EscritorioMixin:
         return ("Buscado " + r.estado()) if r is not None else "Buscado desde el portátil"
 
     def es_busqueda(self, texto):
-        """¿Lo que dijiste/escribiste en la barra es «busca …»? Entonces se abre el buscador: {consulta, tipo}."""
+        """¿Lo que dijiste/escribiste en la barra es «busca …» EN INTERNET? Entonces se abre el buscador: {consulta,
+        tipo}. Las órdenes de Kira que también empiezan por «busca» (la WiFi, tus aparatos, tus PDF, sus recuerdos,
+        sus recetas, su máquina…) NO: siguen yendo a Kira como siempre."""
         import internet_kira as ik
         t = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", str(texto or ""), flags=re.I).strip()
+        if _NO_ES_WEB.search(t) or re.match(r"^(?:busca(?:me)?|buscar)\s+(?:las\s+)?redes\s*$", t, flags=re.I):
+            return None
+        try:
+            import wifi_kira
+            if wifi_kira.orden_wifi(t) is not None:
+                return None
+        except Exception:                             # noqa: BLE001
+            pass
         m = re.match(r"^(?:busca(?:me)?|buscar)\s+en\s+google\s+(.+)$", t, flags=re.I)
         if m:
             return {"consulta": m.group(1).strip(" .?¿!¡"), "tipo": "web"}

@@ -150,8 +150,15 @@ for frase, esp in (("busca recetas de tortilla", ("recetas de tortilla", "web"))
                    ("busca en google el tiempo en Madrid", ("el tiempo en Madrid", "web"))):
     b = api.es_busqueda(frase)
     ok(b and (b["consulta"], b["tipo"]) == esp, f"«{frase}» abre el buscador con «{esp[0]}» ({esp[1]})")
-for frase in ("hola Kira", "resume https://es.wikipedia.org/wiki/Python", "guarda https://a.org/x", "piensa"):
-    ok(api.es_busqueda(frase) is None, f"«{frase}» no es una búsqueda (va a la charla)")
+for frase in ("hola Kira", "resume https://es.wikipedia.org/wiki/Python", "guarda https://a.org/x", "piensa",
+              # v2.92 (revisión de la v2.91): órdenes de Kira que empiezan por «busca» NO abren el buscador
+              "busca redes wifi", "Kira, busca la wifi", "busca redes", "busca aparatos en mi red",
+              "busca aparatos nuevos", "busca puertos abiertos", "busca en mis pdf la palabra lógica",
+              "busca en tus recuerdos la receta", "busca tus recetas de grafos", "busca recetas de ingeniería",
+              "busca el código de emparejar", "busca en tu máquina el archivo"):
+    ok(api.es_busqueda(frase) is None, f"«{frase}» no es una búsqueda en internet (va a Kira como siempre)")
+for frase in ("busca redes neuronales", "busca recetas de tortilla", "busca el tiempo en Sevilla"):
+    ok(api.es_busqueda(frase) is not None, f"«{frase}» sí es buscar en internet")
 r = api.buscar_web("python", "web")
 ok(r["ok"] and len(r["resultados"]) == 2 and r["resultados"][0]["dominio"] == "es.wikipedia.org",
    "buscar: resultados con título, web y resumen (como Google)")

@@ -205,6 +205,9 @@ ok(c == 0 and "resultado 45" in s and "python 1" in s, "un experimento corre (Py
 ok("PKILL pkill -9 -u prueba" in open(os.path.join(T, "pkill.txt")).read(),
    "al acabar mata lo que el experimento dejara corriendo (del usuario prueba)")
 ok("sudo -n -u prueba" in g and "ulimit -t" in g and "timeout -k 5" in g, "como «prueba», con tope de tiempo y memoria")
+ok("\ncd /tmp\n" in g and "\ncd /tmp\n" in mq.guion_web("https://a.org/"),
+   "v2.92: trabaja desde /tmp («prueba» no puede entrar en la carpeta de kira)")
+ok(mq.MAX_WEB >= 8_000_000, "v2.92: trae páginas grandes (la de un vídeo) enteras")
 c, s = bash(mq.guion_experimento("raise ValueError('no cuadra')"))
 ok(c != 0 and mq.resumen_error(s, c) == "ValueError: no cuadra", "si falla, saca la línea del error de verdad")
 c, s = bash(mq.guion_experimento("import modulo_que_no_existe_kira"))
