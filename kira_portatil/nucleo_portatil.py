@@ -155,9 +155,15 @@ def ejecutar(core, orden, paso):
     import internet_kira as net
     import maquina_kira as mq
     import wifi_kira as wk
+    import sentidos_portatil as sp
     if wk.orden_wifi(o) is not None:              # v2.88: la WiFi del portátil (la clave, solo en el portátil)
         paso(0.2, "Miro la WiFi del portátil…")
         return {"texto": wk.responder(o)}
+    so = sp.es_orden(o)                           # v2.93: los SENTIDOS del portátil (cámara y pantalla, con OCR)
+    if so:
+        tipo, describir = so
+        paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
+        return {"texto": sp.hacer(tipo, describir)}
     om = mq.orden_maquina(o)                      # v2.85: su MÁQUINA VIRTUAL (Linux ligero)
     if om:
         accion, carga = om

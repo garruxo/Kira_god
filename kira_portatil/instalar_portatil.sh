@@ -58,6 +58,10 @@ python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || e
 # v2.90: el OÍDO del portátil (hablarle a Kira con el micrófono): Vosk + modelo pequeño de español (~40 MB), sin internet
 # después. El audio se queda en la memoria; no se guarda nada.
 $SUDO apt-get install -y -qq alsa-utils unzip >/dev/null 2>&1 || true
+# v2.93: los OJOS y la PANTALLA del portátil (cámara webcam + captura de pantalla, leídas con OCR). La foto/captura se
+# borra tras leerla. «Ver de verdad» (describir, no solo leer) necesita los ojos del móvil.
+$SUDO apt-get install -y -qq fswebcam scrot tesseract-ocr tesseract-ocr-spa >/dev/null 2>&1 || \
+  echo "  (aviso: no pude instalar cámara/captura/lector del portátil; Kira seguirá sin esos sentidos)"
 python3 -m pip install --break-system-packages -q vosk >/dev/null 2>&1 || echo "  (aviso: no pude instalar el oído (vosk); podrás escribirle a Kira)"
 if [ "$PRUEBA" = "0" ] && [ ! -d "$DATOS/oido/vosk-model-small-es-0.42" ]; then
   mkdir -p "$DATOS/oido"

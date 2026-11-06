@@ -71,6 +71,17 @@ Todo lo de investigar (buscar, leer páginas, vídeos de YouTube, la Wikipedia) 
 - si la máquina no puede (no está preparada, falta KVM o no contesta), lo hace el portátil y el buscador lo dice.
 Para encenderla sin internet: «arranca tu máquina sin internet» o `kira-maquina --encender --sin-internet`.
 
+## Los sentidos de Kira en el portátil (v2.93)
+Kira tiene sentidos también en el ordenador, y usa los de cada máquina:
+- **oído** (desde la v2.90): micrófono + Vosk, le hablas y te entiende;
+- **cámara** (webcam): «mira con tu cámara», «hazme una foto», «¿qué tengo delante?»;
+- **pantalla**: «lee la pantalla», «¿qué pone en la pantalla?».
+
+Kira **lee el texto** de lo que ve (OCR). La foto o captura se **borra en cuanto la lee** (solo se queda el texto).
+Honestidad: en el portátil en modo ligero no caben sus «ojos» (el modelo de visión), así que **lee letras** pero no
+te dice «eso es un gato»: para describir lo que hay están sus ojos del **móvil** (pídeselo desde allí). El móvil
+también tiene su cámara, oído y pantalla; cada uno usa lo suyo.
+
 ## La WiFi (la maneja Kira)
 Conéctalo a la WiFi de casa al instalar Xubuntu (el instalador de Kira necesita internet). Después, desde Kira:
 - en su ventana, botón **«WiFi»**: ver redes, conectar (la clave sale con puntitos y no se queda en la memoria de
