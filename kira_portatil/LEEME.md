@@ -44,6 +44,17 @@ bash instalar_portatil.sh --ligero
 Al terminar, **reinicia**: Kira nace (la primera vez) y después aparece sola al encender. Para usarla desde el móvil:
 «Kira, conéctate al ordenador» + el código de `kira-codigo`, y luego «pasa tu memoria al portátil».
 
+## El escritorio de KiraOS (como Windows)
+Después del saludo entras en el **escritorio**: iconos (Hablar con Kira, WiFi, Mi red, Mapa de ataques, Máquina
+virtual, Cuaderno, Programando, Móvil, Ajustes) y una **barra abajo** con el botón **K** (menú: las apps, volver al
+orbe, reiniciar y apagar con dos toques), la ventana abierta, la **barra para hablar con Kira**, el botón **Texto**, el
+altavoz, la WiFi y la hora. Cada ventana tiene arriba el botón **‹ Escritorio** para volver a la pantalla principal
+(también la tecla Esc).
+
+**Hablar con Kira desde cualquier sitio:** escribe en la barra de abajo (o empieza a teclear en cualquier parte) o
+pulsa el **micrófono** y habla. Kira te contesta **con su voz**; si quieres leerlo, pulsa **Texto**. El altavoz de la
+barra quita o pone la voz. El oído es Vosk (sin internet; el audio no se guarda).
+
 ## La WiFi (la maneja Kira)
 Conéctalo a la WiFi de casa al instalar Xubuntu (el instalador de Kira necesita internet). Después, desde Kira:
 - en su ventana, botón **«WiFi»**: ver redes, conectar (la clave sale con puntitos y no se queda en la memoria de

@@ -133,10 +133,31 @@ var FAKE={pedido:"que me avise cuando una app gaste mucha batería", archivo:"av
   {n:9,codigo:"        return \"Ninguna gasta de más.\"",nota:"return: la función termina y devuelve el texto."},
   {n:10,codigo:"    return \"Gastan mucho: \" + \", \".join(a.nombre for a in altas)",nota:"return: la función termina y devuelve el texto con los nombres."}
  ]};
+
+// v2.90: dentro del escritorio de KiraOS (en un marco), los datos se piden al escritorio
+function puente(metodo){
+  return new Promise(function(res, rej){
+    if(window.pywebview && window.pywebview.api && window.pywebview.api[metodo]){
+      Promise.resolve(window.pywebview.api[metodo]()).then(res, rej); return;
+    }
+    if(window.parent && window.parent !== window){
+      var id = Math.random().toString(36).slice(2);
+      var oye = function(ev){ var d = ev.data || {}; if(d.kira_resp !== id) return;
+        window.removeEventListener("message", oye); if(d.ok) res(d.valor); else rej(); };
+      window.addEventListener("message", oye);
+      window.parent.postMessage({kira_pide: true, id: id, metodo: metodo}, "*");
+      setTimeout(function(){ rej(); }, 5000); return;
+    }
+    rej();
+  });
+}
+var arrancado=false;
 function arranca(){
-  if(window.pywebview && window.pywebview.api && window.pywebview.api.programando_datos){
-    Promise.resolve(window.pywebview.api.programando_datos()).then(reproducir).catch(function(){reproducir(FAKE);});
-  } else { reproducir(FAKE); }
+  if(arrancado) return; arrancado=true;
+  var dentro = (window.pywebview && window.pywebview.api) || (window.parent && window.parent !== window);
+  if(dentro){ puente("programando_datos").then(function(d){ reproducir(d && d.lineas ? d : FAKE); })
+                                       .catch(function(){ reproducir(FAKE); }); }
+  else { reproducir(FAKE); }
 }
 if(window.pywebview && window.pywebview.api){ arranca(); }
 else { window.addEventListener("pywebviewready", arranca); setTimeout(arranca, 400); }

@@ -55,6 +55,19 @@ $SUDO apt-get install -y -qq build-essential cmake git curl python3 python3-tk p
 $SUDO apt-get install -y -qq python3-gi gir1.2-gtk-3.0 speech-dispatcher >/dev/null
 $SUDO apt-get install -y -qq gir1.2-webkit2-4.1 >/dev/null 2>&1 || $SUDO apt-get install -y -qq gir1.2-webkit2-4.0 >/dev/null 2>&1 || true
 python3 -m pip install --break-system-packages -q pywebview >/dev/null 2>&1 || echo "  (aviso: no pude instalar pywebview; KiraOS entrará con una ventana sencilla hasta que se instale)"
+# v2.90: el OÍDO del portátil (hablarle a Kira con el micrófono): Vosk + modelo pequeño de español (~40 MB), sin internet
+# después. El audio se queda en la memoria; no se guarda nada.
+$SUDO apt-get install -y -qq alsa-utils unzip >/dev/null 2>&1 || true
+python3 -m pip install --break-system-packages -q vosk >/dev/null 2>&1 || echo "  (aviso: no pude instalar el oído (vosk); podrás escribirle a Kira)"
+if [ "$PRUEBA" = "0" ] && [ ! -d "$DATOS/oido/vosk-model-small-es-0.42" ]; then
+  mkdir -p "$DATOS/oido"
+  if curl -fsSL -o "$DATOS/oido/modelo.zip" "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"; then
+    unzip -q -o "$DATOS/oido/modelo.zip" -d "$DATOS/oido" && rm -f "$DATOS/oido/modelo.zip"
+    echo "Oído de Kira listo (habla con el botón del micrófono)."
+  else
+    echo "  (aviso: no pude bajar el modelo del oído; vuelve a ejecutar el instalador con internet)"
+  fi
+fi
 
 GPU=0
 if [ "$PRUEBA" = "0" ] && [ "$LIGERO" = "0" ]; then

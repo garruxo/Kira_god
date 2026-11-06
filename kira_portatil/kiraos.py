@@ -30,8 +30,10 @@ sys.path.insert(0, AQUI)
 import bloqueo_kira as bl
 import kira_consola as kc
 import nacimiento_kira as nk
+from escritorio_kira import EscritorioMixin
 
 ARRANQUE = os.path.join(AQUI, "kiraos_web", "arranque.html")
+ESCRITORIO = os.path.join(AQUI, "kiraos_web", "escritorio.html")
 MAPA = os.path.join(AQUI, "kiraos_web", "mapa.html")
 PROGRAMANDO = os.path.join(AQUI, "kiraos_web", "programando.html")
 sys.path.insert(0, os.path.dirname(AQUI))   # para la pieza compartida con el móvil
@@ -60,7 +62,7 @@ def voz_portatil(texto, correr=None):
 # =====================================================================================
 #  EL PUENTE con la pantalla (lo llama el HTML). Sin ventana: se puede probar.
 # =====================================================================================
-class Api:
+class Api(EscritorioMixin):
     def __init__(self, ruta_pin=None, cli=None, hablar=None, ruta_nacimiento=None, baul=None):
         self.ruta_pin = ruta_pin
         self.ruta_nac = ruta_nacimiento
@@ -124,12 +126,9 @@ class Api:
         return True
 
     def entrar(self):
+        """v2.90: al entrar, la MISMA ventana pasa al ESCRITORIO (la pantalla principal, como Windows)."""
         self.entrado = True
-        try:
-            if self._ventana is not None:
-                self._ventana.destroy()
-        except Exception:
-            pass
+        self._ini_escritorio()
         return True
 
 
@@ -146,6 +145,7 @@ def arrancar(api, pantalla=True):
     win = webview.create_window("KiraOS", ARRANQUE, js_api=api, fullscreen=pantalla,
                                 background_color="#04050a", min_size=(900, 640))
     api._ventana = win
+    api.web = True                              # el escritorio vive en esta misma ventana
     webview.start()
     return api.entrado
 
@@ -283,6 +283,8 @@ def main(argv=None):
 
     if not arrancar(api, pantalla=a.pantalla):
         return                                  # cerró sin entrar
+    if getattr(api, "web", False):
+        return                                  # v2.90: el escritorio ya estuvo en la misma ventana; al cerrarla, fin
 
     if cli is None:
         print("Entraste, pero no encuentro el cerebro de casa (falta el token). ¿Está arrancado el servidor?")

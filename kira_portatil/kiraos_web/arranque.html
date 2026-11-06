@@ -362,7 +362,10 @@ function biometria(){
 }
 function entrar(){
   document.body.setAttribute("data-entrado","1");
-  api().entrar();
+  // v2.90: la pantalla principal (el escritorio, como Windows) se abre en esta misma ventana
+  Promise.resolve(api().entrar()).then(function(){
+    if(location.hash.indexOf("quedarse")<0){ setTimeout(function(){ location.href="escritorio.html"; }, 650); }
+  });
 }
 
 // ---- al cargar: pide la info (nombre, cerebro, si hay PIN o hay que crearlo) ----

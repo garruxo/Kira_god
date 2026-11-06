@@ -93,7 +93,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage();
   const v = await pg.inputValue('#resp'); await pg.fill('#resp','Jefe'); await pg.keyboard.press('Enter');
   await pg.waitForSelector('#partida.on', {timeout: 8000}); await pg.click('#empezar');
   const a = await pg.getAttribute('body','data-entrado');
-  const pg2 = await b.newPage(); await pg2.goto('file://' + process.argv[2]); await pg2.waitForTimeout(700);
+  const pg2 = await b.newPage(); await pg2.goto('file://' + process.argv[2] + '#quedarse'); await pg2.waitForTimeout(700);
   await pg2.keyboard.press('a'); await pg2.waitForTimeout(4600);
   const s = await pg2.textContent('#hola'); const a2 = await pg2.getAttribute('body','data-entrado');
   console.log(JSON.stringify({v, a, s, a2, errs})); await b.close(); })().catch(async e => { console.log('ERR ' + e); if (b) await b.close(); });

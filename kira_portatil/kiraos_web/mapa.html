@@ -138,10 +138,30 @@ var FAKE={ataques:[
   {ip:"1.0.0.1",pais_nombre:"Estados Unidos",org:"CLOUDFLARENET",infra_clase:"hosting",lat:39.0,lon:-98.0,veces:12,tipos:["Conexión bloqueada / escaneo de puertos"]},
   {ip:"80.58.0.1",pais_nombre:"España",org:"Telefonica broadband",infra_clase:"isp",lat:40.2,lon:-3.7,veces:3,tipos:["Intento de entrar por SSH (fuerza bruta)"]}
 ]};
+
+// v2.90: dentro del escritorio de KiraOS (en un marco), los datos se piden al escritorio
+function puente(metodo){
+  return new Promise(function(res, rej){
+    if(window.pywebview && window.pywebview.api && window.pywebview.api[metodo]){
+      Promise.resolve(window.pywebview.api[metodo]()).then(res, rej); return;
+    }
+    if(window.parent && window.parent !== window){
+      var id = Math.random().toString(36).slice(2);
+      var oye = function(ev){ var d = ev.data || {}; if(d.kira_resp !== id) return;
+        window.removeEventListener("message", oye); if(d.ok) res(d.valor); else rej(); };
+      window.addEventListener("message", oye);
+      window.parent.postMessage({kira_pide: true, id: id, metodo: metodo}, "*");
+      setTimeout(function(){ rej(); }, 5000); return;
+    }
+    rej();
+  });
+}
+var pedido=false;
 function pide(){
-  if(window.pywebview && window.pywebview.api && window.pywebview.api.mapa_ataques){
-    Promise.resolve(window.pywebview.api.mapa_ataques()).then(cargar).catch(function(){cargar({ataques:[]});});
-  } else { cargar(FAKE); }
+  if(pedido) return; pedido=true;
+  var dentro = (window.pywebview && window.pywebview.api) || (window.parent && window.parent !== window);
+  if(dentro){ puente("mapa_ataques").then(cargar).catch(function(){ cargar({ataques:[]}); }); }
+  else { cargar(FAKE); }
 }
 if(window.pywebview && window.pywebview.api){ pide(); }
 else { window.addEventListener("pywebviewready", pide); setTimeout(pide, 400); }
