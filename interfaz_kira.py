@@ -131,7 +131,8 @@ def construir_interfaz(core, consola=None, modo=None):
     # ---------- piezas (según la paleta) ----------
     def hacer_piezas(P):
         def boton(texto, accion, color=P["GRIS"], alto=48, **kw):
-            kw.setdefault("color", P["TXT"] if _luminosidad(color) > 0.6 else (1, 1, 1, 1))
+            oscuro = P["TXT"] if _luminosidad(P["TXT"]) < 0.5 else P.get("FONDO", (0.06, 0.09, 0.16, 1))
+            kw.setdefault("color", oscuro if _luminosidad(color) > 0.6 else (1, 1, 1, 1))   # v2.89: se lee siempre
             kw.setdefault("font_size", tam(15))
             b = Button(text=texto, size_hint_y=None, height=dp(alto), background_normal="", background_color=color,
                        **FUENTE, **kw)
@@ -843,7 +844,8 @@ def construir_interfaz(core, consola=None, modo=None):
 
         def trabajo():
             return casa.orden(orden, al_paso=lambda fr, txt: avance(txt, fr if fr is not None else 0.5),
-                              parar=lambda: bool(getattr(core, "cancelado", lambda: False)()))
+                              parar=lambda: bool(getattr(core, "cancelado", lambda: False)()),
+                              al_id=lambda tid: oid and ordk_.actualizar(core.dir, oid, tarea=tid))
 
         def hecho(r):
             ok = not isinstance(r, Exception) and r.get("estado") == "hecho"

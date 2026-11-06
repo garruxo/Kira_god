@@ -71,6 +71,19 @@ def _si(v):
     return "sí" if v else "no"
 
 
+def _corta(texto, n):
+    t = str(texto or "").replace("\n", " ").strip()
+    return t if len(t) <= n else t[:n - 1].rstrip() + "…"
+
+
+def _num(x, dec=1):
+    """Números a la española: 91,8 · 1,35."""
+    try:
+        return (f"{float(x):.{dec}f}".rstrip("0").rstrip(".") if dec else str(int(x))).replace(".", ",")
+    except (TypeError, ValueError):
+        return str(x)
+
+
 # ---------- cada tarjeta ----------
 def _haciendo(act, tarea):
     partes = []
@@ -95,9 +108,9 @@ def tarjeta_movil(d):
     if eq.get("modelo"):
         eqs.append(eq["modelo"])
     if eq.get("ram_mb"):
-        eqs.append(f"RAM {eq.get('ram_libre_mb', 0)} de {eq['ram_mb']} MB libres")
+        eqs.append(f"RAM libre {_num(eq.get('ram_libre_mb', 0) / 1024)} de {_num(eq['ram_mb'] / 1024)} GB")
     if eq.get("disco_libre_gb") is not None:
-        eqs.append(f"{eq['disco_libre_gb']} GB libres")
+        eqs.append(f"{_num(eq['disco_libre_gb'])} GB de disco libres")
     if eq.get("bateria") is not None:
         eqs.append(f"batería {eq['bateria']} %" + (" (cargando)" if eq.get("cargando") else ""))
     if eqs:
@@ -127,10 +140,10 @@ def tarjeta_kiraos(d):
         lineas.append("WiFi: " + ("apagada." if w.get("radio") is False else "sin conectar."))
     eq = h.get("equipo") or {}
     eqs = [x for x in (eq.get("procesador"),
-                       f"{eq['ram_mb'] // 1024} GB de RAM" if eq.get("ram_mb") else "",
-                       f"{eq['disco_libre_gb']} GB libres" if eq.get("disco_libre_gb") is not None else "",
-                       f"carga {eq['carga']}" if eq.get("carga") else "",
-                       f"encendido {eq['encendido_h']} h" if eq.get("encendido_h") is not None else "") if x]
+                       f"{_num(eq['ram_mb'] / 1024)} GB de RAM" if eq.get("ram_mb") else "",
+                       f"{_num(eq['disco_libre_gb'])} GB de disco libres" if eq.get("disco_libre_gb") is not None else "",
+                       f"carga {_num(eq['carga'], 2)}" if eq.get("carga") else "",
+                       f"encendido {_num(eq['encendido_h'])} h" if eq.get("encendido_h") is not None else "") if x]
     if eqs:
         lineas.append("Portátil: " + " · ".join(eqs) + ".")
     return {"id": "kiraos", "titulo": "KIRAOS (el portátil)", "texto": "\n".join(lineas),
@@ -167,12 +180,12 @@ def tarjeta_ordenes(d):
     for o in lista[:10]:
         donde = "KiraOS" if o.get("destino") == "kiraos" else "móvil"
         h = time.strftime("%d/%m %H:%M", time.localtime(o.get("cuando", 0)))
-        f = f"[{_ICONO.get(o.get('estado'), '?')}] {donde} · {h} — {str(o.get('texto', ''))[:70]}"
+        f = f"[{_ICONO.get(o.get('estado'), '?')}] {donde} · {h} — {_corta(o.get('texto', ''), 70)}"
         if o.get("estado") == "pendiente":
             pend += 1
             f += " (al llegar a casa)"
         elif o.get("respuesta"):
-            f += "\n      " + str(o["respuesta"]).replace("\n", " ")[:140]
+            f += "\n      " + _corta(o["respuesta"], 140)
         filas.append(f)
     if pend:
         filas.append(f"\n{pend} orden(es) esperando a KiraOS: se las doy yo sola en cuanto la vea.")
@@ -187,7 +200,7 @@ def tarjeta_mejoras(d):
              "solo se instalan con tus DOS toques."]
     botones = []
     for m in ms[:4]:
-        filas.append(f"· «{m['nombre']}»: {str(m.get('descripcion', ''))[:90]}"
+        filas.append(f"· «{m['nombre']}»: {_corta(m.get('descripcion', ''), 90)}"
                      + (" — probada aquí: lista para instalar" if m.get("estado") == "probada" else ""))
         if m.get("estado") == "probada":
             botones.append((f"Instalar «{m['nombre']}» (2 toques)", "aplicar:" + m["nombre"]))
@@ -213,7 +226,7 @@ def tarjeta_charla(d):
     turnos = d.get("charla") or []
     if not turnos:
         return {"id": "charla", "titulo": "CONVERSACIONES", "texto": "Aún no hemos hablado.", "botones": []}
-    filas = [("Tú: " if rol == "tu" else "Kira: ") + str(texto).replace("\n", " ")[:160] for rol, texto in turnos[-8:]]
+    filas = [("Tú: " if rol == "tu" else "Kira: ") + _corta(texto, 160) for rol, texto in turnos[-8:]]
     return {"id": "charla", "titulo": "CONVERSACIONES (lo último)", "texto": "\n".join(filas),
             "botones": [("Hablar con Kira", "ir_inicio")]}
 

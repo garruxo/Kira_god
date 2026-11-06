@@ -296,10 +296,16 @@ class Casa:
         except CasaError:
             return None
 
-    def orden(self, texto, al_paso=None, parar=None, cada=1.0, espera_max=6 * 3600, dormir=time.sleep):
+    def orden(self, texto, al_paso=None, parar=None, cada=1.0, espera_max=6 * 3600, dormir=time.sleep, al_id=None):
         """Manda la orden a la Kira del portátil y espera: al_paso(fraccion, texto) con cada paso; parar() -> True
-        la cancela allí. Devuelve la tarea final {estado, respuesta, codigo, nombre}. Lanza CasaError."""
+        la cancela allí. Devuelve la tarea final {estado, respuesta, codigo, nombre}. Lanza CasaError.
+        v2.89: al_id(tid) nada más empezar, para apuntarlo (si se cierra la app, el resultado se recoge luego)."""
         tid = self._nucleo("/orden", {"orden": str(texto)})["id"]
+        if al_id:
+            try:
+                al_id(tid)
+            except Exception:
+                pass
         vistos, fin, cancelada = 0, self._reloj() + espera_max, False
         while self._reloj() < fin:
             t = self._nucleo("/tarea?id=" + tid)
