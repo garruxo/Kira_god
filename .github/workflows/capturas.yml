@@ -1,0 +1,30 @@
+name: Capturas de pantallas
+on:
+  push:
+    branches: [capturas]
+  workflow_dispatch:
+
+jobs:
+  capturas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb python3-tk python3-pil libgl1-mesa-dri libegl1 libmtdev1 fonts-dejavu-core >/dev/null
+          python -m pip install -q "kivy[base]==2.3.1" pillow
+      - name: El móvil (Kivy de verdad)
+        run: xvfb-run -a -s "-screen 0 1200x2500x24" python herramientas_pc/capturas_pantallas.py --movil capturas
+      - name: KiraOS (ventana de verdad)
+        if: always()
+        run: xvfb-run -a -s "-screen 0 1366x768x24" /usr/bin/python3 herramientas_pc/capturas_pantallas.py --kiraos capturas
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas
+          path: capturas
