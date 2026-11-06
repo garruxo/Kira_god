@@ -45,8 +45,8 @@ Al terminar, **reinicia**: Kira nace (la primera vez) y después aparece sola al
 «Kira, conéctate al ordenador» + el código de `kira-codigo`, y luego «pasa tu memoria al portátil».
 
 ## El escritorio de KiraOS (como Windows)
-Después del saludo entras en el **escritorio**: iconos (Hablar con Kira, WiFi, Mi red, Mapa de ataques, Máquina
-virtual, Cuaderno, Programando, Móvil, Ajustes) y una **barra abajo** con el botón **K** (menú: las apps, volver al
+Después del saludo entras en el **escritorio**: iconos (Hablar con Kira, Buscador, WiFi, Mi red, Mapa de ataques,
+Máquina virtual, Cuaderno, Programando, Móvil, Ajustes) y una **barra abajo** con el botón **K** (menú: las apps, volver al
 orbe, reiniciar y apagar con dos toques), la ventana abierta, la **barra para hablar con Kira**, el botón **Texto**, el
 altavoz, la WiFi y la hora. Cada ventana tiene arriba el botón **‹ Escritorio** para volver a la pantalla principal
 (también la tecla Esc).
@@ -54,6 +54,22 @@ altavoz, la WiFi y la hora. Cada ventana tiene arriba el botón **‹ Escritorio
 **Hablar con Kira desde cualquier sitio:** escribe en la barra de abajo (o empieza a teclear en cualquier parte) o
 pulsa el **micrófono** y habla. Kira te contesta **con su voz**; si quieres leerlo, pulsa **Texto**. El altavoz de la
 barra quita o pone la voz. El oído es Vosk (sin internet; el audio no se guarda).
+
+## El buscador y su máquina virtual (v2.91)
+En el escritorio, el icono **Buscador** es un buscador como Google: escribes, salen los resultados (pestañas Todo,
+Código y Documentos) y, al pulsar uno, Kira te trae la página como **texto limpio** (sin anuncios ni nada que se
+ejecute), con **Resúmelo** y **Guárdalo en mi baúl**. También vale decir o escribir en la barra «busca …».
+
+Todo lo de investigar (buscar, leer páginas, vídeos de YouTube, la Wikipedia) y sus **experimentos** al pensar salen
+**desde su máquina virtual**:
+- la máquina va con la red de QEMU aislada; su única salida es **la puerta** (`proxy_maquina.py`), que corre fuera,
+  en el portátil, y solo deja ir a **webs de internet**: nunca a tu router, a este portátil ni a nada de tu casa;
+- sus experimentos corren dentro como el usuario **prueba**, sin permisos, con tope de tiempo y memoria; al acabar se
+  borra todo lo que dejó; si la máquina se cuelga, vuelve sola a su foto limpia;
+- lo que lleva una clave (la de Claude, la de GitHub) nunca entra en la máquina: eso sale directo;
+- en el icono **Máquina virtual**, «Últimas visitas» enseña a qué sitios fue (solo el nombre, nunca el contenido);
+- si la máquina no puede (no está preparada, falta KVM o no contesta), lo hace el portátil y el buscador lo dice.
+Para encenderla sin internet: «arranca tu máquina sin internet» o `kira-maquina --encender --sin-internet`.
 
 ## La WiFi (la maneja Kira)
 Conéctalo a la WiFi de casa al instalar Xubuntu (el instalador de Kira necesita internet). Después, desde Kira:

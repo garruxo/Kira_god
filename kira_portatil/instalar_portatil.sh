@@ -306,7 +306,8 @@ KIRAESP
   mkdir -p "$DATOS/espacio"
   $SUDO tee /usr/local/bin/kira-maquina >/dev/null <<KIRAMAQ
 #!/usr/bin/env bash
-# La máquina virtual de Kira (Linux ligero, sin internet, sin tus archivos). Sin argumentos: su estado.
+# La máquina virtual de Kira (Linux ligero, sin tus archivos; internet solo por su puerta, nunca hacia tu casa).
+# Sin argumentos: su estado.
 # kira-maquina --ver  (la enciende si hace falta y te la enseña) · --apagar · --ejecutar "comando"
 exec /usr/bin/python3 "$AQUI/maquina_kira.py" "\$@"
 KIRAMAQ
@@ -399,7 +400,7 @@ EOF
   $SUDO tee /usr/share/applications/kira-maquina.desktop >/dev/null <<MAQDESK
 [Desktop Entry]
 Name=Máquina de Kira
-Comment=El ordenador virtual donde Kira prueba sus programas y aprende Linux
+Comment=El ordenador virtual donde Kira investiga, experimenta y aprende Linux
 Exec=/usr/local/bin/kira-maquina --ver
 Terminal=false
 Type=Application

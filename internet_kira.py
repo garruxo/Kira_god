@@ -39,7 +39,7 @@ class InternetError(RuntimeError):
 
 def _abrir(req, timeout=20):
     import red_kira
-    return red_kira.abrir(req, timeout=timeout)
+    return red_kira.abrir_investigar(req, timeout=timeout)
 
 
 def _plano(t):

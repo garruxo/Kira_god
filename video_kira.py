@@ -166,7 +166,7 @@ def _bajar_defecto(url, datos=None, cabeceras=None):
     if cabeceras:
         cab.update(cabeceras)
     req = urllib.request.Request(url, data=datos, headers=cab)
-    with red_kira.abrir(req, timeout=25) as r:
+    with red_kira.abrir_investigar(req, timeout=25) as r:
         return r.read(8 * 1024 * 1024)
 
 

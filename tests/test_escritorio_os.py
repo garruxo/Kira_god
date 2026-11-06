@@ -112,10 +112,57 @@ api.wifi_mod = WifiFalso()
 api.nucleo_cli = None
 ok(api.entrar() is True and api.entrado, "entrar sigue funcionando (y prepara el escritorio)")
 b = api.barra()
-ok(b["wifi"]["ssid"] == "MiCasa" and b["voz"] is True and len(b["iconos"]) == 9, "la barra: WiFi, voz e iconos")
+ok(b["wifi"]["ssid"] == "MiCasa" and b["voz"] is True and len(b["iconos"]) == 10, "la barra: WiFi, voz e iconos")
 ids = [i["id"] for i in ek.ICONOS]
-ok(ids == ["hablar", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "movil", "ajustes"],
-   "los 9 iconos del escritorio")
+ok(ids == ["hablar", "buscador", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "movil", "ajustes"],
+   "los 10 iconos del escritorio (v2.91: con el Buscador)")
+
+
+# ---------- v2.91: el BUSCADOR tipo Google (lo busca y lo lee desde su máquina) ----------
+class NetFalsa:
+    avisos = []
+
+    def __init__(self):
+        self.buscadas = []
+
+    def buscar(self, consulta, tipo="web", n=8):
+        self.buscadas.append((consulta, tipo))
+        if consulta == "nada":
+            raise RuntimeError("No he encontrado nada.")
+        return [{"titulo": "Python (lenguaje)", "url": "https://es.wikipedia.org/wiki/Python", "resumen": "Un lenguaje.",
+                 "fuente": "Wikipedia"},
+                {"titulo": "Python.org", "url": "https://www.python.org/", "resumen": "La web oficial.", "fuente": "web"}]
+
+    def leer(self, url):
+        return {"url": url, "titulo": "Python", "texto": "Python es un lenguaje muy legible. " * 50,
+                "codigos": ["print(1)"], "tipo": "web"}
+
+
+class RedFalsa:
+    def estado(self):
+        return "desde mi máquina virtual (por su puerta, sin ver tu casa)"
+
+
+api.internet_obj, api.red_web = NetFalsa(), RedFalsa()
+for frase, esp in (("busca recetas de tortilla", ("recetas de tortilla", "web")),
+                   ("Kira, busca en internet cómo plantar tomates", ("cómo plantar tomates", "web")),
+                   ("búscame código de un servidor web en python", ("un servidor web en python", "codigo")),
+                   ("busca en google el tiempo en Madrid", ("el tiempo en Madrid", "web"))):
+    b = api.es_busqueda(frase)
+    ok(b and (b["consulta"], b["tipo"]) == esp, f"«{frase}» abre el buscador con «{esp[0]}» ({esp[1]})")
+for frase in ("hola Kira", "resume https://es.wikipedia.org/wiki/Python", "guarda https://a.org/x", "piensa"):
+    ok(api.es_busqueda(frase) is None, f"«{frase}» no es una búsqueda (va a la charla)")
+r = api.buscar_web("python", "web")
+ok(r["ok"] and len(r["resultados"]) == 2 and r["resultados"][0]["dominio"] == "es.wikipedia.org",
+   "buscar: resultados con título, web y resumen (como Google)")
+ok("máquina virtual" in r["via"], "y dice desde dónde se buscó (su máquina)")
+ok(api.buscar_web("python", "raro")["tipo"] == "web" and api.internet_obj.buscadas[-1] == ("python", "web"),
+   "un tipo raro se queda en «Todo»")
+ok(not api.buscar_web("nada")["ok"], "si no encuentra, lo dice (sin inventar)")
+p2 = api.leer_web("https://es.wikipedia.org/wiki/Python")
+ok(p2["ok"] and p2["titulo"] == "Python" and p2["codigos"] == 1 and "legible" in p2["texto"],
+   "leer: la página como texto limpio")
+
 
 # hablar desde cualquier sitio: contesta y lo DICE
 r = api.hablar("hola Kira")
@@ -226,13 +273,29 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
   await pg.click('#btnTexto'); await pg.waitForTimeout(200);
   const texto = await pg.$$eval('#charlaCajon .m', l => l.map(x => x.textContent));
   await pg.click('#cajonCerrar');
-  const apps = ['wifi','red','cuaderno','maquina','movil','ajustes','mapa','programando','hablar']; const vuelve = [];
+  const apps = ['buscador','wifi','red','cuaderno','maquina','movil','ajustes','mapa','programando','hablar']; const vuelve = [];
   for (const a of apps) { await pg.click('.icono[data-app="'+a+'"]'); await pg.waitForTimeout(250);
     const v = await pg.isVisible('#volver'); await pg.click('#volver'); await pg.waitForTimeout(100);
     vuelve.push(v && !(await pg.evaluate(() => document.getElementById('ventana').classList.contains('on')))); }
   await pg.click('#btnKira'); const menu = await pg.$$eval('#menu .op', l => l.length);
   await pg.click('#menu [data-sis="apagar"]'); const conf = await pg.textContent('#menu [data-sis="apagar"]');
-  console.log(JSON.stringify({errs, iconos, aviso, texto, vuelve, menu, conf}));
+  await pg.keyboard.press('Escape');
+  // v2.91: «busca …» en la barra abre el BUSCADOR con los resultados; pulsar uno lo lee; «‹ Resultados» vuelve
+  await pg.click('#entrada'); await pg.keyboard.type('busca python'); await pg.keyboard.press('Enter');
+  await pg.waitForTimeout(1200);
+  const busTitulo = await pg.textContent('#vtitulo');
+  const busCampo = await pg.inputValue('#busCampo');
+  const res = await pg.$$eval('.res .tit', l => l.map(x => x.textContent));
+  const via = await pg.textContent('.via');
+  await pg.screenshot({path: process.argv[3]});
+  await pg.click('.res .tit'); await pg.waitForTimeout(400);
+  const lectura = await pg.textContent('.lectura h3'); const botones = await pg.$$eval('#busCuerpo .b', l => l.map(x => x.textContent));
+  await pg.click('#busAtras'); await pg.waitForTimeout(200);
+  const otraVez = await pg.$$eval('.res .tit', l => l.length);
+  await pg.click('.pest[data-t="codigo"]'); await pg.waitForTimeout(800);
+  const pest = await pg.textContent('.pest.on');
+  console.log(JSON.stringify({errs, iconos, aviso, texto, vuelve, menu, conf, busTitulo, busCampo, res, via, lectura,
+                              botones, otraVez, pest}));
   await b.close(); })().catch(async e => { console.log('ERR ' + e); if (b) await b.close(); });
 """
     f = os.path.join(T, "e.js")
@@ -242,17 +305,24 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
         env["NODE_PATH"] = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()
     except Exception:
         pass
-    r = subprocess.run([node, f, html], capture_output=True, text=True, timeout=120, env=env)
+    r = subprocess.run([node, f, html, os.path.join(T, "buscador.png")], capture_output=True, text=True, timeout=120,
+                       env=env)
     out = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
     if out.startswith("{"):
         d = json.loads(out)
         ok(not d["errs"], "Chromium: sin errores " + str(d["errs"]))
-        ok(d["iconos"] == 9, "Chromium: 9 iconos en el escritorio")
+        ok(d["iconos"] == 10, "Chromium: 10 iconos en el escritorio")
         ok("voz" in d["aviso"] and "ver texto" in d["aviso"], "Chromium: contesta por voz, con «ver texto»")
         ok(len(d["texto"]) == 2 and "hola" in d["texto"][0], "Chromium: el botón «Texto» enseña la conversación")
         ok(all(d["vuelve"]), "Chromium: TODAS las ventanas tienen «‹ Escritorio» y vuelven a la pantalla principal")
         ok(d["menu"] >= 12, "Chromium: el menú KIRA con apps, volver al orbe, reiniciar y apagar")
         ok("Seguro" in d["conf"], "Chromium: apagar pide un segundo toque")
+        ok(d["busTitulo"] == "Buscador" and d["busCampo"] == "python" and len(d["res"]) == 3,
+           "Chromium: «busca python» en la barra abre el Buscador con los resultados")
+        ok("máquina virtual" in d["via"], "Chromium: dice que lo buscó desde su máquina")
+        ok(d["lectura"] and "Resúmelo" in d["botones"] and "Guárdalo en mi baúl" in d["botones"],
+           "Chromium: al pulsar un resultado lo lee, con «Resúmelo» y «Guárdalo en mi baúl»")
+        ok(d["otraVez"] == 3 and d["pest"] == "Código", "Chromium: «‹ Resultados» vuelve y hay pestañas (Todo/Código/…)")
     else:
         print("(sin Chromium utilizable: me salto la pantalla)", out[:200])
 print("\nTODO BIEN", n)

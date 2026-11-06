@@ -1878,7 +1878,7 @@ class KiraGodCore:
                 ultimo = {"ok": False, "resultado": f"intento {i}: no me salió el código ({e})", "codigo": ""}
                 pista = "\n\nLa vez anterior no me diste el código en un bloque ```python. Hazlo más corto y simple."
                 continue
-            ok_prog, motivo, dato = pk.probar_programa(codigo)   # devuelve una TUPLA (ok, motivo, dato), no un dict
+            ok_prog, motivo, dato = self._probar_experimento(codigo)   # una TUPLA (ok, motivo, dato), no un dict
             if ok_prog:
                 salida = (dato or {}).get("salida", "")
                 return {"ok": True, "resultado": str(salida)[:300], "codigo": (codigo or "")[:1200], "intentos": i}
@@ -1895,6 +1895,20 @@ class KiraGodCore:
             pista = f"\n\nLa vez anterior falló con: {err[:150]}. Corrígelo y hazlo más simple."
         ultimo["intentos"] = max(1, intentos)
         return ultimo
+
+    def _probar_experimento(self, codigo):
+        """Prueba un experimento suyo. En KiraOS (v2.91) va DENTRO de su máquina virtual (usuario sin permisos), si
+        está; si no (o es un juego, que necesita el motor), en el modo seguro de siempre. Devuelve (ok, motivo, dato)."""
+        import programar_kira as pk
+        probar = getattr(self, "probar_experimento", None)
+        if probar is not None and not pk.es_juego(codigo):
+            try:
+                r = probar(codigo)
+                if r is not None:
+                    return r
+            except Exception:                      # noqa: BLE001 - si la máquina falla, se prueba aquí
+                pass
+        return pk.probar_programa(codigo)
 
     def _semillas_pensar(self, k=15):
         """Las SEMILLAS sobre las que piensa: PRIMERO lo que ha ESTUDIADO (los temas de su baúl, de lo más reciente),

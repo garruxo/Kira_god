@@ -41,9 +41,12 @@ src = open(os.path.join(RAIZ, "kira_god.py"), encoding="utf-8").read()
 arb = ast.parse(src)
 ep = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "_experimentar_pensando")
 cuerpo = ast.get_source_segment(src, ep) or ""
-ok("= pk.probar_programa(codigo)" in cuerpo, "llama a probar_programa")
-ok(", motivo, dato = pk.probar_programa(codigo)" in cuerpo or ", _motivo, dato = pk.probar_programa(codigo)" in cuerpo
-   or "ok_prog, motivo, dato = pk.probar_programa(codigo)" in cuerpo, "desempaqueta la tupla (ok, motivo, dato)")
+# v2.91: pasa por _probar_experimento (en KiraOS, su máquina virtual; si no, probar_programa de siempre)
+pe = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "_probar_experimento")
+cuerpo_pe = ast.get_source_segment(src, pe) or ""
+ok("= self._probar_experimento(codigo)" in cuerpo and "return pk.probar_programa(codigo)" in cuerpo_pe,
+   "llama a probar_programa (a través de _probar_experimento)")
+ok("ok_prog, motivo, dato = self._probar_experimento(codigo)" in cuerpo, "desempaqueta la tupla (ok, motivo, dato)")
 ok("r.get(\"ok\")" not in cuerpo and "r.get('ok')" not in cuerpo, "ya NO trata el resultado como diccionario")
 
 print(f"\nTODO BIEN {n}")

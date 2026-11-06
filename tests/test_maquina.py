@@ -32,12 +32,15 @@ ok(ud.startswith("#cloud-config") and "name: kira" in ud and "ssh-ed25519 AAAAC3
 ok("ssh_pwauth: false" in ud and "lock_passwd: true" in ud, "sin contraseñas: solo entra con su llave")
 o = mq.orden_qemu(T, kvm=True)
 t = " ".join(o)
-ok("-enable-kvm" in o and "restrict=on" in t, "con KVM y SIN internet por defecto")
+ok("-enable-kvm" in o and "restrict=on" in t, "con KVM y la red de QEMU AISLADA")
+ok(f"guestfwd=tcp:{mq.PUERTA_IP}:{mq.PUERTA_PUERTO}-cmd:" in t and "proxy_maquina.py" in t,
+   "v2.91: por defecto, su única salida es la puerta (proxy fuera de la máquina)")
 ok("hostfwd=tcp:127.0.0.1:2223-:22" in t and "127.0.0.1:1" in o, "SSH y pantalla solo en el propio portátil")
 ok(not any(x in t for x in ("-virtfs", "9p", "smb=", "-fsdev")), "no comparte ninguna carpeta tuya")
 ok("-daemonize" in o and "-pidfile" in o and "-m" in o and o[o.index("-m") + 1] == "1024", "1 GB y en segundo plano")
-t2 = " ".join(mq.orden_qemu(T, kvm=False, red=True))
-ok("tcg" in t2 and "restrict=off" in t2, "sin KVM va con tcg; con internet solo si se pide")
+t2 = " ".join(mq.orden_qemu(T, kvm=False, red=False))
+ok("tcg" in t2 and "restrict=on" in t2 and "guestfwd" not in t2, "sin KVM va con tcg; «sin internet»: ni puerta")
+ok("restrict=off" not in t and "restrict=off" not in t2, "NUNCA con la red abierta (vería tu casa)")
 ok("BatchMode=yes" in mq.orden_ssh(T) and "kira@127.0.0.1" in mq.orden_ssh(T), "entra por SSH con su llave")
 
 # ---------- el guion que corre DENTRO: lo ejecuto con bash de verdad ----------
@@ -75,9 +78,10 @@ ok([f["nombre"] for f in mq.fotos_de_info(info)] == ["nueva", "antes_de_probar"]
 ok(mq.fotos_de_info("basura") == [], "si no entiende, no inventa")
 
 # ---------- las órdenes ----------
-for frase, esp in (("Kira, prepara tu máquina", ("preparar", "")), ("arranca tu máquina", ("encender", "")),
+for frase, esp in (("Kira, prepara tu máquina", ("preparar", "")), ("arranca tu máquina", ("encender", "red")),
                    ("enciende tu máquina con internet", ("encender", "red")), ("apaga tu máquina", ("apagar", "")),
-                   ("enséñame tu máquina", ("ver", "")), ("abre tu máquina", ("encender", "")),
+                   ("arranca tu máquina sin internet", ("encender", "sin")),
+                   ("enséñame tu máquina", ("ver", "")), ("abre tu máquina", ("encender", "red")),
                    ("ejecuta en tu máquina: ls -la /Etc", ("ejecutar", "ls -la /Etc")),
                    ("lee en tu máquina /etc/hostname", ("leer", "/etc/hostname")),
                    ("prueba el programa en tu máquina", ("probar", "")), ("estudia tu máquina", ("estudiar", "")),
@@ -169,7 +173,11 @@ ok("preparada" in txt and m.preparada(), "se prepara: imagen, llave, semilla y d
 ok(oct(os.stat(B).st_mode & 0o777) == "0o700", "su carpeta es solo tuya")
 ok(any(o[0] == "qemu-img" and "-b" in o for o, _ in llamadas), "su disco va encima de la imagen original")
 txt = m.encender()
-ok(m.encendida() and "encendida sin internet" in txt, "se enciende (sin internet)")
+ok(m.encendida() and "solo por mi puerta" in txt and m.modo_red() == "puerta",
+   "se enciende con internet solo por su puerta (v2.91)")
+aj = [i for o, i in llamadas if o[0] == "ssh" and i and "useradd" in i]
+ok(aj and "date -u -s @" in aj[-1] and "prueba" in aj[-1] and "95kira-puerta" in aj[-1],
+   "al arrancar: pone la hora, crea el usuario «prueba» sin permisos y la puerta")
 ok("nueva" in [f["nombre"] for f in m.fotos()], "en el primer arranque hace la foto «nueva»")
 c, s = m.ejecutar("echo hola")
 ok(c == 0 and "hola" in s, "ejecuta dentro y devuelve lo que sale")

@@ -15,28 +15,43 @@ Cómo es:
   - fotos del estado (instantáneas del qcow2): con la máquina encendida o apagada; «vuelve a la foto X».
 
 Candados (por qué no toca lo tuyo):
-  - SIN INTERNET por defecto (red de QEMU «restrict=on»: dentro no se llega ni a internet ni a tu portátil; solo entra
-    el SSH de Kira por el puerto reenviado). Con red solo si lo pides («arranca tu máquina con internet»);
+  - la red de QEMU va AISLADA siempre («restrict=on»): por sí sola no llega ni a internet, ni a tu portátil, ni a tu
+    casa; solo entra el SSH de Kira por el puerto reenviado;
+  - v2.91 (eligió el dueño «internet siempre, pero sin ver tu casa»): su ÚNICA salida es la PUERTA (proxy_maquina.py,
+    10.0.2.100:3128 dentro), que corre FUERA, en el portátil, y solo deja ir a webs de INTERNET (puertos 443/80 a
+    direcciones públicas): nunca a tu router, tu portátil, tu móvil ni nada de tu red. Desde dentro no se puede
+    cambiar. «arranca tu máquina sin internet» la enciende sin puerta;
+  - lo que investiga y experimenta lo hace como el usuario «prueba» (sin permisos de administrador), con límites de
+    tiempo y memoria; al acabar cada experimento se mata lo que dejó corriendo y se borra su carpeta; si la máquina se
+    cuelga, vuelve sola a su foto limpia («nueva»);
   - no comparte ninguna carpeta con el portátil; la pantalla y el SSH solo escuchan en 127.0.0.1;
   - lo que pasa dentro se queda dentro: nada de la máquina vuelve solo al código de Kira (las mejoras siguen por el
-    laboratorio + tus dos toques / la auto-mejora con su interruptor).
+    laboratorio + tus dos toques / la auto-mejora con su interruptor). Lo que vuelve es TEXTO (páginas leídas y lo que
+    imprimen sus experimentos).
 
 Órdenes (las reconoce `orden_maquina`; el móvil se las pasa al portátil):
-  «prepara tu máquina», «arranca tu máquina [con internet]», «apaga tu máquina», «enséñame tu máquina»,
+  «prepara tu máquina», «arranca tu máquina [sin internet]», «apaga tu máquina», «enséñame tu máquina»,
   «ejecuta en tu máquina: <comando>», «lee en tu máquina <ruta>», «prueba el programa en tu máquina»,
   «estudia tu máquina», «haz una foto de tu máquina [llamada X]», «vuelve a la foto X», «fotos de tu máquina»,
   «estado de tu máquina», «deja tu máquina como nueva».
 """
+import base64
+import email.message
+import io
 import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import socket
 import subprocess
 import sys
 import time
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 BASE = os.environ.get("KIRA_MAQUINA") or os.path.expanduser("~/kira_portatil/maquina")
@@ -54,6 +69,13 @@ PANTALLA_VNC = 1                     # 127.0.0.1:5901
 USUARIO = "kira"
 MAX_SALIDA = 20000
 FOTO_NUEVA = "nueva"                 # la foto del primer arranque: «deja tu máquina como nueva»
+PUERTA_IP, PUERTA_PUERTO = "10.0.2.100", 3128          # v2.91: su única salida a internet (proxy_maquina.py, fuera)
+PUERTA = f"http://{PUERTA_IP}:{PUERTA_PUERTO}"
+ENV_PUERTA = (f"export http_proxy={PUERTA} https_proxy={PUERTA} HTTP_PROXY={PUERTA} HTTPS_PROXY={PUERTA} "
+              "no_proxy=localhost,127.0.0.1 NO_PROXY=localhost,127.0.0.1")
+USUARIO_PRUEBA = "prueba"            # sin permisos: con él investiga y experimenta
+LIMITE_EXPERIMENTO = 60              # segundos de procesador por experimento
+MAX_WEB = 3_000_000
 
 
 class MaquinaError(RuntimeError):
@@ -91,15 +113,26 @@ def meta_data(nombre="kira-maquina"):
     return f"instance-id: {nombre}-1\nlocal-hostname: {nombre}\n"
 
 
-def orden_qemu(base, kvm=True, memoria=MEMORIA_MB, nucleos=NUCLEOS, red=False, pantalla=PANTALLA_VNC,
-               puerto_ssh=PUERTO_SSH, qemu="qemu-system-x86_64"):
-    """La orden para encender la máquina en segundo plano (se queda viva aunque Kira se reinicie)."""
+def orden_puerta(base, python=None):
+    """Lo que QEMU lanza por cada conexión a la puerta (fuera de la máquina). Las comas se doblan (así lo pide QEMU)."""
+    cmd = shlex.join([python or sys.executable or "python3", os.path.join(AQUI, "proxy_maquina.py"),
+                      "--registro", os.path.join(base, "puerta.log")])
+    return cmd.replace(",", ",,")
+
+
+def orden_qemu(base, kvm=True, memoria=MEMORIA_MB, nucleos=NUCLEOS, red=True, pantalla=PANTALLA_VNC,
+               puerto_ssh=PUERTO_SSH, qemu="qemu-system-x86_64", python=None):
+    """La orden para encender la máquina en segundo plano (se queda viva aunque Kira se reinicie). La red va SIEMPRE
+    aislada; con `red`, su única salida es la puerta (solo internet, nunca tu casa)."""
     j = lambda n: os.path.join(base, n)  # noqa: E731
     o = [qemu, "-name", "kira-maquina", "-m", str(int(memoria)), "-smp", str(int(nucleos))]
     o += (["-enable-kvm", "-cpu", "host"] if kvm else ["-accel", "tcg"])
+    net = f"user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:{int(puerto_ssh)}-:22"
+    if red:
+        net += f",guestfwd=tcp:{PUERTA_IP}:{PUERTA_PUERTO}-cmd:{orden_puerta(base, python)}"
     o += ["-drive", f"file={j('kira.qcow2')},if=virtio,format=qcow2",
           "-drive", f"file={j('semilla.iso')},if=virtio,format=raw,readonly=on",
-          "-netdev", f"user,id=n0,restrict={'off' if red else 'on'},hostfwd=tcp:127.0.0.1:{int(puerto_ssh)}-:22",
+          "-netdev", net,
           "-device", "virtio-net-pci,netdev=n0",
           "-display", "none", "-vnc", f"127.0.0.1:{int(pantalla)}",
           "-qmp", f"unix:{j('qmp.sock')},server=on,wait=off",
@@ -110,7 +143,8 @@ def orden_qemu(base, kvm=True, memoria=MEMORIA_MB, nucleos=NUCLEOS, red=False, p
 def orden_ssh(base, puerto=PUERTO_SSH, usuario=USUARIO, espera=8):
     return ["ssh", "-i", os.path.join(base, "clave"), "-p", str(int(puerto)),
             "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
-            "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(espera)}", f"{usuario}@127.0.0.1"]
+            "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(espera)}",
+            "-o", "ServerAliveInterval=10", "-o", "ServerAliveCountMax=3", f"{usuario}@127.0.0.1"]
 
 
 def guion_remoto(comando, mostrar=True, python=False, delim=None):
@@ -119,7 +153,7 @@ def guion_remoto(comando, mostrar=True, python=False, delim=None):
     delim = delim or ("KIRA_" + secrets.token_hex(6).upper())
     while delim in comando:
         delim += "X"
-    lineas = ["set -o pipefail"]
+    lineas = ["set -o pipefail", ENV_PUERTA]
     if python:
         lineas += [f"cat > /tmp/kira_programa.py <<'{delim}'", comando, delim]
         orden, titulo = "python3 /tmp/kira_programa.py", "python3 programa.py"
@@ -133,6 +167,123 @@ def guion_remoto(comando, mostrar=True, python=False, delim=None):
     else:
         lineas.append(orden + " 2>&1")
     return "\n".join(lineas) + "\n"
+
+
+def _delim(*textos):
+    d = "KIRA_" + secrets.token_hex(6).upper()
+    while any(d in t for t in textos):
+        d += "X"
+    return d
+
+
+def guion_experimento(codigo, mostrar=True, limite=LIMITE_EXPERIMENTO, delim=None):
+    """Un EXPERIMENTO de Kira dentro de su máquina: como el usuario «prueba» (sin permisos), en una carpeta suya de
+    usar y tirar, con tope de tiempo y memoria. Al acabar se mata lo que dejó corriendo y se borra la carpeta. La
+    salida (lo que imprime) vuelve a Kira; con `mostrar` se ve también en la pantalla de la máquina."""
+    delim = delim or _delim(codigo)
+    lim = int(limite)
+    correr = (f"sudo -n -u {USUARIO_PRUEBA} env {ENV_PUERTA.replace('export ', '')} HOME=/home/{USUARIO_PRUEBA} "
+              f"bash -c 'cd \"$1\" && ulimit -t {lim} -v 900000 -f 200000 -u 150 2>/dev/null; "
+              f"exec timeout -k 5 {lim + 15} python3 -I programa.py' _ \"$D\" 2>&1")
+    lineas = [
+        "set -o pipefail",
+        f"D=$(sudo -n -u {USUARIO_PRUEBA} mktemp -d /tmp/kira_exp.XXXXXX) || "
+        "{ echo '[kira] no pude preparar el sitio de pruebas (¿falta el usuario prueba?)'; exit 97; }",
+        f"sudo -n -u {USUARIO_PRUEBA} tee \"$D/programa.py\" >/dev/null <<'{delim}'", codigo, delim,
+    ]
+    if mostrar:
+        lineas.append("printf '\\n\\033[1;35mprueba@maquina$\\033[0m python3 programa.py   (experimento de Kira, "
+                      "sin permisos)\\n' | (sudo -n tee /dev/tty1 >/dev/null 2>&1 || true)")
+        lineas.append(correr + " | (sudo -n tee /dev/tty1 2>/dev/null || cat)")
+    else:
+        lineas.append(correr)
+    lineas += ["C=${PIPESTATUS[0]}",
+               f"sudo -n pkill -9 -u {USUARIO_PRUEBA} >/dev/null 2>&1",
+               "sudo -n rm -rf -- \"$D\"",
+               "exit $C"]
+    return "\n".join(lineas) + "\n"
+
+
+_PROGRAMA_WEB = r"""import base64, json, sys, urllib.error, urllib.request
+P = json.loads(%s)
+def sale(d):
+    sys.stdout.write("KIRA_WEB " + json.dumps(d) + "\n")
+datos = base64.b64decode(P["datos"]) if P.get("datos") is not None else None
+req = urllib.request.Request(P["url"], data=datos, headers=P.get("cabeceras") or {}, method=P.get("metodo") or None)
+try:
+    with urllib.request.urlopen(req, timeout=P["timeout"]) as r:
+        b = r.read(P["maximo"] + 1)
+        sale({"status": r.status, "url": r.geturl(), "cabeceras": list(r.headers.items()),
+              "cuerpo": base64.b64encode(b).decode()})
+except urllib.error.HTTPError as e:
+    b = b""
+    try:
+        b = e.read(200000)
+    except Exception:
+        pass
+    sale({"status": e.code, "url": P["url"], "cabeceras": list((e.headers or {}).items()),
+          "cuerpo": base64.b64encode(b).decode()})
+except Exception as e:
+    sale({"error": (type(e).__name__ + ": " + str(e))[:300]})
+"""
+
+
+def guion_web(url, datos=None, cabeceras=None, metodo=None, timeout=25, maximo=MAX_WEB, delim=None):
+    """Kira VISITA una página DESDE DENTRO de su máquina (como «prueba», por la puerta). Vuelve una línea
+    «KIRA_WEB {json}» con el estado, las cabeceras y el contenido en base64. En su pantalla se ve a dónde fue."""
+    pet = {"url": str(url), "datos": base64.b64encode(datos).decode() if datos is not None else None,
+           "cabeceras": dict(cabeceras or {}), "metodo": metodo, "timeout": int(timeout), "maximo": int(maximo)}
+    programa = _PROGRAMA_WEB % json.dumps(json.dumps(pet))
+    delim = delim or _delim(programa)
+    visto = shlex.quote(str(url)[:160])
+    return "\n".join([
+        "set -o pipefail",
+        f"printf 'kira visita %s\\n' {visto} | (sudo -n tee /dev/tty1 >/dev/null 2>&1 || true)",
+        f"sudo -n -u {USUARIO_PRUEBA} env {ENV_PUERTA.replace('export ', '')} HOME=/home/{USUARIO_PRUEBA} "
+        f"python3 -I - <<'{delim}'", programa, delim,
+    ]) + "\n"
+
+
+def leer_respuesta_web(salida):
+    """De lo que vuelve por SSH saca el {status, url, cabeceras, cuerpo(bytes)} o {error}."""
+    for linea in reversed(str(salida or "").splitlines()):
+        if linea.startswith("KIRA_WEB "):
+            try:
+                d = json.loads(linea[9:])
+            except ValueError:
+                break
+            if "cuerpo" in d:
+                try:
+                    d["cuerpo"] = base64.b64decode(d.get("cuerpo") or "")
+                except (ValueError, TypeError):
+                    d["cuerpo"] = b""
+            return d
+    return None
+
+
+def guion_ajustes(ahora):
+    """Lo que se deja listo dentro en cada arranque: la hora bien (para los certificados https), el usuario «prueba»
+    (sin permisos) y que todo salga por la puerta."""
+    return "\n".join([
+        f"sudo -n date -u -s @{int(ahora)} >/dev/null 2>&1 || true",
+        f"id {USUARIO_PRUEBA} >/dev/null 2>&1 || sudo -n useradd -m -s /bin/bash -c 'Experimentos de Kira' "
+        f"{USUARIO_PRUEBA}",
+        f"printf '%s\\n' '{ENV_PUERTA}' | sudo -n tee /etc/profile.d/kira_puerta.sh >/dev/null",
+        f"printf 'Acquire::http::Proxy \"{PUERTA}\";\\nAcquire::https::Proxy \"{PUERTA}\";\\n' | "
+        "sudo -n tee /etc/apt/apt.conf.d/95kira-puerta >/dev/null",
+        "true",
+    ])
+
+
+def resumen_error(salida, codigo):
+    """La línea que de verdad dice qué falló (la última de un error de Python), para que Kira se corrija."""
+    if codigo == 124 or codigo == 137:
+        return f"tardó demasiado (más de {LIMITE_EXPERIMENTO} s) y lo corté"
+    lineas = [l.strip() for l in str(salida or "").splitlines() if l.strip()]
+    for l in reversed(lineas):
+        if re.match(r"^[A-Za-z_][\w.]*(?:Error|Exception|Interrupt|Exit)\b", l):
+            return l[:300]
+    return (lineas[-1][:300] if lineas else f"salió con código {codigo}")
 
 
 _FOTO = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
@@ -221,8 +372,8 @@ def orden_maquina(texto):
 
     if re.match(r"^(?:prepara|crea|instala|hazte|montate)\s+" + _MAQ + r"$", t):
         return ("preparar", "")
-    if re.match(r"^(?:arranca|enciende|inicia|despierta|abre)\s+" + _MAQ + r"(?:\s+con\s+(?:internet|red))?$", t):
-        return ("encender", "red" if re.search(r"con\s+(?:internet|red)$", t) else "")
+    if re.match(r"^(?:arranca|enciende|inicia|despierta|abre)\s+" + _MAQ + r"(?:\s+(?:con|sin)\s+(?:internet|red))?$", t):
+        return ("encender", "sin" if re.search(r"sin\s+(?:internet|red)$", t) else "red")
     if re.match(r"^(?:apaga|para|cierra|duerme)\s+" + _MAQ + r"$", t):
         return ("apagar", "")
     if re.match(r"^(?:ensename|muestrame|enseña|ver|veo|mira)\s*(?:me\s+)?" + _MAQ + r"$", t) or \
@@ -363,11 +514,39 @@ class Maquina:
             if c != 0:
                 raise MaquinaError("No pude crear su disco: " + s[-200:])
         paso(1.0, "Lista.")
-        return ("Mi máquina virtual está preparada: un Linux ligero (Debian) con 1 GB de memoria, sin internet y sin "
-                "acceso a tus archivos. Dime «arranca tu máquina».")
+        return ("Mi máquina virtual está preparada: un Linux ligero (Debian) con 1 GB de memoria, sin acceso a tus "
+                "archivos y con internet solo por mi puerta (nunca hacia tu casa). Dime «arranca tu máquina».")
 
     # ---------- encender / apagar ----------
-    def encender(self, red=False, al_paso=None, espera=240):
+    def modo_red(self):
+        """'puerta' (internet solo por la puerta) o 'sin' (sin internet). None si está apagada."""
+        if not self.encendida():
+            return None
+        try:
+            with open(self._j("red.txt"), encoding="utf-8") as f:
+                return f.read().strip() or "sin"
+        except OSError:
+            return "sin"
+
+    def _cerrojo(self):
+        """Que dos partes de Kira (el núcleo y la pantalla) no enciendan la máquina dos veces a la vez."""
+        os.makedirs(self.base, exist_ok=True)
+        f = open(self._j("encender.lock"), "w")
+        try:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            pass
+        return f
+
+    def encender(self, red=True, al_paso=None, espera=240):
+        cerrojo = self._cerrojo()
+        try:
+            return self._encender(red, al_paso, espera)
+        finally:
+            cerrojo.close()
+
+    def _encender(self, red, al_paso, espera):
         paso = al_paso or (lambda *_a: None)
         if not self.preparada():
             self.preparar(al_paso)
@@ -378,6 +557,8 @@ class Maquina:
         c, s = self._run(orden_qemu(self.base, kvm=kvm, memoria=self.memoria, red=red))
         if c != 0:
             raise MaquinaError("QEMU no arrancó: " + s.strip()[-300:])
+        with open(self._j("red.txt"), "w", encoding="utf-8") as f:
+            f.write("puerta" if red else "sin")
         primera = not os.path.isfile(self._j("arrancada.ok"))
         fin = self._reloj() + espera
         while self._reloj() < fin:
@@ -394,11 +575,41 @@ class Maquina:
                 self.foto(FOTO_NUEVA)            # para «deja tu máquina como nueva»
             except MaquinaError:
                 pass
-        self._log(f"\n=== máquina encendida {time.strftime('%d/%m %H:%M')} ({'con' if red else 'sin'} internet) ===")
+        self._ajustar_dentro()
+        self._log(f"\n=== máquina encendida {time.strftime('%d/%m %H:%M')} "
+                  f"({'internet por la puerta' if red else 'sin internet'}) ===")
         aviso = "" if kvm else (" Ojo: va sin aceleración (KVM). Activa «Intel VT» / «Virtualization» en la BIOS (F2) "
                                 "y irá mucho más rápida.")
-        return ("Mi máquina está encendida " + ("CON internet" if red else "sin internet") + ". Dime «enséñame tu "
-                "máquina» para verla." + aviso)
+        return ("Mi máquina está encendida " + ("con internet solo por mi puerta (no ve tu casa)" if red
+                                                else "sin internet") +
+                ". Dime «enséñame tu máquina» para verla." + aviso)
+
+    def _ajustar_dentro(self):
+        """En cada arranque (y al volver a una foto): hora bien, usuario «prueba» sin permisos y la puerta puesta."""
+        try:
+            c, s = self._run(orden_ssh(self.base) + ["bash", "-s"], entrada=guion_ajustes(self._reloj()), timeout=60)
+            if c != 0:
+                self._log("[aviso] no pude ajustar todo dentro: " + s.strip()[-200:])
+        except MaquinaError as e:
+            self._log(f"[aviso] no pude ajustar dentro: {e}")
+
+    def recuperar(self):
+        """Algo va raro (no contesta o se colgó): vuelve a su foto limpia («nueva») y la deja lista otra vez."""
+        self._log(f"=== algo iba raro: vuelvo a la foto limpia ({time.strftime('%d/%m %H:%M')}) ===")
+        red = (self.modo_red() or "puerta") == "puerta"
+        if self.encendida() and FOTO_NUEVA in [f["nombre"] for f in self.fotos()]:
+            try:
+                self._monitor(f"loadvm {FOTO_NUEVA}")
+                self._ajustar_dentro()
+                return "Mi máquina se había quedado rara: ha vuelto a su foto limpia."
+            except MaquinaError:
+                pass
+        if self.encendida():
+            self.apagar(espera=20)
+        if FOTO_NUEVA in [f["nombre"] for f in self.fotos()]:
+            self._run(["qemu-img", "snapshot", "-a", FOTO_NUEVA, self._j("kira.qcow2")])
+        self.encender(red=red)
+        return "Mi máquina se había quedado rara: la he reiniciado desde su foto limpia."
 
     def apagar(self, espera=60):
         if not self.encendida():
@@ -486,6 +697,42 @@ class Maquina:
         self._log(s + (f"[salió con código {c}]" if c else ""))
         return c, s
 
+    def experimentar(self, codigo, timeout=LIMITE_EXPERIMENTO + 40, mostrar=True):
+        """Un EXPERIMENTO (programa Python) como el usuario «prueba», sin permisos, con límites; se limpia al acabar.
+        Devuelve (codigo_salida, salida)."""
+        if not self.encendida():
+            raise MaquinaError("Mi máquina está apagada: dime «arranca tu máquina».")
+        self._log("prueba@maquina$ python3 programa.py   # (experimento, sin permisos)")
+        c, s = self._run(orden_ssh(self.base) + ["bash", "-s"], entrada=guion_experimento(codigo, mostrar),
+                         timeout=timeout)
+        s = recortar(s)
+        self._log(s + (f"[salió con código {c}]" if c else ""))
+        if c == 255:                                           # 255 = el SSH no llegó: la máquina no contesta
+            raise MaquinaError("Mi máquina no contesta.")
+        return c, s
+
+    def pedir_web(self, url, datos=None, cabeceras=None, metodo=None, timeout=25, maximo=MAX_WEB):
+        """VISITA `url` desde DENTRO de la máquina (por la puerta). Devuelve {status, url, cabeceras, cuerpo} o
+        {error}. Lanza MaquinaError si la máquina no contesta."""
+        if not self.encendida():
+            raise MaquinaError("Mi máquina está apagada.")
+        self._log(f"kira visita {str(url)[:200]}")
+        c, s = self._run(orden_ssh(self.base) + ["bash", "-s"],
+                         entrada=guion_web(url, datos, cabeceras, metodo, timeout, maximo), timeout=int(timeout) + 40)
+        d = leer_respuesta_web(s)
+        if d is None:
+            raise MaquinaError("Mi máquina no contestó a la visita" + (f" ({s.strip()[-160:]})" if s.strip() else "")
+                               + ".")
+        return d
+
+    def visitas(self, n=8):
+        """Las últimas visitas que dejó pasar (o paró) la puerta, para enseñarlas."""
+        try:
+            with open(self._j("puerta.log"), encoding="utf-8") as f:
+                return [l.rstrip("\n") for l in f.readlines()[-n:]]
+        except OSError:
+            return []
+
     def leer(self, ruta):
         ruta = str(ruta or "").strip()
         if not ruta or "\n" in ruta:
@@ -525,6 +772,7 @@ class Maquina:
             raise MaquinaError(f"No tengo ninguna foto llamada «{n}». Di «fotos de tu máquina».")
         if self.encendida():
             self._monitor(f"loadvm {n}")
+            self._ajustar_dentro()              # la foto trae la hora de cuando se hizo: se pone la de ahora
         else:
             c, s = self._run(["qemu-img", "snapshot", "-a", n, self._j("kira.qcow2")])
             if c != 0:
@@ -602,10 +850,185 @@ class Maquina:
         f = self.fotos()
         t = ("Mi máquina está ENCENDIDA" if enc else ("Mi máquina está apagada" if self.preparada()
                                                      else "Todavía no tengo máquina: «prepara tu máquina»"))
+        if enc:
+            t += (" con internet solo por mi puerta (no ve tu casa)" if self.modo_red() == "puerta"
+                  else " sin internet")
         if self.preparada():
             t += f" · Linux ligero, {self.memoria} MB · " + ("con KVM (rápida)" if self.kvm() else "sin KVM (lenta)")
             t += f" · {len(f)} foto(s)" + (": " + ", ".join(x["nombre"] for x in f[-5:]) if f else "")
         return t + "."
+
+
+# =====================================================================================
+#  v2.91: LA RED Y LOS EXPERIMENTOS DE KIRAOS PASAN POR SU MÁQUINA
+# =====================================================================================
+class RespuestaWeb:
+    """Lo que devuelve una visita hecha dentro de la máquina, con la forma de urllib (read, headers, url…)."""
+
+    def __init__(self, d, url):
+        self.status = int(d.get("status") or 200)
+        self.url = d.get("url") or url
+        self.headers = email.message.Message()
+        for k, v in d.get("cabeceras") or []:
+            self.headers[k] = v
+        self._cuerpo = io.BytesIO(d.get("cuerpo") or b"")
+
+    def read(self, n=-1):
+        return self._cuerpo.read(-1 if n is None else n)
+
+    def geturl(self):
+        return self.url
+
+    def getcode(self):
+        return self.status
+
+    def info(self):
+        return self.headers
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+
+_SECRETAS = ("authorization", "proxy-authorization", "x-api-key", "x-goog-api-key")
+
+
+def va_por_maquina(url, cabeceras=None):
+    """¿Esta conexión es de INVESTIGAR en internet (va por la máquina)? Lo de casa (el cerebro, el portátil, tu red)
+    y lo que lleva una CLAVE (la de Claude, la de GitHub…) va directo: una clave nunca entra en la máquina."""
+    try:
+        p = urllib.parse.urlsplit(str(url))
+    except ValueError:
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    host = p.hostname.lower()
+    if host == "localhost" or host.endswith((".local", ".lan", ".home", ".internal")):
+        return False
+    try:
+        import ipaddress
+        ip = ipaddress.ip_address(host)
+        if not ip.is_global:
+            return False
+    except ValueError:
+        pass
+    if any(str(k).lower() in _SECRETAS for k in (cabeceras or {})):
+        return False
+    return True
+
+
+class RedMaquina:
+    """Se pone en `red_kira.poner_investigar`: buscar, leer páginas, vídeos y la Wikipedia salen DESDE la máquina.
+    Si la máquina no puede (no está preparada, no hay KVM, no contesta…), lo hace el portátil directamente y lo dice
+    en `estado()` (honesto: no se para Kira por eso)."""
+
+    def __init__(self, maquina, directo=None, reloj=time.time, espera_fallo=300):
+        self.m = maquina
+        self._directo = directo
+        self._reloj = reloj
+        self._espera_fallo = espera_fallo
+        self._no_hasta = 0.0
+        self._fallos = 0
+        self.via, self.motivo = "", ""
+
+    def directo(self, req, timeout=30):
+        if self._directo is not None:
+            return self._directo(req, timeout=timeout)
+        import red_kira
+        return red_kira.abrir(req, timeout=timeout)
+
+    def _pausa(self, motivo):
+        self._no_hasta = self._reloj() + self._espera_fallo
+        self.motivo = motivo
+
+    def lista(self):
+        """(True, '') si la máquina puede hacer la visita ahora; si no, (False, por qué)."""
+        if self._reloj() < self._no_hasta:
+            return False, self.motivo
+        m = self.m
+        if not m.preparada():
+            return False, "mi máquina aún no está preparada (kira-maquina --preparar)"
+        if not m.kvm():
+            return False, "sin KVM mi máquina va demasiado lenta para navegar"
+        if not m.encendida():
+            try:
+                m.encender(red=True)
+            except MaquinaError as e:
+                self._pausa(f"no pude encender mi máquina ({e})")
+                return False, self.motivo
+        if m.modo_red() != "puerta":
+            return False, "mi máquina está encendida sin internet («arranca tu máquina» con la puerta)"
+        return True, ""
+
+    def abrir(self, req, timeout=30):
+        url = req.full_url if isinstance(req, urllib.request.Request) else str(req)
+        cab = dict(req.header_items()) if isinstance(req, urllib.request.Request) else {}
+        if not va_por_maquina(url, cab):
+            return self.directo(req, timeout=timeout)
+        ok, motivo = self.lista()
+        if not ok:
+            self.via, self.motivo = "portatil", motivo
+            return self.directo(req, timeout=timeout)
+        datos = req.data if isinstance(req, urllib.request.Request) else None
+        metodo = req.get_method() if isinstance(req, urllib.request.Request) else None
+        try:
+            d = self.m.pedir_web(url, datos=datos, cabeceras=cab, metodo=metodo, timeout=timeout)
+        except MaquinaError as e:
+            self._fallos += 1
+            if self._fallos >= 2:                          # dos seguidas sin contestar: algo va raro dentro
+                self._fallos = 0
+                try:
+                    self.m.recuperar()
+                except MaquinaError as e2:
+                    self._pausa(f"mi máquina no se recupera ({e2})")
+            self.via, self.motivo = "portatil", f"mi máquina no contestó ({e})"
+            return self.directo(req, timeout=timeout)
+        self._fallos = 0
+        self.via, self.motivo = "maquina", ""
+        if d.get("error"):
+            raise urllib.error.URLError(d["error"])
+        if int(d.get("status") or 0) >= 400:
+            h = email.message.Message()
+            for k, v in d.get("cabeceras") or []:
+                h[k] = v
+            raise urllib.error.HTTPError(url, int(d["status"]), "error de la web", h, io.BytesIO(d.get("cuerpo") or b""))
+        return RespuestaWeb(d, url)
+
+    def estado(self):
+        if self.via == "maquina":
+            return "desde mi máquina virtual (por su puerta, sin ver tu casa)"
+        if self.via == "portatil":
+            return "desde el portátil" + (f" ({self.motivo})" if self.motivo else "")
+        return "aún no he salido a internet"
+
+
+def probar_en_maquina(maquina, codigo, red=None):
+    """Para `KiraGodCore.probar_experimento`: prueba un experimento DENTRO de la máquina (como «prueba», sin permisos).
+    Devuelve (ok, motivo, dato) como programar_kira.probar_programa, o None si la máquina no puede (y entonces se
+    prueba en el modo seguro de siempre)."""
+    if red is not None:
+        ok, _ = red.lista()
+        if not ok:
+            return None
+    elif not maquina.encendida():
+        return None
+    try:
+        c, salida = maquina.experimentar(codigo)
+    except MaquinaError:
+        return None
+    ok = c == 0
+    motivo = "" if ok else resumen_error(salida, c)
+    if not ok and "No module named" in motivo:   # le falta una librería: que siga el camino de siempre (te pregunta)
+        return None
+    dato = {"ok": ok, "etapas": [{"nombre": "maquina", "ok": ok,
+                                  "detalle": "corrió en mi máquina virtual (usuario sin permisos)" if ok else motivo}],
+            "avisos": [], "salida": str(salida or "")[-2000:], "juego": False, "donde": "maquina"}
+    return ok, motivo, dato
 
 
 # =====================================================================================
@@ -617,7 +1040,7 @@ def hacer(maquina, accion, carga="", al_paso=None, guardar_ficha=None):
     if accion == "preparar":
         return {"texto": m.preparar(al_paso)}
     if accion == "encender":
-        return {"texto": m.encender(red=(carga == "red"), al_paso=al_paso)}
+        return {"texto": m.encender(red=(carga != "sin"), al_paso=al_paso)}
     if accion == "apagar":
         return {"texto": m.apagar()}
     if accion == "ver":
@@ -670,7 +1093,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="La máquina virtual de Kira (Linux ligero)")
     ap.add_argument("--preparar", action="store_true")
     ap.add_argument("--encender", action="store_true")
-    ap.add_argument("--con-internet", action="store_true")
+    ap.add_argument("--sin-internet", action="store_true", help="sin la puerta a internet")
     ap.add_argument("--apagar", action="store_true")
     ap.add_argument("--ver", action="store_true")
     ap.add_argument("--estado", action="store_true")
@@ -681,7 +1104,7 @@ def main(argv=None):
         if a.preparar:
             print(m.preparar(lambda _f, t: print("·", t)))
         if a.encender:
-            print(m.encender(red=a.con_internet, al_paso=lambda _f, t: print("·", t)))
+            print(m.encender(red=not a.sin_internet, al_paso=lambda _f, t: print("·", t)))
         if a.ejecutar:
             print(m.ejecutar(a.ejecutar)[1])
         if a.ver:

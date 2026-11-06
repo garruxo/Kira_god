@@ -79,6 +79,37 @@ def maquina():
     return _MAQUINA["m"]
 
 
+def red_maquina():
+    """v2.91: por dónde sale a internet lo de investigar (su máquina; si no puede, el portátil)."""
+    if _MAQUINA.get("red") is None:
+        import maquina_kira as mq
+        _MAQUINA["red"] = mq.RedMaquina(maquina())
+    return _MAQUINA["red"]
+
+
+def enganchar_maquina(core):
+    """v2.91 (lo pidió el dueño): KiraOS aprende, investiga, busca y EXPERIMENTA desde su máquina virtual. Buscar,
+    leer páginas, vídeos y la Wikipedia salen DESDE la máquina (por su puerta, sin ver tu casa) y sus experimentos al
+    pensar corren DENTRO, como un usuario sin permisos. Lo que lleva una clave (Claude, GitHub) o va a casa sale
+    directo: una clave nunca entra en la máquina."""
+    import maquina_kira as mq
+    import red_kira
+    red = red_maquina()
+    red_kira.poner_investigar(red.abrir)
+    core.probar_experimento = lambda codigo: mq.probar_en_maquina(maquina(), codigo, red=red)
+    return red
+
+
+def encender_maquina_al_arrancar(m=None):
+    """Al encender KiraOS se enciende también su máquina (con la puerta), si está preparada y hay KVM."""
+    m = m or maquina()
+    try:
+        if m.preparada() and m.kvm() and not m.encendida():
+            m.encender(red=True)
+    except Exception as e:                       # noqa: BLE001 - si no puede, investigará desde el portátil
+        print(f"[núcleo] no pude encender la máquina: {e}", flush=True)
+
+
 _Y_PRUEBALO = r"\s*,?\s*y\s+pru[eé]balo\s+en\s+(?:tu|la|mi)\s+m[aá]quina(?:\s+virtual)?\s*$"
 
 # v2.87: KiraOS, cerebro central, también le cambia el ASPECTO al móvil y le prepara MEJORAS de sistema
@@ -251,10 +282,12 @@ class Trabajos:
 #  EL NÚCLEO (se puede reiniciar tras importar la memoria)
 # =====================================================================================
 class Nucleo:
-    def __init__(self, datos, crear=None):
+    def __init__(self, datos, crear=None, con_maquina=False):
         self.datos = datos
         self._crear = crear or self._crear_real
+        self.con_maquina = con_maquina
         self.core = self._crear()
+        self._enganchar()
         self.trabajos = Trabajos(lambda orden, paso: ejecutar(self.core, orden, paso))
         self._lock_sinc = threading.Lock()
 
@@ -263,12 +296,20 @@ class Nucleo:
         import kira_god
         return kira_god.KiraGodCore()
 
+    def _enganchar(self):
+        if self.con_maquina:
+            try:
+                enganchar_maquina(self.core)
+            except Exception as e:                   # noqa: BLE001
+                print(f"[núcleo] sin máquina para investigar: {e}", flush=True)
+
     def reiniciar(self):
         try:
             self.core.pensar_sola(False)
         except Exception:
             pass
         self.core = self._crear()
+        self._enganchar()
         try:
             self.core.reanudar_pensar()
         except Exception:
@@ -344,6 +385,9 @@ def actividad(core):
         d["maquina"] = bool(m and m.encendida())
     except Exception:
         pass
+    r = _MAQUINA.get("red")
+    if r is not None:
+        d["internet"] = r.estado()
     try:
         import wifi_kira as wk
         d["wifi"] = wk.resumen_corto()
@@ -542,6 +586,7 @@ def main(argv=None):
     ap.add_argument("--datos", default=DATOS)
     ap.add_argument("--token", default=os.path.join(RAIZ, "kira_laboratorio", "token_lab.txt"))
     ap.add_argument("--sin-wifi", action="store_true", help="no vigilar la WiFi")
+    ap.add_argument("--sin-maquina", action="store_true", help="investigar desde el portátil, no desde su máquina")
     a = ap.parse_args(argv)
     sys.path.insert(0, AQUI)
     import servidor_portatil as sp
@@ -550,7 +595,9 @@ def main(argv=None):
         sys.exit("No encuentro el token del laboratorio (arranca antes el laboratorio una vez: lo crea él).")
     preparar_datos(a.datos, token)
     os.environ.setdefault("KIRA_BAUL_PORTATIL", os.path.join(a.datos, "recuerdos"))
-    nucleo = Nucleo(a.datos)
+    nucleo = Nucleo(a.datos, con_maquina=not a.sin_maquina)
+    if not a.sin_maquina:                       # v2.91: su máquina se enciende con ella (investiga desde ahí)
+        threading.Thread(target=encender_maquina_al_arrancar, daemon=True).start()
     try:
         nucleo.core.reanudar_pensar()
     except Exception:

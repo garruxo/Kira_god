@@ -15,6 +15,8 @@ Todo lo que devuelve es texto/datos sencillos (JSON) y se prueba sin ventana (te
   escuchar() → lo que dijiste (oído Vosk) · voz(si/no) · callar()
   barra() → nombre, WiFi y voz para la barra · wifi_datos() / wifi_hacer() · app(nombre) / app_hacer(nombre, accion)
   sistema("apagar"|"reiniciar") → apaga o reinicia el portátil (la pantalla pide confirmación con dos toques)
+  v2.91: buscar_web(consulta, tipo) / leer_web(url) / es_busqueda(texto) → el BUSCADOR tipo Google; lo busca y lo lee
+  DESDE SU MÁQUINA VIRTUAL (por su puerta, sin ver tu casa) si está; si no, desde el portátil, y lo dice.
 """
 import os
 import re
@@ -28,6 +30,7 @@ DATOS_NUCLEO = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_po
 
 ICONOS = [
     {"id": "hablar", "titulo": "Hablar con Kira", "sub": "la conversación entera"},
+    {"id": "buscador", "titulo": "Buscador", "sub": "internet, como Google"},
     {"id": "wifi", "titulo": "WiFi", "sub": "redes y conexión"},
     {"id": "red", "titulo": "Mi red", "sub": "aparatos de casa"},
     {"id": "mapa", "titulo": "Mapa de ataques", "sub": "de dónde intentan entrar"},
@@ -225,6 +228,67 @@ class EscritorioMixin:
         except Exception as e:                        # noqa: BLE001
             return {"ok": False, "texto": f"[x] {e}"}
 
+    # ---------- BUSCADOR tipo Google (v2.91) ----------
+    def _red_web(self):
+        """Lo que se busca y se lee sale desde su máquina virtual (si puede); se pone una vez."""
+        if getattr(self, "red_web", None) is not None or getattr(self, "usar_maquina", True) is False:
+            return getattr(self, "red_web", None)
+        try:
+            import maquina_kira as mq
+            import red_kira
+            self.red_web = mq.RedMaquina(mq.Maquina())
+            red_kira.poner_investigar(self.red_web.abrir)
+        except Exception:                             # noqa: BLE001
+            self.red_web = None
+        return self.red_web
+
+    def _internet(self):
+        if getattr(self, "internet_obj", None) is None:
+            import internet_kira
+            self._red_web()
+            self.internet_obj = internet_kira.Internet(os.path.join(DATOS_NUCLEO, "internet"))
+        return self.internet_obj
+
+    def _via(self):
+        r = getattr(self, "red_web", None)
+        return ("Buscado " + r.estado()) if r is not None else "Buscado desde el portátil"
+
+    def es_busqueda(self, texto):
+        """¿Lo que dijiste/escribiste en la barra es «busca …»? Entonces se abre el buscador: {consulta, tipo}."""
+        import internet_kira as ik
+        t = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", str(texto or ""), flags=re.I).strip()
+        m = re.match(r"^(?:busca(?:me)?|buscar)\s+en\s+google\s+(.+)$", t, flags=re.I)
+        if m:
+            return {"consulta": m.group(1).strip(" .?¿!¡"), "tipo": "web"}
+        d = ik.interpretar(t)
+        if d and d.get("accion") == "buscar":
+            return {"consulta": d["consulta"], "tipo": d.get("tipo", "web")}
+        return None
+
+    def buscar_web(self, consulta, tipo="web"):
+        import internet_kira as ik
+        net = self._internet()
+        tipo = tipo if tipo in ("web", "codigo", "docs") else "web"
+        try:
+            res = net.buscar(consulta, tipo=tipo, n=10)
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "error": str(e), "resultados": [], "via": self._via()}
+        return {"ok": True, "consulta": consulta, "tipo": tipo, "via": self._via(),
+                "avisos": list(getattr(net, "avisos", []) or [])[:2],
+                "resultados": [{"titulo": r.get("titulo", ""), "url": r.get("url", ""), "dominio": ik.dominio(r.get("url", "")),
+                                "resumen": r.get("resumen", ""), "fuente": r.get("fuente", "")} for r in res]}
+
+    def leer_web(self, url):
+        """La página como TEXTO limpio (sin anuncios ni menús). Nunca se ejecuta nada de ella."""
+        import internet_kira as ik
+        try:
+            pag = self._internet().leer(url)
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "error": str(e), "via": self._via()}
+        return {"ok": True, "titulo": pag.get("titulo", ""), "url": pag.get("url", url), "dominio": ik.dominio(url),
+                "texto": str(pag.get("texto", ""))[:30000], "codigos": len(pag.get("codigos") or []),
+                "tipo": pag.get("tipo", "web"), "via": self._via()}
+
     # ---------- las demás ventanas (texto + botones) ----------
     def app(self, nombre):
         """Lo que enseña una ventana: {"titulo", "texto", "botones": [{"texto", "accion"}]}.
@@ -253,6 +317,11 @@ class EscritorioMixin:
                                            "quitada: te contesto solo por escrito.")}
         if nombre == "movil" and accion == "codigo":
             return {"texto": codigo_movil()}
+        if nombre == "maquina" and accion == "visitas":
+            import maquina_kira as mq
+            v = mq.Maquina().visitas(15)
+            return {"texto": ("Lo último que ha pasado por la puerta de mi máquina (solo el sitio, nunca el contenido):\n"
+                              + "\n".join(v)) if v else "Mi máquina aún no ha salido a internet."}
         return {"texto": "No conozco ese botón."}
 
     def _app_red(self):
@@ -285,10 +354,13 @@ class EscritorioMixin:
             texto = mq.Maquina().estado()
         except Exception as e:                        # noqa: BLE001
             texto = f"[x] {e}"
-        return {"titulo": "Máquina virtual", "texto": texto + "\n\nEs un Linux ligero y aislado (sin internet ni tus "
-                                                              "archivos) para que Kira pruebe y estudie sin riesgo.",
+        return {"titulo": "Máquina virtual", "texto": texto + "\n\nEs un Linux ligero y aislado, sin tus archivos. "
+                "Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu "
+                "casa (ni a este portátil ni a tu router), y mis experimentos corren con un usuario sin permisos. Si "
+                "algo va raro, vuelve sola a su foto limpia.",
                 "botones": [{"texto": "Enciéndela", "accion": "decir:enciende tu máquina"},
                             {"texto": "Enséñamela", "accion": "decir:enséñame tu máquina"},
+                            {"texto": "Últimas visitas", "accion": "hacer:visitas"},
                             {"texto": "Que la estudie", "accion": "decir:estudia tu máquina"},
                             {"texto": "Apágala", "accion": "decir:apaga tu máquina"}]}
 

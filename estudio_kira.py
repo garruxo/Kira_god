@@ -98,7 +98,7 @@ def _pedir_wikipedia(url, timeout=10):
     import red_kira
     req = urllib.request.Request(url, headers={"User-Agent": "KiraApp/1.0 (asistente personal)",
                                                "Accept": "application/json"})
-    with red_kira.abrir(req, timeout=timeout) as r:
+    with red_kira.abrir_investigar(req, timeout=timeout) as r:
         return json.loads(r.read(400_000).decode("utf-8"))
 
 

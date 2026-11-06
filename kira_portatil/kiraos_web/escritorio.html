@@ -86,6 +86,28 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   font-size:15px;box-shadow:inset 0 0 0 1px var(--borde);outline:none}
 .campo:focus{box-shadow:inset 0 0 0 1px var(--cian)}
 
+/* buscador (tipo Google) */
+.bus{max-width:860px;margin:0 auto}
+.bus .logo{text-align:center;font-size:36px;font-weight:800;letter-spacing:3px;margin:4px 0 16px;
+  background:linear-gradient(100deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.caja{display:flex;align-items:center;gap:10px;height:50px;padding:0 6px 0 18px;border-radius:25px;background:rgba(5,8,16,.85);
+  box-shadow:inset 0 0 0 1px rgba(34,211,238,.38),0 6px 24px rgba(0,0,0,.25)}
+.caja:focus-within{box-shadow:inset 0 0 0 1.5px var(--cian),0 6px 24px rgba(34,211,238,.12)}
+.caja input{flex:1;background:none;border:0;outline:none;color:var(--texto);font-size:16px}
+.caja svg{width:20px;height:20px;stroke:#7fe8ff;fill:none;stroke-width:1.9;stroke-linecap:round}
+.caja .b{border-radius:20px}
+.pestanas{display:flex;gap:4px;margin:14px 6px 0;border-bottom:1px solid var(--borde)}
+.pest{padding:8px 14px;font-size:13.5px;color:var(--tenue);border-bottom:2px solid transparent;margin-bottom:-1px}
+.pest.on{color:#9ff1ff;border-bottom-color:var(--cian)}
+.via{color:var(--tenue);font-size:12.5px;margin:10px 6px 8px}
+.res{padding:12px 6px 14px;border-bottom:1px solid rgba(130,170,230,.07)}
+.res .dom{font-size:12.5px;color:#7fd6a8}
+.res .tit{display:block;font-size:17.5px;color:#8ab4f8;margin:3px 0 4px;text-align:left;line-height:1.3}
+.res .tit:hover{text-decoration:underline}
+.res .sum{font-size:14px;color:#c3cbdb;line-height:1.5}
+.lectura h3{font-size:21px;font-weight:600;margin:14px 0 4px;line-height:1.3}
+.lectura .dom{color:#7fd6a8;font-size:12.5px;margin-bottom:14px;word-break:break-all}
+
 /* conversación (en la ventana «Hablar» y en el cajón de texto) */
 .charla{display:flex;flex-direction:column;gap:10px}
 .m{max-width:82%;padding:10px 14px;border-radius:14px;line-height:1.5;font-size:15px;white-space:pre-wrap;
@@ -205,6 +227,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 // ---------- iconos (dibujos sencillos, sin internet ni emojis) ----------
 var ICO = {
   hablar:'<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+  buscador:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4l5.1 5.1"/>',
   wifi:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.2" r=".9"/>',
   red:'<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M12 7.2v4.3M12 11.5L6.4 16.2M12 11.5l5.6 4.7"/>',
   mapa:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
@@ -219,7 +242,8 @@ var ICO = {
 };
 function svg(n, extra){ return '<svg viewBox="0 0 24 24"'+(extra||'')+'>'+(ICO[n]||'')+'</svg>'; }
 var ICONOS = [
-  {id:"hablar",titulo:"Hablar con Kira",sub:"la conversación"},{id:"wifi",titulo:"WiFi",sub:"redes y conexión"},
+  {id:"hablar",titulo:"Hablar con Kira",sub:"la conversación"},{id:"buscador",titulo:"Buscador",sub:"internet, como Google"},
+  {id:"wifi",titulo:"WiFi",sub:"redes y conexión"},
   {id:"red",titulo:"Mi red",sub:"aparatos de casa"},{id:"mapa",titulo:"Mapa de ataques",sub:"de dónde vienen"},
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
@@ -249,8 +273,8 @@ var FAKE = {
         botones:[{texto:"Buscar aparatos",accion:"hacer:inventario"},{texto:"Avisos de la guardiana",accion:"hacer:alertas"},{texto:"Mapa de ataques",accion:"app:mapa"}]},
       cuaderno:{titulo:"Cuaderno",texto:"Soluciones guardadas: 14.\n\n• ¿Cómo funciona un trie? → por prefijos: cada letra es un nodo… (alta)\n• ¿Para qué sirve una caché LRU? → guarda lo último usado y tira lo más viejo (alta)\n• ¿Y si ordeno con un montículo? → probado en mi editor seguro: funciona (media)",
         botones:[{texto:"Piensa una ahora",accion:"decir:piensa una"},{texto:"Ponte a pensar",accion:"decir:piensa"},{texto:"Deja de pensar",accion:"decir:deja de pensar"}]},
-      maquina:{titulo:"Máquina virtual",texto:"Mi máquina está apagada · Linux ligero, 1024 MB · con KVM (rápida) · 1 foto(s): nueva.\n\nEs un Linux ligero y aislado (sin internet ni tus archivos) para que Kira pruebe y estudie sin riesgo.",
-        botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
+      maquina:{titulo:"Máquina virtual",texto:"Mi máquina está ENCENDIDA con internet solo por mi puerta (no ve tu casa) · Linux ligero, 1024 MB · con KVM (rápida) · 1 foto(s): nueva.\n\nEs un Linux ligero y aislado, sin tus archivos. Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu casa, y mis experimentos corren con un usuario sin permisos.",
+        botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Últimas visitas",accion:"hacer:visitas"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
       movil:{titulo:"Móvil",texto:"El móvil se sincronizó conmigo hace 7 min. En total me ha pasado 348 cosa(s) (se suman, no se borra nada).\n\nCuando Kira app llega a casa me pasa sola lo que ha aprendido y yo le paso lo mío.",
         botones:[{texto:"Ver el código para emparejar",accion:"hacer:codigo"}]},
       ajustes:{titulo:"Ajustes",texto:"KiraOS versión 2.90.\nCerebro: rápido.\nVoz: puesta.\n\nPARTIDA DE NACIMIENTO DE KIRA\nNací el sábado 7 de noviembre de 2026.",
@@ -261,7 +285,17 @@ var FAKE = {
   mapa_ataques:function(){ return Promise.resolve({ataques:[
     {ip:"5.188.0.5",pais_nombre:"Rusia",org:"SELECTEL hosting",infra_clase:"hosting",lat:61.5,lon:105.3,veces:42,tipos:["Intento de entrar por SSH (fuerza bruta)"]},
     {ip:"80.58.0.1",pais_nombre:"España",org:"Telefonica broadband",infra_clase:"isp",lat:40.2,lon:-3.7,veces:3,tipos:["Conexión bloqueada / escaneo de puertos"]}]}); },
-  programando_datos:function(){ return Promise.resolve({}); }
+  programando_datos:function(){ return Promise.resolve({}); },
+  es_busqueda:function(t){ var m=/^(?:kira[,\s]+)?(?:busca(?:me)?|buscar)\s+(?:en\s+(?:internet|google|la\s+web)\s+)?(.+?)(?:\s+en\s+internet)?$/i.exec(String(t||""));
+      return Promise.resolve(m?{consulta:m[1],tipo:"web"}:null); },
+  buscar_web:function(q,t){ return new Promise(function(r){ setTimeout(function(){ r({ok:true,consulta:q,tipo:t,avisos:[],
+      via:"Buscado desde mi máquina virtual (por su puerta, sin ver tu casa)",resultados:[
+      {titulo:"Python (lenguaje de programación)",url:"https://es.wikipedia.org/wiki/Python",dominio:"es.wikipedia.org",resumen:"Lenguaje de programación de alto nivel, interpretado y con una sintaxis muy legible."},
+      {titulo:"Welcome to Python.org",url:"https://www.python.org/",dominio:"python.org",resumen:"La web oficial del lenguaje: descargas, documentación y noticias."},
+      {titulo:"El tutorial de Python",url:"https://docs.python.org/es/3/tutorial/",dominio:"docs.python.org",resumen:"Tutorial oficial en español, desde lo más básico hasta clases y módulos."}]}); }, 500); }); },
+  leer_web:function(u){ return Promise.resolve({ok:true,titulo:"Python (lenguaje de programación)",url:u,dominio:"es.wikipedia.org",codigos:0,
+      via:"Buscado desde mi máquina virtual (por su puerta, sin ver tu casa)",
+      texto:"(ejemplo) Aquí sale el texto de la página, limpio: sin anuncios, sin menús y sin nada que se ejecute.\n\nPulsa «Resúmelo» y te lo resumo con mi voz, o «Guárdalo en mi baúl» y lo aprendo."}); }
 };
 function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : FAKE; }
 function llama(m){ var a=[].slice.call(arguments,1); var o=api(); if(!o[m]) return Promise.reject("no hay "+m);
@@ -305,13 +339,14 @@ function refrescaBarra(){ llama("barra").then(pintaBarra).catch(function(){}); }
 
 // ---------- ventanas (con «‹ Escritorio» para volver a la pantalla principal) ----------
 var actual=null;
-function abrir(id){
+function abrir(id, consulta, tipo){
   cierraMenus();
   actual=id; $("vtitulo").textContent=nombreDe(id);
   var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Un momento…</div>';
   $("ventana").classList.add("on");
   $("abiertas").innerHTML='<div class="chip">'+svg(id)+esc(nombreDe(id))+'</div>';
   if(id==="hablar") return pintaHablar();
+  if(id==="buscador") return pintaBuscador(consulta, tipo);
   if(id==="wifi") return pintaWifi();
   if(id==="mapa"){ c.className="vcuerpo marco"; c.innerHTML='<iframe src="mapa.html" title="Mapa de ataques"></iframe>'; return; }
   if(id==="programando"){
@@ -381,6 +416,58 @@ function wifiAccion(a){
     .catch(function(){ r.textContent="No he podido."; });
 }
 
+// ---------- BUSCADOR tipo Google (lo busca y lo lee desde su máquina virtual) ----------
+var busq={consulta:"",tipo:"web",res:null};
+var PESTANAS=[["web","Todo"],["codigo","Código"],["docs","Documentos"]];
+function pintaBuscador(consulta, tipo){
+  var c=$("vcuerpo"); if(tipo) busq.tipo=tipo;
+  c.innerHTML='<div class="bus"><div class="logo">Kira</div>'+
+    '<div class="caja">'+svg("buscador")+'<input id="busCampo" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Busca en internet…">'+
+    '<button class="b prin" id="busIr">Buscar</button></div>'+
+    '<div class="pestanas">'+PESTANAS.map(function(p){ return '<button class="pest'+(busq.tipo===p[0]?" on":"")+'" data-t="'+p[0]+'">'+p[1]+'</button>'; }).join("")+'</div>'+
+    '<div id="busCuerpo"><div class="vacio" style="margin-top:16px">Escribe lo que quieras buscar. Lo busco y lo leo desde mi máquina virtual, que sale a internet por su puerta sin ver tu casa. Al pulsar un resultado te traigo la página como texto limpio, sin anuncios.</div></div></div>';
+  $("busIr").onclick=buscar;
+  $("busCampo").addEventListener("keydown", function(e){ if(e.key==="Enter") buscar(); });
+  [].forEach.call(c.querySelectorAll(".pest"), function(b){ b.onclick=function(){
+    busq.tipo=b.dataset.t; [].forEach.call(c.querySelectorAll(".pest"), function(x){ x.classList.toggle("on", x===b); });
+    if($("busCampo").value.trim()) buscar(); }; });
+  if(consulta){ $("busCampo").value=consulta; buscar(); } else { $("busCampo").focus(); }
+}
+function buscar(){
+  var q=$("busCampo").value.trim(), b=$("busCuerpo"); if(!q||!b) return; busq.consulta=q;
+  b.innerHTML='<div class="vacio" style="margin-top:16px;display:flex;gap:10px;align-items:center"><span class="puntos" style="display:flex;gap:4px">'+
+    '<i style="width:6px;height:6px;border-radius:50%;background:var(--cian)"></i><i style="width:6px;height:6px;border-radius:50%;background:#7dd3fc"></i>'+
+    '<i style="width:6px;height:6px;border-radius:50%;background:var(--rosa)"></i></span>Buscando «'+esc(q)+'»…</div>';
+  llama("buscar_web", q, busq.tipo).then(function(d){ busq.res=d; pintaResultados(); })
+    .catch(function(){ b.innerHTML='<div class="texto" style="margin-top:16px">No he podido buscar ahora.</div>'; });
+}
+function pintaResultados(){
+  var d=busq.res||{}, b=$("busCuerpo"); if(!b) return;
+  if(!d.ok){ b.innerHTML='<div class="via">'+esc(d.via||"")+'</div><div class="texto">'+esc(d.error||"No he encontrado nada.")+'</div>'; return; }
+  b.innerHTML='<div class="via">'+esc(d.via)+' · '+d.resultados.length+' resultado(s)'+(d.avisos&&d.avisos.length?' · '+esc(d.avisos[0]):'')+'</div>'+
+    d.resultados.map(function(r,i){ return '<div class="res"><div class="dom">'+esc(r.dominio)+'</div><button class="tit" data-i="'+i+'">'+
+      esc(r.titulo)+'</button><div class="sum">'+esc(r.resumen)+'</div></div>'; }).join("");
+  [].forEach.call(b.querySelectorAll(".tit"), function(t){ t.onclick=function(){ leerResultado(+t.dataset.i); }; });
+}
+function leerResultado(i){
+  var r=(busq.res.resultados||[])[i], b=$("busCuerpo"); if(!r||!b) return;
+  b.innerHTML='<div class="vacio" style="margin-top:16px">Leyendo '+esc(r.dominio)+' desde mi máquina…</div>';
+  llama("leer_web", r.url).then(function(p){
+    var atras='<button class="b" id="busAtras">‹ Resultados</button>';
+    if(!p.ok){ b.innerHTML='<div class="botones">'+atras+'</div><div class="texto" style="margin-top:14px">'+esc(p.error||"No he podido leerla.")+'</div>'; }
+    else {
+      b.innerHTML='<div class="botones">'+atras+'<button class="b prin" id="busResume">Resúmelo</button>'+
+        '<button class="b" id="busGuarda">Guárdalo en mi baúl</button></div>'+
+        '<div class="lectura"><h3>'+esc(p.titulo)+'</h3><div class="dom">'+esc(p.url)+' · '+esc(p.via)+
+        (p.codigos?' · '+p.codigos+' bloque(s) de código':'')+'</div><div class="texto">'+esc(p.texto)+'</div></div>';
+      $("busResume").onclick=function(){ enviar("resume "+p.url); };
+      $("busGuarda").onclick=function(){ enviar("guarda "+p.url); };
+    }
+    $("busAtras").onclick=function(){ pintaResultados(); $("vcuerpo").scrollTop=0; };
+    $("vcuerpo").scrollTop=0;
+  }).catch(function(){ b.innerHTML='<div class="texto">No he podido leerla.</div>'; });
+}
+
 // ---------- HABLAR CON KIRA, desde cualquier sitio ----------
 var mensajes=[], vozOn=true, ocupada=false;
 function pintaHablar(){
@@ -409,6 +496,13 @@ var PUNTOS='<span class="puntos"><i></i><i></i><i></i></span>';
 function enviar(texto){
   texto=String(texto||"").trim(); if(!texto) return;
   $("entrada").value="";
+  // «busca …» (escrito o dicho) abre el BUSCADOR con los resultados
+  llama("es_busqueda", texto).then(function(b){
+    if(b && b.consulta){ abrir("buscador", b.consulta, b.tipo); return; }
+    hablarCon(texto);
+  }).catch(function(){ hablarCon(texto); });
+}
+function hablarCon(texto){
   mensajes.push({quien:"tu",texto:texto}); var m={quien:"kira",texto:"",lineas:[]}; mensajes.push(m); pintaCharla();
   ocupada=true; aviso(PUNTOS+"Kira está pensando…");
   llama("hablar", texto).then(function(r){

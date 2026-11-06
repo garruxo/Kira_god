@@ -31,6 +31,24 @@ def abrir(req, timeout=30):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+# v2.91: en KiraOS, lo de INVESTIGAR (buscar, leer páginas, vídeos, Wikipedia) sale desde su máquina virtual.
+# En el móvil no se pone nada y todo sigue igual.
+_INVESTIGAR = {"abrir": None}
+
+
+def poner_investigar(abrir_fn):
+    """Cambia por dónde sale lo de investigar (None = como siempre)."""
+    _INVESTIGAR["abrir"] = abrir_fn
+
+
+def abrir_investigar(req, timeout=30):
+    """Como `abrir`, para buscar/leer en internet. Si KiraOS ha puesto su máquina, sale por ella."""
+    f = _INVESTIGAR["abrir"]
+    if f is not None:
+        return f(req, timeout=timeout)
+    return abrir(req, timeout=timeout)
+
+
 def red_sin_limite():
     """¿Estás en una red sin límite de datos (WiFi)? True / False; None si no se sabe (p. ej. en el PC)."""
     try:
