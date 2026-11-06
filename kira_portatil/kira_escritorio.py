@@ -283,16 +283,19 @@ def construir(cli, pantalla_completa=False, raiz=None, nucleo=None):
                 poner(f"WiFi: me conecto a «{red['ssid']}»…", "sis")
                 wifi_en_hilo(lambda s_=red["ssid"]: wk.conectar(s_), refrescar)
 
-        fila = tk.Frame(win, bg=FONDO)
-        fila.pack(fill="x", padx=12, pady=10)
-        for texto, accion in (("Conectar", conectar_sel), ("Buscar otra vez", refrescar),
-                              ("Arreglar", lambda: wifi_en_hilo(wk.reparar, refrescar)),
-                              ("Desconectar", lambda: wifi_en_hilo(wk.desconectar, refrescar)),
-                              ("Apagar", lambda: wifi_en_hilo(lambda: wk.radio(False), refrescar)),
-                              ("Encender", lambda: wifi_en_hilo(lambda: wk.radio(True), refrescar)),
-                              ("Cerrar", win.destroy)):
-            tk.Button(fila, text=texto, command=accion, bg="#0ea5e9" if texto == "Conectar" else "#334155", fg="white",
-                      bd=0, font=("DejaVu Sans", 10), padx=8, activebackground="#475569").pack(side="left", padx=(0, 5))
+        filas_botones = ((("Conectar", conectar_sel), ("Buscar otra vez", refrescar),
+                          ("Arreglar", lambda: wifi_en_hilo(wk.reparar, refrescar))),
+                         (("Desconectar", lambda: wifi_en_hilo(wk.desconectar, refrescar)),
+                          ("Apagar", lambda: wifi_en_hilo(lambda: wk.radio(False), refrescar)),
+                          ("Encender", lambda: wifi_en_hilo(lambda: wk.radio(True), refrescar)),
+                          ("Cerrar", win.destroy)))
+        for i, botones in enumerate(filas_botones):          # v2.89: en dos filas (en una no cabían)
+            fila = tk.Frame(win, bg=FONDO)
+            fila.pack(fill="x", padx=12, pady=(10 if i == 0 else 0, 10 if i else 4))
+            for texto, accion in botones:
+                tk.Button(fila, text=texto, command=accion, bg="#0ea5e9" if texto == "Conectar" else "#334155",
+                          fg="white", bd=0, font=("DejaVu Sans", 11), padx=10, pady=4,
+                          activebackground="#475569").pack(side="left", padx=(0, 6))
         lista.bind("<Double-Button-1>", lambda _e: conectar_sel())
         refrescar()
         return win
