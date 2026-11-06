@@ -4,6 +4,9 @@ on:
     branches: [capturas]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   capturas:
     runs-on: ubuntu-24.04
@@ -28,3 +31,11 @@ jobs:
         with:
           name: capturas
           path: capturas
+      - name: Guardar las capturas en la rama (para poder verlas)
+        if: always()
+        run: |
+          git config user.name "kira-capturas"
+          git config user.email "kira-capturas@users.noreply.github.com"
+          git add -f capturas/*.png
+          git commit -m "Capturas de las pantallas" || true
+          git push

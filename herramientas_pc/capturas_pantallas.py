@@ -186,7 +186,6 @@ fin(0)
 
 
 def kiraos(salida):
-    import threading
     import tkinter as tk
     from PIL import ImageGrab
     os.makedirs(salida, exist_ok=True)
@@ -221,12 +220,6 @@ def kiraos(salida):
     raiz = ke.construir(CliDemo(), nucleo=None)
     raiz.geometry("1366x768+0+0")
 
-    def bombear(seg):
-        fin_ = time.time() + seg
-        while time.time() < fin_:
-            raiz.update()
-            time.sleep(0.02)
-
     def campo():
         pila = [raiz]
         while pila:
@@ -236,24 +229,30 @@ def kiraos(salida):
             pila.extend(w.winfo_children())
 
     def foto(nombre):
-        bombear(0.5)
+        raiz.update_idletasks()
         ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).crop((0, 0, 1366, 768)).save(os.path.join(salida, nombre))
         print("foto", nombre, flush=True)
 
-    bombear(1.0)
-    for frase in ("hola Kira, ¿qué tal?", "qué wifi tienes"):
+    def decir(frase):
         c = campo()
         c.delete(0, "end")
         c.insert(0, frase)
         raiz._kira_enviar()
-        bombear(2.5)
-    foto("os_7_ventana.png")
-    win = raiz._kira_wifi()
-    win.geometry("560x480+403+120")
-    bombear(3.0)
-    foto("os_8_wifi.png")
-    raiz.destroy()
-    _ = threading
+
+    vent = {}
+
+    def abrir_wifi():
+        vent["w"] = raiz._kira_wifi()
+        vent["w"].geometry("560x480+403+120")
+
+    # todo dentro del bucle de Tk (como en el portátil de verdad)
+    raiz.after(1000, lambda: decir("hola Kira, ¿qué tal?"))
+    raiz.after(4000, lambda: decir("qué wifi tienes"))
+    raiz.after(7000, lambda: foto("os_7_ventana.png"))
+    raiz.after(7500, abrir_wifi)
+    raiz.after(11000, lambda: foto("os_8_wifi.png"))
+    raiz.after(11500, raiz.destroy)
+    raiz.mainloop()
 
 
 if __name__ == "__main__":
