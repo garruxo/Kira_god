@@ -443,12 +443,8 @@ AutomaticLoginEnable=true
 AutomaticLogin=$USER
 GDM
     elif systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
-      $SUDO mkdir -p /etc/lightdm/lightdm.conf.d
-      $SUDO tee /etc/lightdm/lightdm.conf.d/50-kira.conf >/dev/null <<LDM
-[Seat:*]
-autologin-user=$USER
-autologin-user-timeout=0
-LDM
+      # v2.99: el guion arregla también el archivo principal que lo anulaba, la sesión y el grupo autologin
+      KIRA_USUARIO="$USER" bash "$AQUI/arreglar_inicio.sh" || echo "  (aviso: no pude dejar la entrada automática; prueba: bash kira_portatil/arreglar_inicio.sh)"
     else
       echo "  (aviso: no reconozco el gestor de sesión; si pide contraseña al encender, actívale el inicio automático a mano)"
     fi
