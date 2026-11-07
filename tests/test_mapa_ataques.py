@@ -171,6 +171,13 @@ ok(callable(getattr(api, "mapa_mundo", None)) and callable(getattr(api, "mapa_at
 esc = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "escritorio.html"), encoding="utf-8").read()
 ok('"mapa_mundo"' in esc, "el escritorio deja pasar «mapa_mundo» al mapa (que va en un marco)")
 
+# ---------- el mapa del mundo va DENTRO (sin internet) ----------
+WEB = os.path.join(RAIZ, "kira_portatil", "kiraos_web")
+mjs = open(os.path.join(WEB, "mundo_50m.js"), encoding="utf-8").read()
+ok("window.KIRA_MUNDO=" in mjs and "window.KIRA_ISO_NUM=" in mjs and len(mjs) > 500_000, "mundo_50m.js: el mapa de verdad, dentro")
+ok("dominio público" in open(os.path.join(WEB, "MUNDO_LICENCIA.txt"), encoding="utf-8").read().lower(), "con su licencia")
+ok('<script src="mundo_50m.js">' in open(os.path.join(WEB, "mapa.html"), encoding="utf-8").read(), "el mapa lo carga")
+
 # ---------- la pantalla de verdad (Chromium) ----------
 DATOS = at.mapa_datos(at.cargar(EST))
 node = shutil.which("node")
@@ -188,39 +195,42 @@ let b; (async () => { b = await chromium.launch(); const out = {};
     await pg.goto('file://' + html); await pg.waitForTimeout(900);
     return [pg, errs];
   }
-  // 1) con ataques reales
+  // 1) con ataques reales (y el mapa hecho a mano: así se comprueba el decodificador)
   let [pg, errs] = await pagina(JSON.parse(fs.readFileSync(datos,'utf8')));
   await pg.waitForTimeout(3500);
-  out.paises = await pg.$$eval('.pais', l => l.length);
-  out.rusiaTrozos = await pg.$eval('.pais:nth-of-type(3)', e => (e.getAttribute('d').match(/M/g)||[]).length);
-  out.fijiTrozos = await pg.$eval('.pais:nth-of-type(4)', e => (e.getAttribute('d').match(/M/g)||[]).length);
+  const m = await pg.evaluate(() => KIRA_MAPA);
+  out.paises = m.paises; out.trozos = m.trozos; out.real = m.real; out.disparados = m.disparados; out.puntos = m.puntos;
+  out.resaltados = m.resaltados;
+  out.pixelesFx = await pg.evaluate(() => { const c=document.getElementById('cFx'), d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    let n=0; for(let i=3;i<d.length;i+=4) if(d[i]>0) n++; return n; });
   out.origen = await pg.$$eval('#tOrigen td', l => l.map(x => x.textContent));
   out.buscan = await pg.$$eval('#tBuscan td', l => l.map(x => x.textContent));
   out.tipos = await pg.$$eval('#tTipos td', l => l.map(x => x.textContent));
   out.filas = await pg.$$eval('#tAtaques tr', l => l.map(x => x.textContent));
-  out.lineas = await pg.$$eval('#gLineas .linea, #gLineas .onda, #gLineas .impacto', l => l.length);
-  out.puntos = await pg.$$eval('#gPuntos circle', l => l.length);
   out.estado = await pg.textContent('#estado');
   out.cuenta = await pg.textContent('#cuenta');
   await pg.click('#tAtaques tr'); await pg.waitForTimeout(200);
   out.ficha = await pg.textContent('#ficha');
   out.errs = errs; await pg.close();
-  // 2) sin ataques: lo explica y ofrece la demostración
-  [pg, errs] = await pagina({ataques:[]});
-  out.vacio = await pg.textContent('#vacio'); out.vacioVis = await pg.isVisible('#vacio');
-  await pg.click('#vacioDemo'); await pg.waitForTimeout(2600);
-  out.demoEstado = await pg.textContent('#estado'); out.demoFilas = await pg.$$eval('#tAtaques tr', l => l.length);
-  out.demoIps = await pg.$$eval('#tAtaques td.ip', l => l.map(x => x.textContent));
-  out.demoBoton = await pg.textContent('#btnDemo');
-  await pg.screenshot({path: foto1});
-  await pg.click('#btnDemo'); await pg.waitForTimeout(300);
-  out.vuelve = await pg.isVisible('#vacio');
-  out.errs2 = errs; await pg.close();
-  // 3) sin fronteras (no se pudieron bajar): dibujo de reserva
+  // 2) sin ataques: lo explica y ofrece la demostración; con el mapa DE VERDAD que va dentro (mundo_50m.js)
+  const pg2 = await b.newPage({viewport:{width:1300,height:640}}); errs=[]; pg2.on('pageerror', e => errs.push(String(e)));
+  await pg2.addInitScript(() => { window.KIRA_EJEMPLO = {ataques:[]}; });
+  await pg2.goto('file://' + html); await pg2.waitForTimeout(1200);
+  const m2 = await pg2.evaluate(() => KIRA_MAPA); out.realDentro = m2.real; out.paisesDentro = m2.paises;
+  out.vacio = await pg2.textContent('#vacio'); out.vacioVis = await pg2.isVisible('#vacio');
+  await pg2.click('#vacioDemo'); await pg2.waitForTimeout(2600);
+  out.demoEstado = await pg2.textContent('#estado'); out.demoFilas = await pg2.$$eval('#tAtaques tr', l => l.length);
+  out.demoIps = await pg2.$$eval('#tAtaques td.ip', l => l.map(x => x.textContent));
+  out.demoBoton = await pg2.textContent('#btnDemo');
+  await pg2.screenshot({path: foto1});
+  await pg2.click('#btnDemo'); await pg2.waitForTimeout(300);
+  out.vuelve = await pg2.isVisible('#vacio');
+  out.errs2 = errs; await pg2.close();
+  // 3) si faltara el archivo del mapa: dibujo de reserva
   const pg3 = await b.newPage({viewport:{width:1300,height:640}});
-  await pg3.addInitScript(d => { window.KIRA_EJEMPLO = d; }, JSON.parse(fs.readFileSync(datos,'utf8')));
+  await pg3.addInitScript(d => { window.KIRA_EJEMPLO = d; window.KIRA_SIN_MUNDO = true; }, JSON.parse(fs.readFileSync(datos,'utf8')));
   await pg3.goto('file://' + html); await pg3.waitForTimeout(1500);
-  out.reserva = await pg3.$$eval('.cont', l => l.length);
+  out.reserva = await pg3.evaluate(() => KIRA_MAPA.real === false && KIRA_MAPA.paises === 8);
   await pg3.screenshot({path: foto2});
   console.log(JSON.stringify(out));
   await b.close(); })().catch(async e => { console.log('ERR ' + e); if (b) await b.close(); });
@@ -242,14 +252,17 @@ let b; (async () => { b = await chromium.launch(); const out = {};
     if out.startswith("{"):
         d = json.loads(out)
         ok(not d["errs"] and not d["errs2"], "Chromium: sin errores " + str(d["errs"] + d["errs2"]))
-        ok(d["paises"] == 6, "Chromium: dibuja cada país del TopoJSON (y quita la Antártida)")
-        ok(d["rusiaTrozos"] == 1 and d["fijiTrozos"] == 2,
+        ok(d["real"] and d["paises"] == 6, "Chromium: dibuja cada país del TopoJSON (y quita la Antártida)")
+        ok(d["trozos"]["Russia"] == 1 and d["trozos"]["Fiji"] == 2,
            "Chromium: un país que cruza la línea de cambio de fecha queda cerrado y se ve a los dos lados")
+        ok(d["realDentro"] and d["paisesDentro"] > 200, "Chromium: el mapa de verdad (Natural Earth 1:50m) va dentro, sin internet")
+        ok(d["resaltados"]["casa"] == "724" and "643" in d["resaltados"]["origenes"],
+           "Chromium: tu país (España) en azul y los países de donde vienen, coloreados")
         ok("Rusia" in " ".join(d["origen"]) and "3" in d["origen"], "Chromium: panel ORIGEN con países y veces")
-        ok("ssh" in " ".join(d["buscan"]) and "3389" in d["buscan"], "Chromium: panel LO QUE BUSCAN EN TI (servicio y puerto)")
+        ok("ssh" in " ".join(d["buscan"]) and "3389" in d["buscan"], "Chromium: panel QUÉ BUSCAN EN TI (servicio y puerto)")
         ok(any("Fuerza bruta" in x for x in d["tipos"]), "Chromium: panel TIPO DE ATAQUE")
         ok(len(d["filas"]) >= 3 and any("5.188.0.5" in x for x in d["filas"]), "Chromium: la lista de ATAQUES se va llenando")
-        ok(d["lineas"] > 0, "Chromium: las líneas vuelan desde su país hasta tu portátil")
+        ok(d["disparados"] >= 3 and d["pixelesFx"] > 500, "Chromium: las líneas vuelan desde su país hasta tu portátil")
         ok(d["puntos"] >= 3, "Chromium: un punto por cada IP atacante")
         ok("Repitiendo" in d["estado"] or "vivo" in d["estado"].lower(), "Chromium: dice si es repetición o en vivo")
         ok("IP" in d["cuenta"] and "países" in d["cuenta"], "Chromium: contadores arriba")
@@ -259,7 +272,7 @@ let b; (async () => { b = await chromium.launch(); const out = {};
         ok(all(x.startswith(("203.0.113.", "198.51.100.")) for x in d["demoIps"]),
            "Chromium: la demo usa IPs de documentación (inventadas), nunca de nadie")
         ok("reales" in d["demoBoton"] and d["vuelve"], "Chromium: se vuelve a tus datos reales")
-        ok(d["reserva"] == 8, "Chromium: sin fronteras bajadas, usa el dibujo de reserva")
+        ok(d["reserva"], "Chromium: si faltara el archivo del mapa, usa el dibujo de reserva")
         esp = "/tmp/claude-0/-home-claude/c4932b0e-9cad-5b68-a590-3e4b8a3549d8/scratchpad"
         if os.path.isdir(esp):
             shutil.copy(f1, esp)

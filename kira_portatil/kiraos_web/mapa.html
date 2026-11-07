@@ -3,87 +3,81 @@
 <title>Mapa de ataques · KiraOS</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--fondo:#020308;--panel:rgba(6,14,30,.86);--borde:rgba(34,211,238,.35);--cab:rgba(14,60,96,.55);--texto:#dbe7f7;
-  --tenue:#7f93b4;--cian:#22d3ee;--rosa:#f472d0;--letra:"Ubuntu Condensed","DejaVu Sans Condensed","Liberation Sans Narrow","Arial Narrow","Noto Sans",system-ui,sans-serif}
+:root{--fondo:#010207;--azul:#1e88e5;--azulc:#64b5f6;--texto:#e3eefc;--tenue:#7f93b4;--cian:#22d3ee;--rosa:#f472d0;
+  --letra:"Ubuntu Condensed","DejaVu Sans Condensed","Liberation Sans Narrow","Arial Narrow","Noto Sans",system-ui,sans-serif}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto);font-family:var(--letra);font-stretch:condensed}
 #todo{position:fixed;inset:0;display:flex;flex-direction:column}
 /* cabecera */
-#cab{display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid rgba(34,211,238,.18);background:linear-gradient(#060b18,#03050c)}
-#logo{font-size:30px;font-weight:800;letter-spacing:2px;line-height:1;background:linear-gradient(90deg,#2ee6ff,#f472d0);
+#cab{display:flex;align-items:center;gap:14px;padding:7px 16px;background:linear-gradient(#050a16,#010207);border-bottom:1px solid rgba(30,136,229,.35)}
+#logo{font-size:34px;font-weight:900;letter-spacing:1px;line-height:1;background:linear-gradient(90deg,#2ee6ff,#f472d0);
   -webkit-background-clip:text;background-clip:text;color:transparent}
-#cab h1{font-size:15px;font-weight:700;letter-spacing:2px;color:#cfe3ff;text-transform:uppercase}
-#cab h1 i{display:block;font-style:normal;font-weight:400;letter-spacing:.5px;font-size:11.5px;color:var(--tenue);text-transform:none}
-#estado{font-size:11.5px;font-weight:700;letter-spacing:1.5px;padding:4px 10px;border-radius:4px;border:1px solid var(--borde);color:var(--cian);text-transform:uppercase}
-#estado.demo{color:#fbbf24;border-color:rgba(251,191,36,.5)}
+#cab h1{font-size:16px;font-weight:800;letter-spacing:2.5px;color:#fff;text-transform:uppercase}
+#cab h1 i{display:block;font-style:normal;font-weight:400;letter-spacing:.4px;font-size:11.5px;color:var(--tenue);text-transform:none}
+#estado{font-size:11.5px;font-weight:800;letter-spacing:1.5px;padding:4px 10px;border-radius:3px;border:1px solid var(--azul);color:#9fd2ff;text-transform:uppercase;background:rgba(30,136,229,.1)}
+#estado.demo{color:#fbbf24;border-color:rgba(251,191,36,.6);background:rgba(251,191,36,.08)}
 #estado.vivo:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:6px;vertical-align:1px;animation:latir 1s infinite}
 @keyframes latir{50%{opacity:.25}}
 .hueco{flex:1}
 #cuenta{font-size:12px;color:var(--tenue);letter-spacing:.5px}
-#cuenta b{color:#fff;font-size:15px}
-#btnDemo{font-family:var(--letra);font-size:12px;letter-spacing:.5px;padding:6px 12px;border-radius:5px;border:1px solid var(--borde);background:rgba(34,211,238,.08);color:var(--texto);cursor:pointer}
-#btnDemo:hover{background:rgba(34,211,238,.2)}
+#cuenta b{color:#fff;font-size:16px}
+#btnDemo{font-family:var(--letra);font-size:12px;letter-spacing:.5px;padding:6px 12px;border-radius:4px;border:1px solid var(--azul);background:rgba(30,136,229,.12);color:#fff;cursor:pointer}
+#btnDemo:hover{background:rgba(30,136,229,.3)}
 /* mapa */
-#zona{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#07101f 0%,#020308 70%)}
-#mapa{position:absolute;inset:0;width:100%;height:100%}
-.pais{fill:#060a14;stroke:rgba(214,230,255,.62);stroke-width:.32;stroke-linejoin:round}
-.cont{fill:#08101f;stroke:rgba(214,230,255,.5);stroke-width:.5}
-.rej{stroke:rgba(90,130,190,.08);stroke-width:.4}
-.casa{fill:#fff}
-.casaAnillo{fill:none;stroke:var(--cian);stroke-width:1.1;transform-box:fill-box;transform-origin:center;animation:onda 2.2s ease-out infinite}
-.punto{cursor:pointer;opacity:.85}
-.punto:hover{opacity:1}
-.linea{fill:none;stroke-width:1.15;stroke-linecap:round}
-.onda{fill:none;stroke-width:1.2;transform-box:fill-box;transform-origin:center;animation:onda 1.4s ease-out forwards}
-.impacto{fill:none;stroke-width:1.4;transform-box:fill-box;transform-origin:center;animation:onda .9s ease-out forwards}
-@keyframes onda{0%{transform:scale(.3);opacity:1}100%{transform:scale(3.2);opacity:0}}
-/* paneles (encima del mapa, como en Norse) */
-.pan{position:absolute;background:var(--panel);border:1px solid var(--borde);border-radius:6px;overflow:hidden;
-  box-shadow:0 0 24px rgba(0,0,0,.6);font-size:12px}
-.pan h2{font-size:12.5px;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:5px 8px;background:var(--cab);
-  border-bottom:1px solid var(--borde);color:#e8f6ff}
+#zona{position:relative;flex:1;min-height:0;overflow:hidden;background:#010207}
+#cMundo,#cFx{position:absolute;inset:0;width:100%;height:100%}
+#cFx{cursor:crosshair}
+/* paneles al estilo Norse: azul vivo, cabecera con brillo */
+.pan{position:absolute;background:rgba(3,12,28,.88);border:1px solid var(--azul);border-radius:3px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(30,136,229,.25),0 0 22px rgba(30,136,229,.25),inset 0 0 18px rgba(30,136,229,.08);font-size:12.5px}
+.pan h2{position:relative;font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:5px 26px;color:#fff;white-space:nowrap;overflow:hidden;
+  background:linear-gradient(#1565c0,#0b3f7a 55%,#082d58);border-bottom:1px solid #42a5f5;text-shadow:0 0 8px rgba(100,181,246,.8)}
+.pan h2:after{content:"";position:absolute;right:9px;top:50%;width:9px;height:9px;margin-top:-6px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg);opacity:.85}
 .pan table{width:100%;border-collapse:collapse}
-.pan th{font-size:10.5px;font-weight:600;color:var(--tenue);text-align:left;padding:3px 7px;letter-spacing:.4px}
-.pan td{padding:2.5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-.pan td.n{text-align:right;color:#fff;font-weight:700;width:1%}
-.pan tr.top td{color:#fff}
-.cod{display:inline-block;min-width:22px;font-size:9.5px;font-weight:700;text-align:center;padding:1px 3px;border-radius:3px;background:rgba(255,255,255,.1);color:#cfe3ff;margin-right:5px}
-.bola{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:0}
+.pan th{font-size:11px;font-weight:700;color:#cfe3ff;text-align:left;padding:3px 7px;letter-spacing:.4px;border-bottom:1px solid rgba(30,136,229,.35)}
+.pan td{padding:2.5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;color:#dbe7f7}
+.pan tbody tr:nth-child(even) td{background:rgba(255,255,255,.025)}
+.pan td.n{text-align:right;color:#fff;font-weight:800;width:1%}
+.pan tr.top td{background:rgba(30,136,229,.35)!important;color:#fff}
+.pan tr.top td:nth-child(2){color:#ff8a80;font-weight:700}
+.cod{display:inline-block;min-width:24px;font-size:9.5px;font-weight:800;text-align:center;padding:1px 3px;border-radius:2px;background:#0d47a1;color:#fff;margin-right:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+.bola{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0;box-shadow:0 0 6px currentColor}
 .vacioPan{padding:8px 10px;color:var(--tenue);font-size:11.5px}
-#pOrigen{left:12px;top:12px;width:230px}
-#pBuscan{right:12px;top:12px;width:230px}
-#pTipos{right:12px;bottom:12px;width:230px}
-#pAtaques{left:12px;bottom:12px;right:254px;max-width:880px}
+#pOrigen{left:12px;top:12px;width:236px}
+#pBuscan{right:12px;top:12px;width:236px}
+#pTipos{right:12px;bottom:12px;width:236px}
+#pAtaques{left:12px;bottom:12px;right:262px;max-width:900px}
 #pAtaques td{max-width:170px}
+#pAtaques th.rojo{color:#ff5252}#pAtaques th.az{color:#40c4ff}
 #pAtaques tr.nuevo td{animation:fila 2.4s ease-out}
-@keyframes fila{0%{background:rgba(34,211,238,.35)}100%{background:transparent}}
-#pAtaques td.hora{color:#7ee3ff;font-variant-numeric:tabular-nums}
-#pAtaques td.ip{color:#fca5a5;font-variant-numeric:tabular-nums}
+@keyframes fila{0%{background:rgba(255,82,82,.35)}100%{background:transparent}}
+#pAtaques td.hora{color:#69f0ae;font-variant-numeric:tabular-nums}
+#pAtaques td.ip{color:#ff8a80;font-variant-numeric:tabular-nums}
 #pAtaques tr{cursor:pointer}
-#pAtaques tr:hover td{background:rgba(255,255,255,.04)}
+#pAtaques tr:hover td{background:rgba(30,136,229,.18)!important}
 /* ficha de una IP */
-#ficha{position:absolute;left:254px;top:12px;width:300px;display:none;background:rgba(6,14,30,.95);border:1px solid rgba(244,114,208,.5);
-  border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;box-shadow:0 10px 40px rgba(0,0,0,.7);z-index:5}
+#ficha{position:absolute;left:262px;top:12px;width:300px;display:none;background:rgba(3,12,28,.96);border:1px solid #ff5252;
+  border-radius:4px;padding:12px 14px;font-size:12.5px;line-height:1.5;box-shadow:0 0 24px rgba(255,82,82,.25),0 10px 40px rgba(0,0,0,.7);z-index:5}
 #ficha.on{display:block}
-#ficha .ip{font-size:18px;font-weight:800;color:#fff;letter-spacing:.5px}
+#ficha .ip{font-size:19px;font-weight:900;color:#fff;letter-spacing:.5px}
 #ficha .x{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--tenue);font-size:18px;cursor:pointer}
-#ficha .fila{color:var(--tenue)}#ficha .fila b{color:var(--texto);font-weight:600}
+#ficha .fila{color:var(--tenue)}#ficha .fila b{color:var(--texto);font-weight:700}
 .tag{display:inline-block;font-size:10.5px;padding:1px 8px;border-radius:999px;margin:4px 0}
 .tag.hosting{background:rgba(244,114,208,.16);color:#f7a8df;border:1px solid rgba(244,114,208,.35)}
 .tag.isp{background:rgba(34,211,238,.16);color:#8fe6ff;border:1px solid rgba(34,211,238,.35)}
 .tag.desconocido{background:#1a2742;color:#9fb0cc}
 #ficha .nota{margin-top:8px;font-size:11px;color:#8a99b6}
-/* sin ataques todavía */
-#vacio{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);display:none;text-align:center;max-width:430px;
-  background:rgba(6,14,30,.9);border:1px solid var(--borde);border-radius:10px;padding:18px 22px;font-size:13.5px;line-height:1.55;z-index:4}
+#vacio{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);display:none;text-align:center;max-width:440px;
+  background:rgba(3,12,28,.92);border:1px solid var(--azul);border-radius:6px;padding:18px 22px;font-size:13.5px;line-height:1.55;z-index:4;box-shadow:0 0 30px rgba(30,136,229,.3)}
 #vacio.on{display:block}
 #vacio b{color:#fff}
-#vacio button{margin-top:12px;font-family:var(--letra);font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid var(--borde);
-  background:rgba(34,211,238,.15);color:#fff;cursor:pointer}
-#pie{font-size:10.5px;color:#5d6f8f;padding:4px 16px;border-top:1px solid rgba(34,211,238,.12);background:#03050c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* pantallas más pequeñas */
-@media (max-width:1050px){#pBuscan,#pTipos{width:190px}#pAtaques{right:212px}#pOrigen{width:190px}#ficha{left:212px}}
-@media (max-height:560px){#pOrigen tr:nth-child(n+8),#pBuscan tr:nth-child(n+7){display:none}}
-</style></head>
+#vacio button{margin-top:12px;font-family:var(--letra);font-size:13px;padding:7px 14px;border-radius:4px;border:1px solid var(--azul);
+  background:rgba(30,136,229,.25);color:#fff;cursor:pointer}
+#pie{font-size:10.5px;color:#5d6f8f;padding:4px 16px;border-top:1px solid rgba(30,136,229,.2);background:#010207;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1050px){#pBuscan,#pTipos,#pOrigen{width:196px}#pAtaques{right:220px}#ficha{left:220px}}
+@media (max-height:560px){#pOrigen tbody tr:nth-child(n+8),#pBuscan tbody tr:nth-child(n+7){display:none}}
+</style>
+<script src="mundo_50m.js"></script>
+</head>
 <body>
 <div id="todo">
   <div id="cab">
@@ -95,39 +89,46 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:v
     <button id="btnDemo">Ver demostración</button>
   </div>
   <div id="zona">
-    <svg id="mapa" viewBox="0 0 1000 394" preserveAspectRatio="xMidYMid meet">
-      <defs><clipPath id="recorte"><rect x="0" y="0" width="1000" height="394"/></clipPath></defs>
-      <g id="gMundo" clip-path="url(#recorte)"></g><g id="gPuntos"></g><g id="gLineas"></g><g id="gCasa"></g>
-    </svg>
+    <canvas id="cMundo"></canvas>
+    <canvas id="cFx"></canvas>
     <div class="pan" id="pOrigen"><h2>Origen</h2><div id="tOrigen"></div></div>
-    <div class="pan" id="pBuscan"><h2>Lo que buscan en ti</h2><div id="tBuscan"></div></div>
+    <div class="pan" id="pBuscan"><h2>Qué buscan en ti</h2><div id="tBuscan"></div></div>
     <div class="pan" id="pTipos"><h2>Tipo de ataque</h2><div id="tTipos"></div></div>
     <div class="pan" id="pAtaques"><h2>Ataques</h2>
-      <table><thead><tr><th>Hora</th><th>Organización</th><th>Origen</th><th>IP</th><th>Tipo</th><th>Servicio</th><th>Puerto</th></tr></thead>
+      <table><thead><tr><th>Hora</th><th>Organización</th><th class="rojo">Origen</th><th class="rojo">IP</th><th>Tipo</th><th class="az">Servicio</th><th class="az">Puerto</th></tr></thead>
       <tbody id="tAtaques"></tbody></table></div>
     <div id="ficha"></div>
     <div id="vacio"></div>
   </div>
-  <div id="pie">El origen es APARENTE: con VPN, proxy o equipos infectados (botnet) la IP puede no ser la del atacante real. Se sitúa por país, nunca por calle. Kira solo mira y apunta: no responde ni ataca a nadie.</div>
+  <div id="pie">El origen es APARENTE: con VPN, proxy o equipos infectados (botnet) la IP puede no ser la del atacante real. Se sitúa por país, nunca por calle. Kira solo mira y apunta: no responde ni ataca a nadie. Mapa: Natural Earth.</div>
 </div>
 
 <script>
-var W=1000, H=394, LAT_N=84, LAT_S=-58;
-function proj(lon,lat){ return [ (lon+180)/360*W, (LAT_N-lat)/(LAT_N-LAT_S)*H ]; }
+var LAT_N=84, LAT_S=-58;
 var $=function(id){ return document.getElementById(id); };
-var NS="http://www.w3.org/2000/svg";
-function el(tag, at){ var e=document.createElementNS(NS, tag); for(var k in at) e.setAttribute(k, at[k]); return e; }
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+// lo que el mapa ha hecho (para las pruebas y para saber si va bien)
+window.KIRA_MAPA = {paises:0, trozos:{}, real:false, disparados:0, puntos:0, resaltados:{casa:null, origenes:[]}};
 
-// ---------- colores por servicio (como en Norse: cada servicio, su color) ----------
-var COLOR_SERV = {ssh:"#4ade80",telnet:"#fb923c",http:"#22d3ee",https:"#38bdf8",smb:"#a78bfa",netbios:"#a78bfa",rpc:"#a78bfa",
-  "escritorio remoto":"#f472d0",vnc:"#f472d0",mysql:"#facc15","ms-sql":"#facc15",postgres:"#facc15",redis:"#facc15",mongodb:"#facc15",
-  dns:"#94a3b8",smtp:"#fda4af",ftp:"#fda4af",sip:"#fdba74","router (tr-069)":"#fb7185",adb:"#fb7185"};
-function colorServ(s){ return COLOR_SERV[s] || "#e2e8f0"; }
-var COLOR_CLASE = {"fuerza bruta":"#4ade80","escaneo":"#22d3ee","cebo":"#f472d0"};
+// ---------- colores (como en Norse: cada servicio, su color) ----------
+var COLOR_SERV = {ssh:"#69f0ae",telnet:"#ff9100",http:"#40c4ff",https:"#448aff",smb:"#b388ff",netbios:"#b388ff",rpc:"#b388ff",
+  "escritorio remoto":"#ff4081",vnc:"#ff4081",mysql:"#ffd740","ms-sql":"#ffd740",postgres:"#ffd740",redis:"#ffd740",mongodb:"#ffd740",
+  dns:"#b0bec5",smtp:"#ff8a80",ftp:"#ff8a80",sip:"#ffab40","router (tr-069)":"#ff5252",adb:"#ff5252"};
+function colorServ(s){ return COLOR_SERV[s] || "#eceff1"; }
+var COLOR_CLASE = {"fuerza bruta":"#69f0ae","escaneo":"#40c4ff","cebo":"#ff4081"};
 var NOMBRE_CLASE = {"fuerza bruta":"Fuerza bruta (contraseñas)","escaneo":"Escaneo / bloqueado","cebo":"Picó en el cebo"};
 
-// ---------- el mundo: fronteras de verdad (TopoJSON de Natural Earth) o, si no hay, el dibujo esquemático ----------
+// ---------- proyección: el mundo ocupa todo el ancho (como Norse) ----------
+var V={s:1,ox:0,oy:0,w:0,h:0,dpr:1};
+function vista(){
+  var z=$("zona"), w=z.clientWidth, h=z.clientHeight, dpr=Math.min(2, window.devicePixelRatio||1);
+  var s=Math.min(w/360, h/(LAT_N-LAT_S));
+  V={s:s, ox:(w-360*s)/2, oy:(h-(LAT_N-LAT_S)*s)/2, w:w, h:h, dpr:dpr};
+  ["cMundo","cFx"].forEach(function(id){ var c=$(id); c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); });
+}
+function proj(lon,lat){ return [V.ox+(lon+180)*V.s, V.oy+(LAT_N-lat)*V.s]; }
+
+// ---------- el mundo: TopoJSON de Natural Earth (va dentro: mundo_50m.js) ----------
 function topoAPaises(topo){
   var tf=topo.transform, arcos=topo.arcs.map(function(a){
     if(!tf) return a.map(function(p){ return [p[0],p[1]]; });
@@ -140,32 +141,22 @@ function topoAPaises(topo){
     var nombre=(g.properties&&g.properties.name)||"";
     if(nombre==="Antarctica"||g.id==="010") return;
     var polis = g.type==="Polygon" ? [g.arcs] : (g.type==="MultiPolygon" ? g.arcs : []);
-    var anillos=[]; polis.forEach(function(p){ p.forEach(function(r){ anillos.push(anillo(r)); }); });
+    var anillos=[]; polis.forEach(function(p){ p.forEach(function(r){ anillos.push(desenrolla(anillo(r))); }); });
     out.push({id:g.id, nombre:nombre, anillos:anillos});
   });
   return out;
 }
-function caminoDe(anillos){
-  // Un trozo que cruza la línea de cambio de fecha (Rusia, Fiji…) se «desenrolla» para que siga siendo una forma
-  // cerrada, y se dibuja dos veces (desplazado 360°) para que se vea a los dos lados; lo que sobra lo recorta el mapa.
-  var d="";
-  anillos.forEach(function(r){
-    var pts=[], prev=null, sale=false;
-    r.forEach(function(p){
-      var lon=p[0];
-      if(prev!==null){ while(lon-prev>180) lon-=360; while(lon-prev<-180) lon+=360; }
-      if(lon>180||lon<-180) sale=true;
-      pts.push([lon,p[1]]); prev=lon;
-    });
-    var copias = sale ? [0, (pts.some(function(p){ return p[0]>180; }) ? -360 : 360)] : [0];
-    copias.forEach(function(dx){
-      pts.forEach(function(p,i){ var q=proj(p[0]+dx,p[1]); d += (i===0?"M":"L") + q[0].toFixed(1)+","+q[1].toFixed(1); });
-      d+="Z";
-    });
-  });
-  return d;
+// Un anillo que cruza la línea de cambio de fecha (Rusia, Fiji…) se «desenrolla» para que siga siendo una forma
+// cerrada; luego se dibuja dos veces (desplazado 360°) y lo que sobra lo recorta el borde del mapa.
+function desenrolla(r){
+  var pts=[], prev=null, sale=0;
+  r.forEach(function(p){ var lon=p[0];
+    if(prev!==null){ while(lon-prev>180) lon-=360; while(lon-prev<-180) lon+=360; }
+    if(lon>180) sale=-360; else if(lon<-180) sale=360;
+    pts.push([lon,p[1]]); prev=lon; });
+  return {pts:pts, copias: sale ? [0, sale] : [0]};
 }
-var CONT = {   // de reserva: contornos aproximados [lon,lat]
+var CONT = {   // de reserva si faltara el archivo del mapa: contornos aproximados [lon,lat]
  norteamerica:[[-168,66],[-156,71],[-128,70],[-95,72],[-82,73],[-61,66],[-56,53],[-66,49],[-70,43],[-74,40],[-81,31],[-80,26],[-97,26],[-98,19],[-105,20],[-114,31],[-124,40],[-124,48],[-130,55],[-146,60],[-168,66]],
  centroamerica:[[-92,18],[-87,16],[-83,10],[-77,8],[-83,14],[-90,16],[-92,18]],
  sudamerica:[[-77,8],[-70,12],[-60,11],[-50,0],[-35,-6],[-39,-14],[-48,-25],[-53,-34],[-62,-40],[-66,-50],[-74,-52],[-73,-44],[-71,-33],[-70,-18],[-76,-14],[-81,-6],[-80,1],[-77,8]],
@@ -175,57 +166,122 @@ var CONT = {   // de reserva: contornos aproximados [lon,lat]
  oceania:[[114,-22],[122,-18],[131,-12],[142,-11],[146,-18],[153,-25],[150,-37],[141,-38],[129,-32],[115,-34],[114,-22]],
  groenlandia:[[-45,60],[-20,70],[-20,82],[-45,83],[-58,76],[-54,66],[-45,60]]
 };
-var MUNDO_REAL=false;
-function dibujaMundo(topo){
-  var g=$("gMundo"); g.innerHTML="";
-  for(var lon=-180;lon<=180;lon+=30){ var a=proj(lon,LAT_N),b=proj(lon,LAT_S); g.appendChild(el("line",{"class":"rej",x1:a[0],y1:a[1],x2:b[0],y2:b[1]})); }
-  for(var lat=-30;lat<=60;lat+=30){ var c=proj(-180,lat),d=proj(180,lat); g.appendChild(el("line",{"class":"rej",x1:c[0],y1:c[1],x2:d[0],y2:d[1]})); }
-  var paises=null;
-  try{ if(topo) paises=topoAPaises(topo); }catch(e){ paises=null; }
-  if(paises && paises.length){
-    MUNDO_REAL=true;
-    paises.forEach(function(p){ var pa=el("path",{"class":"pais",d:caminoDe(p.anillos)}); var t=el("title",{}); t.textContent=p.nombre; pa.appendChild(t); g.appendChild(pa); });
-  } else {
-    MUNDO_REAL=false;
-    for(var k in CONT) g.appendChild(el("path",{"class":"cont",d:caminoDe([CONT[k]])}));
-  }
+var PAISES=null;
+function cargaMundo(){
+  var topo = window.KIRA_SIN_MUNDO ? null : (window.KIRA_MUNDO_EJEMPLO || window.KIRA_MUNDO || null);
+  try{ PAISES = topo ? topoAPaises(topo) : null; }catch(e){ PAISES=null; }
+  if(!PAISES || !PAISES.length){
+    PAISES = Object.keys(CONT).map(function(k){ return {id:null, nombre:k, anillos:[desenrolla(CONT[k])], reserva:true}; });
+    KIRA_MAPA.real=false;
+  } else KIRA_MAPA.real=true;
+  KIRA_MAPA.paises=PAISES.length; KIRA_MAPA.trozos={};
+  PAISES.forEach(function(p){ KIRA_MAPA.trozos[p.nombre]=p.anillos.reduce(function(s,a){ return s+a.copias.length; },0); });
+}
+function trazar(ctx, anillos){
+  ctx.beginPath();
+  anillos.forEach(function(a){ a.copias.forEach(function(dx){
+    a.pts.forEach(function(p,i){ var q=proj(p[0]+dx,p[1]); if(i===0) ctx.moveTo(q[0],q[1]); else ctx.lineTo(q[0],q[1]); });
+    ctx.closePath(); }); });
+}
+// colorea: tu país en azul (como Norse con el más atacado) y los países de donde vienen, en naranja según cuántos
+function dibujaMundo(){
+  var c=$("cMundo"), ctx=c.getContext("2d");
+  ctx.setTransform(V.dpr,0,0,V.dpr,0,0); ctx.clearRect(0,0,V.w,V.h);
+  var g=ctx.createRadialGradient(V.w/2,V.h*0.45,10,V.w/2,V.h*0.45,Math.max(V.w,V.h)*0.7);
+  g.addColorStop(0,"#06101f"); g.addColorStop(1,"#010207"); ctx.fillStyle=g; ctx.fillRect(0,0,V.w,V.h);
+  ctx.save(); ctx.beginPath(); ctx.rect(V.ox, V.oy, 360*V.s, (LAT_N-LAT_S)*V.s); ctx.clip();
+  ctx.strokeStyle="rgba(70,120,190,.10)"; ctx.lineWidth=.6;
+  for(var lon=-180;lon<=180;lon+=20){ var a=proj(lon,LAT_N),b=proj(lon,LAT_S); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); }
+  for(var lat=-40;lat<=80;lat+=20){ var a2=proj(-180,lat),b2=proj(180,lat); ctx.beginPath(); ctx.moveTo(a2[0],a2[1]); ctx.lineTo(b2[0],b2[1]); ctx.stroke(); }
+  var NUM=window.KIRA_ISO_NUM||{}, casa=NUM[OBJ.pais]||null, calor={}, maxv=1;
+  (D&&D.origenes||[]).forEach(function(o){ var id=NUM[o.pais]; if(id){ calor[id]=o.veces; maxv=Math.max(maxv,o.veces); } });
+  KIRA_MAPA.resaltados={casa:casa, origenes:Object.keys(calor)};
+  PAISES.forEach(function(p){
+    trazar(ctx, p.anillos);
+    if(p.id && p.id===casa) ctx.fillStyle="rgba(30,100,220,.62)";
+    else if(p.id && calor[p.id]) ctx.fillStyle="rgba(255,105,35,"+(0.07+0.22*Math.sqrt(calor[p.id]/maxv)).toFixed(3)+")";
+    else ctx.fillStyle = p.reserva ? "#081124" : "#050b17";
+    ctx.fill("evenodd");
+  });
+  ctx.lineJoin="round";
+  PAISES.forEach(function(p){
+    trazar(ctx, p.anillos);
+    ctx.strokeStyle = (p.id && p.id===casa) ? "rgba(150,200,255,.95)" : "rgba(230,240,255,.62)";
+    ctx.lineWidth = p.reserva ? .9 : .55; ctx.stroke();
+  });
+  ctx.restore();
 }
 
-// ---------- tu portátil (destino de las líneas) ----------
-var OBJ={lat:40.2,lon:-3.7,texto:"Tu portátil"};
-function dibujaCasa(){
-  var g=$("gCasa"); g.innerHTML=""; var q=proj(OBJ.lon,OBJ.lat);
-  g.appendChild(el("circle",{"class":"casaAnillo",cx:q[0],cy:q[1],r:5}));
-  var c=el("circle",{"class":"casa",cx:q[0],cy:q[1],r:2.6}); var t=el("title",{}); t.textContent=OBJ.texto; c.appendChild(t); g.appendChild(c);
-}
+// ---------- tu portátil (destino de todas las líneas) ----------
+var OBJ={pais:"ES",lat:40.2,lon:-3.7,texto:"Tu portátil"};
 
-// ---------- un ataque: la línea vuela desde su país hasta tu portátil ----------
-var vivas=0;
+// ---------- los efectos: líneas que vuelan, explosiones, focos ----------
+var ARCOS=[], EXPLOS=[], FOCOS=[], PUNTOS=[], ultimoCuadro=0;
 function disparo(ev){
   if(ev.lat==null||ev.lon==null) return;
-  if(vivas>28) return;
-  var o=proj(ev.lon,ev.lat), t=proj(OBJ.lon,OBJ.lat), col=colorServ(ev.servicio);
-  var dx=t[0]-o[0], dy=t[1]-o[1], dist=Math.sqrt(dx*dx+dy*dy);
-  if(dist<4){ impacto(t,col); return; }
-  var cx=(o[0]+t[0])/2, cy=(o[1]+t[1])/2 - Math.min(140, dist*0.32);
-  var p=el("path",{"class":"linea",d:"M"+o[0]+","+o[1]+" Q"+cx+","+cy+" "+t[0]+","+t[1],stroke:col});
-  $("gLineas").appendChild(p); vivas++;
-  var largo=p.getTotalLength ? p.getTotalLength() : dist;
-  p.style.strokeDasharray=largo; p.style.strokeDashoffset=largo; p.style.opacity="0.95";
-  p.getBoundingClientRect();
-  var dura=Math.max(700, Math.min(1700, largo*3.2));
-  p.style.transition="stroke-dashoffset "+dura+"ms ease-in, opacity 1.6s ease "+(dura+250)+"ms";
-  p.style.strokeDashoffset="0"; p.style.opacity="0";
-  $("gLineas").appendChild(el("circle",{"class":"onda",cx:o[0],cy:o[1],r:3,stroke:col}));
-  setTimeout(function(){ impacto(t,col); }, dura);
-  setTimeout(function(){ p.remove(); vivas--; }, dura+2000);
-  limpiaOndas();
+  if(ARCOS.length>60) ARCOS.shift();
+  var ahora=performance.now();
+  ARCOS.push({lon:ev.lon, lat:ev.lat, col:colorServ(ev.servicio), t0:ahora, dura:1100+Math.random()*700, llego:false});
+  EXPLOS.push({lon:ev.lon, lat:ev.lat, col:colorServ(ev.servicio), t0:ahora, dura:900, r:14});
+  KIRA_MAPA.disparados++;
 }
-function impacto(t,col){ var c=el("circle",{"class":"impacto",cx:t[0],cy:t[1],r:3,stroke:col}); $("gLineas").appendChild(c); setTimeout(function(){ c.remove(); }, 1000); }
-function limpiaOndas(){ var o=$("gLineas").querySelectorAll(".onda"); for(var i=0;i<o.length-30;i++) o[i].remove(); setTimeout(function(){ var o2=$("gLineas").querySelectorAll(".onda"); if(o2.length) o2[0].remove(); }, 1500); }
+function bez(o,c,t,u){ var a=1-u; return [a*a*o[0]+2*a*u*c[0]+u*u*t[0], a*a*o[1]+2*a*u*c[1]+u*u*t[1]]; }
+function control(o,t){ var dx=t[0]-o[0], dy=t[1]-o[1], d=Math.sqrt(dx*dx+dy*dy);
+  return [(o[0]+t[0])/2, (o[1]+t[1])/2 - Math.min(V.h*0.42, d*0.38)]; }
+function rgba(hex, a){ var n=parseInt(hex.slice(1),16); return "rgba("+(n>>16&255)+","+(n>>8&255)+","+(n&255)+","+a.toFixed(3)+")"; }
+function cuadro(ahora){
+  requestAnimationFrame(cuadro);
+  if(document.hidden || ahora-ultimoCuadro<33) return;        // ~30 imágenes por segundo: suave en un portátil viejo
+  ultimoCuadro=ahora;
+  var c=$("cFx"), ctx=c.getContext("2d");
+  ctx.setTransform(V.dpr,0,0,V.dpr,0,0); ctx.clearRect(0,0,V.w,V.h);
+  var T=proj(OBJ.lon,OBJ.lat);
+  // focos naranjas en los países que más atacan (como las bolas de Norse)
+  FOCOS.forEach(function(f,i){ var q=proj(f.lon,f.lat), pulso=0.5+0.5*Math.sin(ahora/520+i), r=10+f.peso*16+pulso*5;
+    var g=ctx.createRadialGradient(q[0],q[1],0,q[0],q[1],r); g.addColorStop(0,"rgba(255,140,40,.55)"); g.addColorStop(.45,"rgba(255,110,30,.22)"); g.addColorStop(1,"rgba(255,90,20,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(q[0],q[1],r,0,6.283); ctx.fill();
+    ctx.strokeStyle="rgba(255,150,60,"+(0.35+0.3*pulso).toFixed(2)+")"; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(q[0],q[1],r*0.55,0,6.283); ctx.stroke(); });
+  // los atacantes: puntitos (se pueden pulsar)
+  PUNTOS.forEach(function(p){ var q=proj(p.lon,p.lat); p.x=q[0]; p.y=q[1];
+    ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(q[0],q[1],1.8,0,6.283); ctx.fill(); });
+  // las líneas
+  ctx.lineCap="round";
+  ARCOS=ARCOS.filter(function(a){
+    var o=proj(a.lon,a.lat), k=control(o,T), u=(ahora-a.t0)/a.dura;
+    if(u<1){
+      var u0=Math.max(0,u-0.45), N=18, prev=bez(o,k,T,u0);
+      for(var i=1;i<=N;i++){ var uu=u0+(u-u0)*i/N, q=bez(o,k,T,uu), al=i/N;
+        ctx.strokeStyle=rgba(a.col,0.10*al); ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(prev[0],prev[1]); ctx.lineTo(q[0],q[1]); ctx.stroke();
+        ctx.strokeStyle=rgba(a.col,0.85*al); ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(prev[0],prev[1]); ctx.lineTo(q[0],q[1]); ctx.stroke();
+        prev=q; }
+      var h=bez(o,k,T,u);
+      ctx.fillStyle=rgba(a.col,.35); ctx.beginPath(); ctx.arc(h[0],h[1],5,0,6.283); ctx.fill();
+      ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(h[0],h[1],1.7,0,6.283); ctx.fill();
+      return true;
+    }
+    if(!a.llego){ a.llego=true; EXPLOS.push({lon:OBJ.lon, lat:OBJ.lat, col:a.col, t0:ahora, dura:700, r:18}); }
+    var f=1-(ahora-a.t0-a.dura)/2600; if(f<=0) return false;
+    ctx.strokeStyle=rgba(a.col,0.55*f); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.quadraticCurveTo(k[0],k[1],T[0],T[1]); ctx.stroke();
+    return true;
+  });
+  // explosiones
+  EXPLOS=EXPLOS.filter(function(e){ var u=(ahora-e.t0)/e.dura; if(u>=1) return false; var q=proj(e.lon,e.lat);
+    ctx.fillStyle=rgba(e.col,0.35*(1-u)); ctx.beginPath(); ctx.arc(q[0],q[1],e.r*0.35*(1-u)+2,0,6.283); ctx.fill();
+    ctx.strokeStyle=rgba(e.col,0.9*(1-u)); ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(q[0],q[1],2+e.r*u,0,6.283); ctx.stroke(); return true; });
+  // tu portátil
+  var pul=(ahora%2000)/2000;
+  ctx.strokeStyle="rgba(64,196,255,"+(1-pul).toFixed(2)+")"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(T[0],T[1],4+pul*18,0,6.283); ctx.stroke();
+  ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(T[0],T[1],3.2,0,6.283); ctx.fill();
+  ctx.font="bold 11px "+getComputedStyle(document.body).fontFamily; ctx.fillStyle="#bfe6ff"; ctx.fillText("TU PORTÁTIL", T[0]+8, T[1]-7);
+}
+$("cFx").addEventListener("click", function(ev){
+  var r=$("cFx").getBoundingClientRect(), x=ev.clientX-r.left, y=ev.clientY-r.top, mejor=null, md=81;
+  PUNTOS.forEach(function(p){ var d=(p.x-x)*(p.x-x)+(p.y-y)*(p.y-y); if(d<md){ md=d; mejor=p; } });
+  if(mejor) ficha(mejor.ip);
+});
 
 // ---------- los paneles ----------
-var D=null, DEMO=false, ultimaMarca=0;
+var D=null, DEMO=false;
 function tabla(cab, filas){
   return '<table><thead><tr>'+cab.map(function(c){ return '<th>'+c+'</th>'; }).join("")+'</tr></thead><tbody>'+filas.join("")+'</tbody></table>';
 }
@@ -235,25 +291,25 @@ function pintaPaneles(){
       return '<tr class="'+(i===0?"top":"")+'"><td class="n">'+x.veces+'</td><td><span class="cod">'+esc(x.pais==="??"?"?":x.pais)+'</span>'+esc(x.nombre)+'</td></tr>'; }))
     : '<div class="vacioPan">Nadie todavía.</div>';
   var s=(D.servicios||[]);
-  $("tBuscan").innerHTML = s.length ? tabla(["#","Servicio","Puerto"], s.map(function(x){
-      return '<tr><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+colorServ(x.servicio)+'"></span>'+esc(x.servicio)+'</td><td>'+x.puerto+'</td></tr>'; }))
+  $("tBuscan").innerHTML = s.length ? tabla(["#","Servicio","Puerto"], s.map(function(x,i){
+      return '<tr class="'+(i===0?"top":"")+'"><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+colorServ(x.servicio)+';color:'+colorServ(x.servicio)+'"></span>'+esc(x.servicio)+'</td><td>'+x.puerto+'</td></tr>'; }))
     : '<div class="vacioPan">Nada todavía.</div>';
   var c=(D.clases||[]);
   $("tTipos").innerHTML = c.length ? tabla(["#","Tipo"], c.map(function(x){
-      return '<tr><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+(COLOR_CLASE[x.clase]||"#ccc")+'"></span>'+esc(NOMBRE_CLASE[x.clase]||x.clase)+'</td></tr>'; }))
+      var col=COLOR_CLASE[x.clase]||"#ccc";
+      return '<tr><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+col+';color:'+col+'"></span>'+esc(NOMBRE_CLASE[x.clase]||x.clase)+'</td></tr>'; }))
     : '<div class="vacioPan">Nada todavía.</div>';
   var nE=(D.eventos||[]).length, nP=(D.origenes||[]).filter(function(x){ return x.pais!=="??"; }).length;
   $("cuenta").innerHTML = '<b>'+(D.total||0)+'</b> IP · <b>'+nP+'</b> países · <b>'+nE+'</b> ataques apuntados';
 }
-function pintaPuntos(){
-  var g=$("gPuntos"); g.innerHTML="";
-  (D.ataques||[]).forEach(function(a, i){
-    if(a.lat==null||a.lon==null) return;
-    var q=proj(a.lon,a.lat), r=1.6+Math.min(3.5, Math.sqrt(a.veces||1)*0.45);
-    var c=el("circle",{"class":"punto",cx:q[0],cy:q[1],r:r,fill:a.infra_clase==="hosting"?"#f472d0":(a.infra_clase==="isp"?"#22d3ee":"#94a3b8")});
-    var t=el("title",{}); t.textContent=a.ip+" · "+(a.pais_nombre||"?"); c.appendChild(t);
-    c.addEventListener("click", function(){ ficha(a.ip); }); g.appendChild(c);
-  });
+function preparaPuntosYFocos(){
+  PUNTOS=(D.ataques||[]).filter(function(a){ return a.lat!=null&&a.lon!=null; }).map(function(a){
+    return {ip:a.ip, lat:a.lat, lon:a.lon, col:a.infra_clase==="hosting"?"#ff4081":(a.infra_clase==="isp"?"#40c4ff":"#b0bec5")}; });
+  KIRA_MAPA.puntos=PUNTOS.length;
+  var por={}; (D.eventos||[]).forEach(function(e){ if(e.lat==null||e.pais===OBJ.pais) return; var k=e.pais||e.pais_nombre;
+    var f=por[k]=por[k]||{lat:0,lon:0,n:0}; f.lat+=e.lat; f.lon+=e.lon; f.n++; });
+  var lista=Object.keys(por).map(function(k){ var f=por[k]; return {lat:f.lat/f.n, lon:f.lon/f.n, n:f.n}; }).sort(function(a,b){ return b.n-a.n; }).slice(0,8);
+  var max=lista.length?lista[0].n:1; FOCOS=lista.map(function(f){ return {lat:f.lat, lon:f.lon, peso:Math.sqrt(f.n/max)}; });
 }
 function hora(t){
   var d=new Date(t*1000), h=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)+":"+("0"+d.getSeconds()).slice(-2);
@@ -263,9 +319,10 @@ function hora(t){
 function fila(ev, nuevo){
   var tb=$("tAtaques"), tr=document.createElement("tr");
   if(nuevo) tr.className="nuevo";
+  var col=colorServ(ev.servicio);
   tr.innerHTML='<td class="hora">'+hora(ev.t)+'</td><td>'+esc(ev.org||"desconocido")+'</td><td>'+esc(ev.pais_nombre||"?")+'</td>'+
-    '<td class="ip">'+esc(ev.ip)+'</td><td>'+esc(NOMBRE_CLASE[ev.clase]?ev.clase:(ev.clase||"escaneo"))+'</td>'+
-    '<td><span class="bola" style="background:'+colorServ(ev.servicio)+'"></span>'+esc(ev.servicio||"?")+'</td><td>'+(ev.puerto==null?"—":ev.puerto)+'</td>';
+    '<td class="ip">'+esc(ev.ip)+'</td><td>'+esc(ev.clase||"escaneo")+'</td>'+
+    '<td><span class="bola" style="background:'+col+';color:'+col+'"></span>'+esc(ev.servicio||"?")+'</td><td>'+(ev.puerto==null?"—":ev.puerto)+'</td>';
   tr.addEventListener("click", function(){ ficha(ev.ip); });
   tb.insertBefore(tr, tb.firstChild);
   while(tb.children.length>7) tb.removeChild(tb.lastChild);
@@ -288,18 +345,18 @@ function ficha(ip){
 }
 
 // ---------- la reproducción: cada ataque apuntado se ve llegar, uno tras otro ----------
-var cola=[], vistos={}, reloj=null, repitiendo=false;
+var cola=[], vistos={}, reloj=null;
 function clave(e){ return e.t+"|"+e.ip+"|"+e.puerto+"|"+e.clase; }
 function estado(txt, cls){ var s=$("estado"); s.textContent=txt; s.className=cls||""; }
 function siguiente(){
   if(!cola.length){
     if(!(D.eventos||[]).length) return;
-    repitiendo=true; cola=(D.eventos||[]).slice(-60).map(function(e){ return {ev:e,nuevo:false}; });
-    estado(DEMO?"Demostración":"Repitiendo tus últimos ataques reales", DEMO?"demo":"");
+    cola=(D.eventos||[]).slice(-60).map(function(e){ return {ev:e,nuevo:false}; });
+    estado(DEMO?"Demostración · datos inventados":"Repitiendo tus últimos ataques reales", DEMO?"demo":"");
   }
   var x=cola.shift(); disparo(x.ev); fila(x.ev, x.nuevo);
 }
-function arranca(){ if(reloj) clearInterval(reloj); reloj=setInterval(siguiente, DEMO?260:900); }
+function arranca(){ if(reloj) clearInterval(reloj); reloj=setInterval(siguiente, DEMO?170:900); }
 
 function eventosDe(d){
   // datos de antes de la v2.96: sin ataques uno a uno, se hace uno por IP
@@ -314,11 +371,11 @@ function carga(d, primera){
   d=d||{}; d.eventos=eventosDe(d);
   if(!d.origenes && d.ataques){ var o={}; d.ataques.forEach(function(a){ var k=a.pais||"??"; o[k]=o[k]||{pais:k,nombre:a.pais_nombre||"desconocido",veces:0}; o[k].veces+=a.veces||1; });
     d.origenes=Object.keys(o).map(function(k){ return o[k]; }).sort(function(x,y){ return y.veces-x.veces; }); }
-  if(!d.clases){ var c={}; d.eventos.forEach(function(e){ c[e.clase]=(c[e.clase]||0)+1; }); d.clases=Object.keys(c).map(function(k){ return {clase:k,veces:c[k]}; }); }
+  if(!d.clases){ var c={}; d.eventos.forEach(function(e){ c[e.clase]=(c[e.clase]||0)+1; }); d.clases=Object.keys(c).map(function(k){ return {clase:k,veces:c[k]}; }).sort(function(x,y){ return y.veces-x.veces; }); }
   if(!d.servicios){ var s={}; d.eventos.forEach(function(e){ if(e.puerto==null) return; s[e.puerto]=s[e.puerto]||{puerto:e.puerto,servicio:e.servicio,veces:0}; s[e.puerto].veces++; });
     d.servicios=Object.keys(s).map(function(k){ return s[k]; }).sort(function(x,y){ return y.veces-x.veces; }); }
   D=d; if(d.objetivo&&d.objetivo.lat!=null) OBJ=d.objetivo;
-  dibujaCasa(); pintaPaneles(); pintaPuntos();
+  pintaPaneles(); preparaPuntosYFocos(); dibujaMundo();
   var nuevos=d.eventos.filter(function(e){ return !vistos[clave(e)]; });
   d.eventos.forEach(function(e){ vistos[clave(e)]=true; });
   $("vacio").classList.toggle("on", !d.eventos.length && !DEMO);
@@ -328,26 +385,27 @@ function carga(d, primera){
     $("vacioDemo").onclick=function(){ demo(true); };
     estado("Vigilando", "vivo"); return;
   }
-  if(primera){ cola=nuevos.slice(-60).map(function(e){ return {ev:e,nuevo:false}; }); estado(DEMO?"Demostración":"Repitiendo tus últimos ataques reales", DEMO?"demo":""); }
+  if(primera){ cola=nuevos.slice(-60).map(function(e){ return {ev:e,nuevo:false}; }); estado(DEMO?"Demostración · datos inventados":"Repitiendo tus últimos ataques reales", DEMO?"demo":""); }
   else if(nuevos.length){ cola=nuevos.map(function(e){ return {ev:e,nuevo:true}; }).concat(cola); estado("En vivo · "+nuevos.length+" nuevo(s)", "vivo"); }
   arranca();
 }
 
 // ---------- demostración: datos INVENTADOS (IPs de documentación 203.0.113.x / 198.51.100.x), bien marcados ----------
 var DEMO_PAISES=[["CN","China",35.9,104.2,"Proveedor de hosting (demo)","hosting",9],["US","Estados Unidos",39,-98,"Centro de datos (demo)","hosting",8],
-  ["RU","Rusia",61.5,105.3,"Servidores alquilados (demo)","hosting",6],["BR","Brasil",-10.3,-53.2,"ISP doméstico (demo)","isp",4],
-  ["IN","India",21,78,"ISP doméstico (demo)","isp",4],["NL","Países Bajos",52.2,5.3,"Hosting europeo (demo)","hosting",3],
-  ["DE","Alemania",51.2,10.4,"Centro de datos (demo)","hosting",3],["VN","Vietnam",14.1,108.3,"ISP doméstico (demo)","isp",2],
-  ["KR","Corea del Sur",36.5,127.9,"ISP doméstico (demo)","isp",2],["CO","Colombia",4.6,-74.1,"ISP doméstico (demo)","isp",1]];
+  ["RU","Rusia",56,50,"Servidores alquilados (demo)","hosting",6],["BR","Brasil",-12,-48,"ISP doméstico (demo)","isp",4],
+  ["IN","India",22,79,"ISP doméstico (demo)","isp",4],["NL","Países Bajos",52.2,5.3,"Hosting europeo (demo)","hosting",3],
+  ["DE","Alemania",51.2,10.4,"Centro de datos (demo)","hosting",3],["VN","Vietnam",16,107,"ISP doméstico (demo)","isp",2],
+  ["KR","Corea del Sur",36.5,127.9,"ISP doméstico (demo)","isp",2],["CO","Colombia",4.6,-74.1,"ISP doméstico (demo)","isp",1],
+  ["TW","Taiwán",23.7,121,"ISP doméstico (demo)","isp",1],["IT","Italia",42.8,12.5,"Centro de datos (demo)","hosting",1]];
 var DEMO_PUERTOS=[[22,"ssh","fuerza bruta",10],[23,"telnet","escaneo",6],[2222,"ssh","cebo",3],[80,"http","escaneo",3],[445,"smb","escaneo",2],
   [3389,"escritorio remoto","escaneo",2],[5900,"vnc","escaneo",1],[3306,"mysql","escaneo",1],[7547,"router (tr-069)","escaneo",1]];
 function azar(lista){ var tot=lista.reduce(function(s,x){ return s+x[x.length-1]; },0), r=Math.random()*tot; for(var i=0;i<lista.length;i++){ r-=lista[i][lista[i].length-1]; if(r<=0) return lista[i]; } return lista[0]; }
 function datosDemo(){
   var ahora=Date.now()/1000, ev=[], ips={};
-  for(var i=0;i<120;i++){
+  for(var i=0;i<160;i++){
     var p=azar(DEMO_PAISES), q=azar(DEMO_PUERTOS), ip=(i%2?"203.0.113.":"198.51.100.")+(1+Math.floor(Math.random()*250));
-    var e={t:Math.floor(ahora-(120-i)*7),ip:ip,puerto:q[0],servicio:q[1],clase:q[2],tipo:q[2],pais:p[0],pais_nombre:p[1],
-      org:p[4],lat:p[2]+(Math.random()-.5)*6,lon:p[3]+(Math.random()-.5)*8,infra_clase:p[5]};
+    var e={t:Math.floor(ahora-(160-i)*5),ip:ip,puerto:q[0],servicio:q[1],clase:q[2],tipo:q[2],pais:p[0],pais_nombre:p[1],
+      org:p[4],lat:p[2]+(Math.random()-.5)*5,lon:p[3]+(Math.random()-.5)*7,infra_clase:p[5]};
     ev.push(e);
     var a=ips[ip]=ips[ip]||{ip:ip,pais:p[0],pais_nombre:p[1],org:p[4],infra_clase:p[5],lat:e.lat,lon:e.lon,veces:0,tipos:[],puertos:[],primera:e.t};
     a.veces++; a.ultima=e.t; if(a.tipos.indexOf(q[2])<0) a.tipos.push(q[2]); if(a.puertos.indexOf(q[0])<0) a.puertos.push(q[0]);
@@ -358,7 +416,7 @@ function datosDemo(){
 var REAL=null;
 function demo(si){
   DEMO=si; $("btnDemo").textContent=si?"Volver a mis ataques reales":"Ver demostración";
-  vistos={}; cola=[]; $("tAtaques").innerHTML=""; $("ficha").classList.remove("on");
+  vistos={}; cola=[]; ARCOS=[]; EXPLOS=[]; $("tAtaques").innerHTML=""; $("ficha").classList.remove("on");
   if(si){ $("vacio").classList.remove("on"); carga(datosDemo(), true); estado("Demostración · datos inventados", "demo"); }
   else carga(REAL||{}, true);
 }
@@ -390,12 +448,16 @@ function pideDatos(primera){
 var empezado=false;
 function empieza(){
   if(empezado) return; empezado=true;
-  dibujaMundo(null); dibujaCasa();
-  var mundo = dentro() ? puente("mapa_mundo", 40000) : Promise.resolve(window.KIRA_MUNDO_EJEMPLO ? {ok:true,mundo:window.KIRA_MUNDO_EJEMPLO} : {ok:false});
-  mundo.then(function(r){ if(r&&r.ok&&r.mundo){ dibujaMundo(r.mundo); dibujaCasa(); } }).catch(function(){});
+  vista(); cargaMundo(); D={}; dibujaMundo();
+  // si faltara el archivo del mapa, se lo pide a Python (que lo baja una vez y lo guarda)
+  if(!KIRA_MAPA.real && dentro() && !window.KIRA_SIN_MUNDO){
+    puente("mapa_mundo", 40000).then(function(r){ if(r&&r.ok&&r.mundo){ window.KIRA_MUNDO=r.mundo; cargaMundo(); dibujaMundo(); } }).catch(function(){});
+  }
+  requestAnimationFrame(cuadro);
   pideDatos(true);
   setInterval(function(){ pideDatos(false); }, 60000);
 }
+window.addEventListener("resize", function(){ if(!empezado) return; vista(); dibujaMundo(); });
 if(window.pywebview && window.pywebview.api){ empieza(); }
 else { window.addEventListener("pywebviewready", empieza); setTimeout(empieza, 400); }
 </script>
