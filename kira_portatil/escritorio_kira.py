@@ -472,16 +472,64 @@ class EscritorioMixin:
                             {"texto": "Sin voz", "accion": "hacer:voz_no"}]}
 
     # ---------- apagar / reiniciar ----------
-    def sistema(self, accion, correr=None):
-        orden = {"apagar": ["systemctl", "poweroff"], "reiniciar": ["systemctl", "reboot"]}.get(accion)
-        if orden is None:
-            return {"ok": False, "texto": "No conozco esa orden."}
-        correr = correr or (lambda o: subprocess.Popen(o, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    # v2.98: apagar/reiniciar prueban varias formas, por orden, hasta que una funcione (antes solo `systemctl` y sin
+    # mirar si había funcionado). En Xubuntu, la de la propia sesión (xfce4-session-logout) casi siempre vale.
+    ORDENES_SISTEMA = {
+        "apagar": (["systemctl", "poweroff"], ["xfce4-session-logout", "--halt", "--fast"],
+                   ["dbus-send", "--system", "--print-reply", "--dest=org.freedesktop.login1", "/org/freedesktop/login1",
+                    "org.freedesktop.login1.Manager.PowerOff", "boolean:true"]),
+        "reiniciar": (["systemctl", "reboot"], ["xfce4-session-logout", "--reboot", "--fast"],
+                      ["dbus-send", "--system", "--print-reply", "--dest=org.freedesktop.login1", "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager.Reboot", "boolean:true"]),
+    }
+
+    @staticmethod
+    def _correr_sistema(orden):
+        """Devuelve (código, error). Si la herramienta no existe, (127, …)."""
         try:
-            correr(orden)
-            return {"ok": True, "texto": "Hasta luego." if accion == "apagar" else "Vuelvo enseguida."}
-        except Exception as e:                        # noqa: BLE001
-            return {"ok": False, "texto": f"[x] {e}"}
+            p = subprocess.run(orden, capture_output=True, text=True, timeout=15)
+            return p.returncode, (p.stderr or "").strip()
+        except FileNotFoundError:
+            return 127, f"no está «{orden[0]}»"
+        except subprocess.TimeoutExpired:
+            return 0, ""                              # si tarda, es que ya se está apagando
+
+    def sistema(self, accion, correr=None):
+        if accion == "salir":
+            return self.salir_a_linux()
+        ordenes = self.ORDENES_SISTEMA.get(accion)
+        if ordenes is None:
+            return {"ok": False, "texto": "No conozco esa orden."}
+        correr = correr or self._correr_sistema
+        motivos = []
+        for orden in ordenes:
+            try:
+                r = correr(orden)
+            except Exception as e:                    # noqa: BLE001
+                motivos.append(str(e))
+                continue
+            cod, err = (0, "") if r is None else r    # correr de las pruebas: None = fue bien
+            if cod == 0:
+                return {"ok": True, "texto": "Hasta luego." if accion == "apagar" else "Vuelvo enseguida."}
+            if err:
+                motivos.append(err.splitlines()[-1][:160])
+        que = "apagar" if accion == "apagar" else "reiniciar"
+        return {"ok": False, "texto": f"No he podido {que} el portátil ({'; '.join(motivos[:2]) or 'sin motivo'}). "
+                                      "Hazlo desde Xubuntu: menú K ▸ «Ir a Xubuntu», luego el menú de arriba "
+                                      "a la izquierda ▸ Salir."}
+
+    def salir_a_linux(self, cerrar=None):
+        """v2.98: botón «Ir a Xubuntu». Cierra la ventana de KiraOS (como Alt+F4) y queda el escritorio de Xubuntu
+        debajo. Lo de Kira en segundo plano (cerebro, núcleo, vigilancia, WiFi) sigue funcionando. Para volver: el
+        menú de Xubuntu ▸ «Kira», o reiniciar."""
+        ventana = getattr(self, "_ventana", None)
+        if cerrar is None:
+            if ventana is None:
+                return {"ok": False, "texto": "Aquí no hay ventana de KiraOS que cerrar. Pulsa Alt + F4."}
+            cerrar = ventana.destroy
+        # un momento de espera para que la pantalla reciba la respuesta antes de que se cierre la ventana
+        threading.Timer(0.6, cerrar).start()
+        return {"ok": True, "texto": "Te dejo en Xubuntu. Para volver, busca «Kira» en su menú."}
 
 
 def codigo_movil(correr=None):

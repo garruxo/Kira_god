@@ -261,7 +261,8 @@ var ICO = {
   ajustes:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   bloquear:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   reiniciar:'<path d="M20 11a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
-  apagar:'<path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/>'
+  apagar:'<path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/>',
+  salir:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l-5-5 5-5M5 12h11"/>'
 };
 function svg(n, extra){ return '<svg viewBox="0 0 24 24"'+(extra||'')+'>'+(ICO[n]||'')+'</svg>'; }
 var ICONOS = [
@@ -600,6 +601,7 @@ function pintaMenu(){
     '<div><div style="font-weight:600">KiraOS</div><div style="color:var(--tenue);font-size:12px">'+esc($("hola").textContent)+'</div></div></div>'+
     ICONOS.map(function(i){ return '<div class="op" data-app="'+i.id+'">'+svg(i.id)+esc(i.titulo)+'</div>'; }).join("")+
     '<div class="sep"></div><div class="op" data-sis="bloquear">'+svg("bloquear")+'Volver al orbe</div>'+
+    '<div class="op" data-sis="salir">'+svg("salir")+'Ir a Xubuntu</div>'+
     '<div class="op peligro" data-sis="reiniciar">'+svg("reiniciar")+(confirmar==="reiniciar"?"¿Seguro? Toca otra vez":"Reiniciar el portátil")+'</div>'+
     '<div class="op peligro" data-sis="apagar">'+svg("apagar")+(confirmar==="apagar"?"¿Seguro? Toca otra vez":"Apagar el portátil")+'</div>';
   [].forEach.call(document.querySelectorAll("#menu [data-app]"), function(el){ el.onclick=function(){ abrir(el.dataset.app); }; });
@@ -607,6 +609,7 @@ function pintaMenu(){
 }
 function sistema(a){
   if(a==="bloquear"){ location.href="arranque.html"; return; }
+  if(a==="salir"){ cierraMenus(); llama("sistema", "salir").then(function(d){ aviso(esc((d&&d.texto)||""), 6); }).catch(function(){}); return; }
   if(confirmar!==a){ confirmar=a; pintaMenu(); setTimeout(function(){ if(confirmar===a){ confirmar=null; pintaMenu(); } }, 6000); return; }
   confirmar=null; cierraMenus();
   llama("sistema", a).then(function(d){ aviso(esc((d&&d.texto)||""), 6); }).catch(function(){});
@@ -614,6 +617,7 @@ function sistema(a){
 function cierraMenus(){ $("menu").classList.remove("on"); $("btnKira").classList.remove("on"); }
 $("btnKira").onclick=function(e){ e.stopPropagation(); var on=!$("menu").classList.contains("on");
   confirmar=null; pintaMenu(); $("menu").classList.toggle("on", on); $("btnKira").classList.toggle("on", on); };
+$("menu").addEventListener("click", function(e){ e.stopPropagation(); });   // v2.98: un clic DENTRO del menú no lo cierra
 document.addEventListener("click", function(e){ if(!$("menu").contains(e.target) && e.target!==$("btnKira")) cierraMenus(); });
 
 // ---------- teclado: escribir en cualquier sitio = hablar con Kira; Esc = volver ----------
