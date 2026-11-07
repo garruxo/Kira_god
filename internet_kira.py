@@ -76,6 +76,12 @@ _LEER_URL = re.compile(r"^(?:l[eé]e(?:me)?|abre|resume(?:me)?|guarda)\s+(?:esta
                        r"(?P<url>https?://\S+)$", re.I)
 
 
+_ESTUDIA_ENLACES = re.compile(
+    r"^(?:estudia|aprende|lee)\s+(?:(?:esta|la)\s+(?:p[aá]gina|web)\s+)?(?:y\s+)?(?:(?:todos\s+)?(?:sus|los)\s+enlaces|"
+    r"(?:a\s+)?fondo\s+(?:esta|la)\s+(?:p[aá]gina|web)|(?:esta|la)\s+(?:p[aá]gina|web)\s+(?:entera|completa|a\s+fondo))"
+    r"(?:\s+(?:de\s+)?(?:esta|la)\s+(?:p[aá]gina|web))?\s*:?\s*(?P<url>https?://\S+)?$", re.I)
+
+
 _APRENDE_CODIGO = re.compile(
     r"^(?:oye\s+|hola\s+)?(?:kira[\s,:;.]*)?(?:apr[eé]nde(?:te)?|estudia)\s+"
     r"(?:a\s+programar|a\s+codificar|c[oó]digo\s+(?:de|sobre|para)|c[oó]digos?\s+(?:de|sobre|para)|"
@@ -101,10 +107,14 @@ def interpretar(texto):
       {'accion': 'buscar', 'tipo': 'web'|'codigo'|'docs', 'consulta': str}
       {'accion': 'estudiar', 'consulta': str}
       {'accion': 'leer'|'resumir'|'guardar'|'editor'|'navegador', 'n': int}  (de los últimos resultados)
-      {'accion': 'leer'|'resumir'|'guardar', 'url': str}"""
+      {'accion': 'leer'|'resumir'|'guardar', 'url': str}
+      {'accion': 'estudiar_enlaces', 'url': str|None}  (v3.01: la página y lo que enlaza; None = la última leída)"""
     t = " ".join(str(texto or "").split()).strip(" .!¡?¿")
     if not t:
         return None
+    m = _ESTUDIA_ENLACES.match(t)
+    if m:
+        return {"accion": "estudiar_enlaces", "url": m.group("url")}
     m = _LEER_URL.match(t)
     if m:
         acc = _plano(t.split()[0])
@@ -167,8 +177,14 @@ class _HtmlATexto(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.partes, self.codigos, self.titulo = [], [], ""
         self._fuera, self._pre, self._en_titulo, self._codigo = 0, 0, False, []
+        self.enlaces, self._enlace = [], None               # v3.01: [(href, texto)] del CONTENIDO (no menús)
 
     def handle_starttag(self, tag, attrs):
+        if tag == "a" and not self._fuera and len(self.enlaces) < MAX_ENLACES_CRUDOS:
+            href = dict(attrs).get("href") or ""
+            if href:
+                self._enlace = [href, ""]
+                self.enlaces.append(self._enlace)
         if tag in self.FUERA:
             self._fuera += 1
             return
@@ -187,6 +203,8 @@ class _HtmlATexto(HTMLParser):
             self.partes.append("\n")
 
     def handle_endtag(self, tag):
+        if tag == "a":
+            self._enlace = None
         if tag in self.FUERA:
             self._fuera = max(0, self._fuera - 1)
             return
@@ -210,6 +228,8 @@ class _HtmlATexto(HTMLParser):
             return
         if self._fuera:
             return
+        if self._enlace is not None and len(self._enlace[1]) < 200:
+            self._enlace[1] += data
         if self._pre:
             self._codigo.append(data)
         else:
@@ -230,14 +250,19 @@ class _HtmlATexto(HTMLParser):
         return "".join(salida).strip()
 
 
-def html_a_texto(contenido):
-    """(titulo, texto, [bloques de código]) de una página HTML."""
+def _html_partes(contenido):
     p = _HtmlATexto()
     try:
         p.feed(contenido)
         p.close()
     except Exception:
         pass
+    return p
+
+
+def html_a_texto(contenido, _p=None):
+    """(titulo, texto, [bloques de código]) de una página HTML."""
+    p = _p or _html_partes(contenido)
     texto = p.texto()
     # quita líneas sueltas muy cortas repetidas (restos de menús): se quedan las frases y los títulos
     lineas = [l for l in texto.split("\n")]
@@ -249,6 +274,89 @@ def html_a_texto(contenido):
         vistas.add(clave)
         limpias.append(l)
     return " ".join(p.titulo.split())[:200], "\n".join(limpias).strip()[:MAX_TEXTO], p.codigos[:20]
+
+
+# =====================================================================================
+#  ENLACES DE UNA PÁGINA (v3.01): para seguir estudiando lo que la página enlaza
+# =====================================================================================
+MAX_ENLACES_CRUDOS = 600
+MAX_ENLACES = 150
+_EXT_NO = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico", ".mp3", ".mp4", ".webm", ".avi", ".mov", ".zip",
+           ".rar", ".7z", ".gz", ".tar", ".exe", ".msi", ".apk", ".dmg", ".iso", ".deb", ".rpm", ".css", ".woff",
+           ".woff2", ".ttf", ".xml", ".rss")
+_NO_SEGUIR = re.compile(r"(?:^|[/._?=&-])(?:login|log-in|signin|sign-in|signup|sign-up|registro|register|registrarse|"
+                        r"account|cuenta|perfil|profile|cart|carrito|checkout|comprar|buy|pago|payment|donate|donar|"
+                        r"subscribe|suscrib|newsletter|share|compartir|cookies?|privacy|privacidad|legal|aviso-legal|"
+                        r"terms|terminos|contact|contacto|advert|publicidad|logout|password|wp-admin|admin)(?:$|[/._?=&-])",
+                        re.I)
+_REDES = ("facebook.com", "twitter.com", "x.com", "instagram.com", "tiktok.com", "whatsapp.com", "t.me", "telegram.",
+          "linkedin.com", "pinterest.", "reddit.com/submit", "doubleclick.", "googleadservices.", "amazon.", "ebay.")
+_ESTUDIO = re.compile(r"\b(?:cap[ií]tulo|lecci[oó]n|tema|parte|m[oó]dulo|unidad|siguiente|continuar|curso|tutorial|"
+                      r"gu[ií]a|manual|introducci[oó]n|ejemplos?|ejercicios?|documentaci[oó]n|referencia|chapter|"
+                      r"lesson|part|module|unit|next|course|guide|docs?|reference|examples?|exercises?|learn)\b", re.I)
+VACIAS = {"de", "la", "el", "en", "y", "a", "los", "las", "del", "un", "una", "que", "con", "por", "para", "como", "es",
+          "al", "lo", "se", "su", "sus", "o", "the", "of", "and", "to", "in", "for", "on", "with", "is", "curso",
+          "completo", "gratis", "tutorial", "documentacion", "oficial"}
+
+
+def _palabras(t):
+    return [w for w in re.findall(r"[a-z0-9ñ+#]{2,}", _plano(t)) if w not in VACIAS]
+
+
+def enlaces_de(crudos, base):
+    """Los enlaces útiles de una página: [{'url', 'texto'}], ya absolutos, sin repetir, sin la propia página, sin
+    anclas, ni archivos (imágenes, descargas), ni entrar/registrarse/comprar/compartir, ni redes sociales/anuncios."""
+    vistos = {urllib.parse.urldefrag(str(base or ""))[0].rstrip("/")}
+    salida = []
+    for href, texto in crudos:
+        href = str(href or "").strip()
+        if not href or href.startswith(("#", "mailto:", "javascript:", "tel:", "data:")):
+            continue
+        try:
+            url = urllib.parse.urldefrag(urllib.parse.urljoin(base, href))[0]
+            partes = urllib.parse.urlsplit(url)
+        except ValueError:
+            continue
+        if partes.scheme not in ("http", "https") or not partes.netloc:
+            continue
+        if partes.path.lower().endswith(_EXT_NO) or _NO_SEGUIR.search(partes.path + "?" + partes.query):
+            continue
+        if any(r in partes.netloc.lower() + partes.path.lower() for r in _REDES):
+            continue
+        clave = url.rstrip("/")
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        salida.append({"url": url, "texto": " ".join(str(texto or "").split())[:160]})
+        if len(salida) >= MAX_ENLACES:
+            break
+    return salida
+
+
+def elegir_enlaces(pag, tema="", n=3, ya=()):
+    """De los enlaces de la página, los que merece la pena SEGUIR para estudiar `tema`: los que hablan del tema (en su
+    texto o su dirección), los de la misma web y los que parecen la continuación de un curso (capítulo, lección,
+    siguiente…). Lo que no tiene nada que ver no se sigue. Devuelve [{'url','texto','puntos'}] de mejor a peor."""
+    claves = set(_palabras(tema)) or set(_palabras(pag.get("titulo", "")))
+    dom = dominio(pag.get("url", ""))
+    ya = {str(u).rstrip("/") for u in ya}
+    cand = []
+    for e in pag.get("enlaces") or []:
+        if e["url"].rstrip("/") in ya:
+            continue
+        txt = e.get("texto", "")
+        palabras = set(_palabras(txt + " " + urllib.parse.unquote(urllib.parse.urlsplit(e["url"]).path).replace("-", " ")
+                                 .replace("_", " ").replace("/", " ")))
+        comun = len(claves & palabras)
+        estudio = bool(_ESTUDIO.search(txt)) or bool(_ESTUDIO.search(urllib.parse.urlsplit(e["url"]).path))
+        misma = dominio(e["url"]) == dom
+        if not comun and not (misma and estudio):
+            continue                                        # no habla del tema ni sigue el curso: no se sigue
+        if len(txt) < 3 and not comun:
+            continue
+        cand.append(dict(e, puntos=3 * comun + 2 * estudio + 1 * misma))
+    cand.sort(key=lambda e: -e["puntos"])
+    return cand[:max(0, int(n))]
 
 
 # =====================================================================================
@@ -581,10 +689,13 @@ class Internet:
             pag = {"url": url, "titulo": os.path.basename(urllib.parse.urlsplit(url).path) or dominio(url),
                    "texto": texto, "codigos": [], "tipo": "pdf"}
         elif "html" in tipo or crudo.lstrip()[:15].lower().startswith((b"<!doctype", b"<html")):
-            titulo, texto, codigos = html_a_texto(self._texto(crudo, tipo))
+            contenido = self._texto(crudo, tipo)
+            partes = _html_partes(contenido)
+            titulo, texto, codigos = html_a_texto(contenido, _p=partes)
             if len(texto) < 30 and not codigos:
                 raise InternetError("Esa página no tiene texto que pueda leer (puede que necesite el navegador).")
-            pag = {"url": url, "titulo": titulo or dominio(url), "texto": texto, "codigos": codigos, "tipo": "web"}
+            pag = {"url": url, "titulo": titulo or dominio(url), "texto": texto, "codigos": codigos, "tipo": "web",
+                   "enlaces": enlaces_de(partes.enlaces, final or url)}
         elif tipo.startswith(("text/", "application/json", "application/javascript")) or gh or \
                 ext in (".py", ".js", ".md", ".txt", ".json", ".c", ".java", ".kt", ".sh", ".css"):
             texto = self._texto(crudo, tipo)[:MAX_TEXTO]
@@ -616,7 +727,9 @@ class Internet:
         corte = t[:maximo]
         return (f"{pag['titulo']}\n{pag['url']}\n\n{corte}" + ("…\n\n(sigue: «resume» para el resumen)" if len(t) > maximo
                                                                else "") +
-                (f"\n\nTiene {len(pag['codigos'])} bloque(s) de código: «abre en el editor»." if pag["codigos"] else ""))
+                (f"\n\nTiene {len(pag['codigos'])} bloque(s) de código: «abre en el editor»." if pag["codigos"] else "") +
+                (f"\n\nTiene {len(pag['enlaces'])} enlace(s) a otras páginas: «estudia sus enlaces» y sigo los que "
+                 "tratan del tema." if pag.get("enlaces") else ""))
 
     @staticmethod
     def codigo_de(pag):

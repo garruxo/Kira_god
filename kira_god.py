@@ -1699,14 +1699,47 @@ class KiraGodCore:
                 "cuando no esté estudiando sigo pensando sobre ello (cómo funciona, para qué sirve, qué puedo hacer, "
                 "cómo mejorarlo, cómo programarlo…). Pregúntame cuando quieras.")
 
-    def estudiar_en_internet(self, consulta, paginas=3, al_paso=None):
-        """Busca, lee las mejores páginas, las resume y guarda lo aprendido en el baúl (y Claude lo repasa si está)."""
+    def seguir_enlaces(self, pag, tema="", por_pagina=2, maximo=4, profundidad=1, vistas=None, al_paso=None):
+        """v3.01: tras leer una página, abre los ENLACES que tratan del tema (o siguen el curso: capítulo, lección,
+        siguiente…) y los estudia también. Acotado: `por_pagina` enlaces por página, `maximo` en total y `profundidad`
+        saltos (1 = solo los enlaces de esta página). Nunca entra en registrarse/comprar/redes. Devuelve
+        (leidas, guardadas) con leidas = [(titulo, url)]."""
+        import internet_kira as ik_
+        net = self.internet
+        vistas = vistas if vistas is not None else set()
+        vistas.add(str(pag.get("url", "")).rstrip("/"))
+        leidas, guardadas = [], 0
+        cola = [(pag, 0)]
+        while cola and len(leidas) < maximo:
+            actual, nivel = cola.pop(0)
+            if nivel >= profundidad:
+                continue
+            for e in ik_.elegir_enlaces(actual, tema, n=por_pagina, ya=vistas):
+                if len(leidas) >= maximo or self.cancelado():
+                    break
+                vistas.add(e["url"].rstrip("/"))
+                if al_paso:
+                    al_paso(f"Siguiendo el enlace «{(e.get('texto') or ik_.dominio(e['url']))[:40]}»…")
+                try:
+                    hija = net.leer(e["url"])
+                except ik_.InternetError:
+                    continue
+                ok, _ = self.guardar_pagina(hija, tema)
+                leidas.append((hija.get("titulo") or e.get("texto") or e["url"], e["url"]))
+                guardadas += int(bool(ok))
+                cola.append((hija, nivel + 1))
+        return leidas, guardadas
+
+    def estudiar_en_internet(self, consulta, paginas=3, al_paso=None, enlaces=4):
+        """Busca, lee las mejores páginas, las resume y guarda lo aprendido en el baúl (y Claude lo repasa si está).
+        v3.01: además SIGUE los enlaces de esas páginas que tratan del tema (como mucho `enlaces` en total)."""
         import internet_kira as ik_
         net = self.internet
         res = net.buscar(consulta, "web")
         leidas, guardadas, fallos = [], 0, 0
+        vistas, de_enlaces = set(), []
         for r in res:
-            if len(leidas) >= paginas:
+            if len(leidas) >= paginas or self.cancelado():
                 break
             if al_paso:
                 al_paso(f"Leyendo {r['fuente']}…")
@@ -1718,12 +1751,46 @@ class KiraGodCore:
             ok, _ = self.guardar_pagina(pag, consulta)
             leidas.append(r["fuente"])
             guardadas += int(bool(ok))
+            quedan = enlaces - len(de_enlaces)
+            if quedan > 0:
+                hijas, g = self.seguir_enlaces(pag, consulta, por_pagina=max(2, enlaces // max(1, paginas)), maximo=quedan, vistas=vistas, al_paso=al_paso)
+                de_enlaces += hijas
+                guardadas += g
         if not leidas:
             return f"[x] He buscado «{consulta}», pero no he podido leer ninguna página."
         repaso = self._repasar_con_claude(consulta)
-        return (f"[OK] He estudiado «{consulta}» en internet: he leído {len(leidas)} página(s) ({', '.join(leidas)}) y he "
-                f"guardado {guardadas} ficha(s) nuevas en mi baúl" + (", y Claude las ha repasado" if repaso else "") +
-                ". Pregúntame cuando quieras.")
+        extra = f" y he seguido {len(de_enlaces)} enlace(s) de dentro que trataban del tema" if de_enlaces else ""
+        return (f"[OK] He estudiado «{consulta}» en internet: he leído {len(leidas)} página(s) ({', '.join(leidas)})"
+                f"{extra}, y he guardado {guardadas} ficha(s) nuevas en mi baúl" +
+                (", y Claude las ha repasado" if repaso else "") + ". Pregúntame cuando quieras.")
+
+    def estudiar_pagina(self, url=None, al_paso=None, maximo=8, profundidad=2):
+        """v3.01: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras leer una): la estudia y sigue
+        sus enlaces del tema, hasta 2 saltos y `maximo` páginas. Para webs con varios capítulos o lecciones."""
+        import internet_kira as ik_
+        net = self.internet
+        try:
+            pag = net.leer(url) if url else getattr(net, "pagina", None)
+        except ik_.InternetError as e:
+            return f"[x] {e}"
+        if not pag:
+            return "[i] Dime qué página: «estudia esta página y sus enlaces: https://…» (o lee una antes)."
+        tema = pag.get("titulo") or ik_.dominio(pag.get("url", ""))
+        if al_paso:
+            al_paso(f"Estudiando «{tema[:50]}»…")
+        ok, _ = self.guardar_pagina(pag, tema)
+        if not pag.get("enlaces"):
+            return (f"[OK] He estudiado «{tema}»" + (" y lo he guardado en mi baúl" if ok else "") +
+                    ". No tiene enlaces del tema que seguir.")
+        hijas, g = self.seguir_enlaces(pag, tema, por_pagina=4, maximo=maximo, profundidad=profundidad, al_paso=al_paso)
+        if not hijas:
+            return (f"[OK] He estudiado «{tema}»" + (" y lo he guardado" if ok else "") + ". Tiene enlaces, pero "
+                    "ninguno trata del tema (menús, registro, redes…), así que no los he seguido.")
+        lista = "\n".join(f"- {t[:70]}" for t, _u in hijas)
+        return (f"[OK] He estudiado «{tema}» y {len(hijas)} página(s) que enlaza sobre lo mismo; he guardado "
+                f"{g + int(bool(ok))} ficha(s) nuevas en mi baúl:\n{lista}" +
+                ("\n(He parado al llegar al tope de páginas; dime «estudia sus enlaces» otra vez para seguir.)"
+                 if len(hijas) >= maximo else ""))
 
     def estudiar_ciberseguridad(self, al_paso=None, con_internet=False):
         """El botón «ESTUDIAR» de la Sala de Ciberseguridad y «estudia ciberseguridad».
@@ -2913,6 +2980,8 @@ class KiraGodCore:
                 return net.texto_resultados()
             if p["accion"] == "estudiar":
                 return self.estudiar_en_internet(p["consulta"])
+            if p["accion"] == "estudiar_enlaces":
+                return self.estudiar_pagina(p.get("url"))
             if p["accion"] == "navegador":
                 url = net.resultado(p["n"])["url"]
                 movil = getattr(self, "movil", None)

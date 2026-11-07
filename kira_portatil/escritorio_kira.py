@@ -356,9 +356,16 @@ class EscritorioMixin:
             pag = self._internet().leer(url)
         except Exception as e:                        # noqa: BLE001
             return {"ok": False, "error": str(e), "via": self._via()}
+        todos = pag.get("enlaces") or []
+        del_tema = ik.elegir_enlaces(pag, pag.get("titulo", ""), n=25)
+        vistos = {e["url"] for e in del_tema}
+        enlaces = ([{"url": e["url"], "texto": e.get("texto") or ik.dominio(e["url"]), "tema": True} for e in del_tema] +
+                   [{"url": e["url"], "texto": e.get("texto") or ik.dominio(e["url"]), "tema": False}
+                    for e in todos if e["url"] not in vistos and e.get("texto")][:max(0, 40 - len(del_tema))])
         return {"ok": True, "titulo": pag.get("titulo", ""), "url": pag.get("url", url), "dominio": ik.dominio(url),
                 "texto": str(pag.get("texto", ""))[:30000], "codigos": len(pag.get("codigos") or []),
-                "tipo": pag.get("tipo", "web"), "via": self._via()}
+                "tipo": pag.get("tipo", "web"), "via": self._via(), "enlaces": enlaces,
+                "total_enlaces": len(todos)}
 
     # ---------- las demás ventanas (texto + botones) ----------
     def app(self, nombre):

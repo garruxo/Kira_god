@@ -107,6 +107,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .res .sum{font-size:14px;color:#c3cbdb;line-height:1.5}
 .lectura h3{font-size:21px;font-weight:600;margin:14px 0 4px;line-height:1.3}
 .lectura .dom{color:#7fd6a8;font-size:12.5px;margin-bottom:14px;word-break:break-all}
+.enlaces{margin:22px 0 8px;border-top:1px solid rgba(130,170,230,.12);padding-top:12px}
+.enlaces .cab{font-size:15px;font-weight:600;color:#9ff1ff;margin-bottom:6px}
+.enlaces .sub{font-size:12.5px;color:var(--tenue);margin:10px 0 4px}
+.enl{display:block;text-align:left;color:#8ab4f8;font-size:14.5px;padding:5px 2px;line-height:1.35}
+.enl:hover{text-decoration:underline}
+.enl.tema::before{content:"› ";color:#7fd6a8}
 
 /* conversación (en la ventana «Hablar» y en el cajón de texto) */
 .charla{display:flex;flex-direction:column;gap:10px}
@@ -323,7 +329,10 @@ var FAKE = {
       {titulo:"El tutorial de Python",url:"https://docs.python.org/es/3/tutorial/",dominio:"docs.python.org",resumen:"Tutorial oficial en español, desde lo más básico hasta clases y módulos."}]}); }, 500); }); },
   leer_web:function(u){ return Promise.resolve({ok:true,titulo:"Python (lenguaje de programación)",url:u,dominio:"es.wikipedia.org",codigos:0,
       via:"Buscado desde mi máquina virtual (por su puerta, sin ver tu casa)",
-      texto:"(ejemplo) Aquí sale el texto de la página, limpio: sin anuncios, sin menús y sin nada que se ejecute.\n\nPulsa «Resúmelo» y te lo resumo con mi voz, o «Guárdalo en mi baúl» y lo aprendo."}); }
+      texto:"(ejemplo) Aquí sale el texto de la página, limpio: sin anuncios, sin menús y sin nada que se ejecute.\n\nPulsa «Resúmelo» y te lo resumo con mi voz, o «Guárdalo en mi baúl» y lo aprendo.",
+      total_enlaces:3,enlaces:[{url:"https://docs.python.org/es/3/tutorial/introduction.html",texto:"Una introducción informal a Python",tema:true},
+        {url:"https://docs.python.org/es/3/tutorial/controlflow.html",texto:"Más herramientas para control de flujo",tema:true},
+        {url:"https://www.python.org/downloads/",texto:"Descargas",tema:false}]}); }
 };
 function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : FAKE; }
 function llama(m){ var a=[].slice.call(arguments,1); var o=api(); if(!o[m]) return Promise.reject("no hay "+m);
@@ -496,20 +505,39 @@ function pintaResultados(){
   [].forEach.call(b.querySelectorAll(".tit"), function(t){ t.onclick=function(){ leerResultado(+t.dataset.i); }; });
 }
 function leerResultado(i){
-  var r=(busq.res.resultados||[])[i], b=$("busCuerpo"); if(!r||!b) return;
-  b.innerHTML='<div class="vacio" style="margin-top:16px">Leyendo '+esc(r.dominio)+' desde mi máquina…</div>';
-  llama("leer_web", r.url).then(function(p){
-    var atras='<button class="b" id="busAtras">‹ Resultados</button>';
+  var r=(busq.res.resultados||[])[i]; if(!r) return;
+  busq.pila=[]; leerUrl(r.url, r.dominio);
+}
+function htmlEnlaces(p){
+  var l=p.enlaces||[]; if(!l.length) return "";
+  var tema=l.filter(function(e){return e.tema;}), otros=l.filter(function(e){return !e.tema;});
+  function fila(e){ return '<button class="enl'+(e.tema?' tema':'')+'" data-u="'+esc(e.url)+'">'+esc(e.texto)+'</button>'; }
+  return '<div class="enlaces"><div class="cab">Enlaces de esta página'+(p.total_enlaces?' ('+p.total_enlaces+')':'')+'</div>'+
+    (tema.length?'<div class="sub">Del mismo tema — los que sigo al estudiar</div>'+tema.map(fila).join(""):'')+
+    (otros.length?'<div class="sub">Otros</div>'+otros.map(fila).join(""):'')+'</div>';
+}
+function leerUrl(url, dom){
+  var b=$("busCuerpo"); if(!b) return;
+  b.innerHTML='<div class="vacio" style="margin-top:16px">Leyendo '+esc(dom||url)+' desde mi máquina…</div>';
+  llama("leer_web", url).then(function(p){
+    var atras='<button class="b" id="busAtras">'+(busq.pila&&busq.pila.length?'‹ Atrás':'‹ Resultados')+'</button>';
     if(!p.ok){ b.innerHTML='<div class="botones">'+atras+'</div><div class="texto" style="margin-top:14px">'+esc(p.error||"No he podido leerla.")+'</div>'; }
     else {
       b.innerHTML='<div class="botones">'+atras+'<button class="b prin" id="busResume">Resúmelo</button>'+
-        '<button class="b" id="busGuarda">Guárdalo en mi baúl</button></div>'+
+        '<button class="b" id="busGuarda">Guárdalo en mi baúl</button>'+
+        ((p.enlaces||[]).some(function(e){return e.tema;})?'<button class="b" id="busEnlaces">Estúdiala con sus enlaces</button>':'')+'</div>'+
         '<div class="lectura"><h3>'+esc(p.titulo)+'</h3><div class="dom">'+esc(p.url)+' · '+esc(p.via)+
-        (p.codigos?' · '+p.codigos+' bloque(s) de código':'')+'</div><div class="texto">'+esc(p.texto)+'</div></div>';
+        (p.codigos?' · '+p.codigos+' bloque(s) de código':'')+'</div><div class="texto">'+esc(p.texto)+'</div></div>'+htmlEnlaces(p);
       $("busResume").onclick=function(){ enviar("resume "+p.url); };
       $("busGuarda").onclick=function(){ enviar("guarda "+p.url); };
+      if($("busEnlaces")) $("busEnlaces").onclick=function(){ enviar("estudia esta página y sus enlaces: "+p.url); };
+      [].forEach.call(b.querySelectorAll(".enl"), function(e){ e.onclick=function(){
+        busq.pila=busq.pila||[]; busq.pila.push([p.url, p.dominio]); leerUrl(e.dataset.u, ""); }; });
     }
-    $("busAtras").onclick=function(){ pintaResultados(); $("vcuerpo").scrollTop=0; };
+    $("busAtras").onclick=function(){
+      var antes=busq.pila&&busq.pila.length?busq.pila.pop():null;
+      if(antes) leerUrl(antes[0], antes[1]); else pintaResultados();
+      $("vcuerpo").scrollTop=0; };
     $("vcuerpo").scrollTop=0;
   }).catch(function(){ b.innerHTML='<div class="texto">No he podido leerla.</div>'; });
 }

@@ -74,6 +74,12 @@ def es_estudia_general(texto):
     tema = m.group(2).strip(" .?!¡¿")
     if len(tema) < 2:
         return None
+    try:                                         # v3.01: «estudia esta página y sus enlaces…» va por internet
+        import internet_kira as _ik
+        if (_ik.interpretar(t) or {}).get("accion") == "estudiar_enlaces":
+            return None
+    except ImportError:
+        pass
     norm = "".join(c for c in unicodedata.normalize("NFD", tema.lower()) if unicodedata.category(c) != "Mn")
     if re.match(r"^python\s*:", norm):          # «estudia python: …» = documentación de Python (especial)
         return None
