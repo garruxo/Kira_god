@@ -110,7 +110,7 @@ tx = "\n".join(textos(sm.get_screen("menu")))
 for titulo in ("KIRA APP (este móvil)", "KIRAOS (el portátil)", "CEREBRO", "SINCRONÍA CON KIRAOS", "ÓRDENES",
                "CONVERSACIONES", "MEJORAS QUE ME MANDA KIRAOS", "AJUSTES"):
     ok(titulo in tx, f"el panel enseña «{titulo}»")
-ok("No la veo en la WiFi" in tx and "hazme un juego de carreras" in tx and "EN ESPERA" in tx,
+ok("No la veo ni en la WiFi" in tx and "hazme un juego de carreras" in tx and "EN ESPERA" in tx,
    "sin KiraOS lo dice, y enseña las órdenes que esperan")
 # probar la mejora de KiraOS en el laboratorio del móvil
 buscar("Button", text="Probar «hora_kiraos»").press()

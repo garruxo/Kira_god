@@ -123,14 +123,19 @@ def tarjeta_kiraos(d):
     h = d.get("kiraos")
     if not h:
         return {"id": "kiraos", "titulo": "KIRAOS (el portátil)",
-                "texto": ("No la veo en la WiFi de casa. Fuera de casa yo pienso y estudio con mi cerebro pequeño, lo "
-                          "guardo, y te apunto el trabajo (programas, juegos, apps…) para dárselo al volver."),
+                "texto": ("No la veo ni en la WiFi de casa ni por Tailscale. Fuera de casa yo pienso y estudio con mi "
+                          "cerebro pequeño, lo guardo, y te apunto el trabajo (programas, juegos, apps…) para dárselo "
+                          "al volver."),
                 "botones": [("Buscarla", "buscar_kiraos")]}
     act = h.get("actividad") or {}
     haciendo = h.get("haciendo") if h.get("ocupada") else ""
+    ahora = "EN PAUSA (no empieza nada nuevo)" if h.get("pausada") else _haciendo(act, haciendo)
+    if h.get("ocupada"):
+        ahora = "OCUPADA: " + ahora
+    n = int(h.get("en_cola") or 0)
     lineas = [f"Despierta (versión {h.get('version', '?')}) · {h.get('recuerdos', 0)} recuerdos"
               + (f" · me llama «{h['llamar']}»" if h.get("llamar") else "") + ".",
-              f"Ahora: {_haciendo(act, haciendo)}.",
+              f"Ahora: {ahora}." + (f" {n} tarea(s) en espera." if n else ""),
               f"Su cuaderno: {act.get('pensamientos', 0)} pensamientos · {act.get('soluciones', 0)} soluciones."]
     w = act.get("wifi") or {}
     if w.get("ssid"):
@@ -146,8 +151,12 @@ def tarjeta_kiraos(d):
                        f"encendido {_num(eq['encendido_h'])} h" if eq.get("encendido_h") is not None else "") if x]
     if eqs:
         lineas.append("Portátil: " + " · ".join(eqs) + ".")
-    return {"id": "kiraos", "titulo": "KIRAOS (el portátil)", "texto": "\n".join(lineas),
-            "botones": [("Parar lo que hace", "parar_kiraos")] if h.get("ocupada") else []}
+    if h.get("via") == "fuera":                       # v3.00
+        lineas.append("Conectada por Tailscale (fuera de casa): me sincronizo y veo lo que hace; el trabajo que me "
+                      "pidas se lo doy al volver a casa.")
+    botones = [("Parar lo que hace", "parar_kiraos")] if h.get("ocupada") else []
+    botones.append(("Seguir", "seguir_kiraos") if h.get("pausada") else ("Pausar", "pausar_kiraos"))
+    return {"id": "kiraos", "titulo": "KIRAOS (el portátil)", "texto": "\n".join(lineas), "botones": botones}
 
 
 def tarjeta_cerebro(d):

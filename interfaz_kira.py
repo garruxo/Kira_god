@@ -1988,7 +1988,10 @@ def construir_interfaz(core, consola=None, modo=None):
                 c = core._casa()
                 h = None
                 try:
-                    h = c.nucleo_hola() if c is not None and c.nucleo_disponible() else None
+                    # v3.00: en casa o, si no, por Tailscale (para VER qué hace; el trabajo sigue esperando a casa)
+                    h = c.nucleo_hola() if c is not None and c.nucleo_disponible(fuera=True) else None
+                    if h is not None:
+                        h = dict(h, via=getattr(c, "via", None))
                 except Exception:
                     h = None
                 cer = ""
@@ -2114,6 +2117,12 @@ def construir_interfaz(core, consola=None, modo=None):
                         lambda r: (mirar_red(), decir("¡La veo! Me sincronizo sola." if r is True else
                                                       "No la veo: ¿está el portátil encendido y en la misma WiFi?",
                                                       hablar=False)))
+            elif a in ("pausar_kiraos", "seguir_kiraos"):
+                si = a == "pausar_kiraos"
+                en_hilo(lambda: core._casa().pausar_nucleo(si),
+                        lambda r: (mirar_red(), decir(("KiraOS en pausa: no empieza nada nuevo hasta que le des a "
+                                                       "«Seguir»." if si else "KiraOS sigue con lo que tenga.")
+                                                      if r is True else "No he podido llegar a KiraOS.", hablar=False)))
             elif a == "parar_kiraos":
                 en_hilo(lambda: core._casa().cancelar_nucleo(),
                         lambda r: decir("Le he dicho a KiraOS que pare." if r is True else "No he podido llegar a KiraOS.",

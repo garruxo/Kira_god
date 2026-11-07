@@ -2496,8 +2496,10 @@ class KiraGodCore:
         import sincronia_kira as sc
         paso = al_paso or (lambda _f, _t: None)
         c = self._casa()
-        if c is None or not c.nucleo_disponible():
-            return "No veo a KiraOS en la WiFi de casa: lo guardo todo y se lo paso en cuanto llegue."
+        if c is None or not c.nucleo_disponible(fuera=True):     # v3.00: también fuera de casa, por Tailscale
+            return ("No veo a KiraOS ni en la WiFi de casa ni por Tailscale: lo guardo todo y se lo paso en cuanto la "
+                    "vea.")
+        fuera = getattr(c, "via", None) == "fuera"
         rec = getattr(self, "recuerdos", None)
         if rec is None:
             return "[x] No tengo el baúl a mano."
@@ -2523,10 +2525,14 @@ class KiraGodCore:
             est["resumen"] = sc.texto_resumen({"enviados": tot_env}, {"recuerdos": tot_rec, "mejoras": mejoras,
                                                                        "tema": tema})
             sc.guardar_estado_movil(self.dir, est)
-        paso(0.95, "Miro las órdenes que te tenía apuntadas…")
-        ordenes = self.ordenes_a_kiraos()
+        ordenes = ""
+        if not fuera:                       # las órdenes de trabajo, solo en casa (decisión del dueño, v2.88)
+            paso(0.95, "Miro las órdenes que te tenía apuntadas…")
+            ordenes = self.ordenes_a_kiraos()
         paso(1.0, "Hecho.")
         texto = est["resumen"] + ((" " + ordenes) if ordenes else "")
+        if fuera:
+            texto += " (Por Tailscale, fuera de casa. Las órdenes de trabajo apuntadas se las doy al volver.)"
         if mejoras and self.auto_mejora_encendida():
             texto += " " + self._auto_mejoras_recibidas()
         if (mejoras or tema) and callable(getattr(self, "al_sincronia", None)):
@@ -2614,9 +2620,11 @@ class KiraGodCore:
                 c = self._casa()
                 try:
                     en_casa = bool(c is not None and c.nucleo_disponible())
+                    # v3.00: fuera de casa, por Tailscale: SOLO la sincronía (las órdenes de trabajo esperan a casa)
+                    conectada = en_casa or bool(c is not None and c.nucleo_disponible(fuera=True))
                 except Exception:
-                    en_casa = False
-                if en_casa:
+                    en_casa = conectada = False
+                if conectada:
                     nuevo = False
                     try:
                         nuevo = sc.pendiente_movil(self.dir, self.recuerdos) > 0
@@ -2629,12 +2637,12 @@ class KiraGodCore:
                         except Exception:
                             pass
                         ultima = time.time()
-                    elif ok_.pendientes_kiraos(self.dir) or ok_.en_kiraos(self.dir):
+                    elif en_casa and (ok_.pendientes_kiraos(self.dir) or ok_.en_kiraos(self.dir)):
                         try:
                             self.ordenes_a_kiraos()
                         except Exception:
                             pass
-                en_casa_antes = en_casa
+                en_casa_antes = conectada
                 dormir(cada_seg)
             self._hilo_casa = None
 

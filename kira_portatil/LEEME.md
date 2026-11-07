@@ -130,3 +130,18 @@ Una sola pregunta: `kira -p "tu pregunta"`.
 Tras instalar, abre la app **Kira** desde el menú de aplicaciones, o escribe `kira-ventana`. Es una ventana donde
 escribes y Kira responde con el cerebro grande. Botones para cambiar de cerebro y ver tu red. A pantalla completa
 (modo «KiraOS»): `kira-ventana --pantalla` (sales con Escape). La terminal sigue estando: `kira`.
+
+## Fuera de casa (Tailscale) — v3.00
+
+Para que Kira app se sincronice con KiraOS y vea lo que hace **aunque no estéis en la misma WiFi**:
+
+1. En el portátil, una sola vez: `cd kira_god/kira_portatil` y `bash activar_fuera.sh` (o `bash act` + Tab).
+   Sale un código QR: escanéalo con el móvil y entra con tu cuenta (Google, Microsoft o GitHub).
+2. En el móvil: instala la app **Tailscale** (Play Store) y entra con **la misma cuenta**.
+3. Abre Kira app un momento en casa: aprende sola la dirección del portátil en Tailscale.
+
+Desde entonces, fuera de casa: **se sincroniza** y el panel **enseña lo que hace KiraOS** (con Parar / Pausar / Seguir).
+Las **órdenes de trabajo** siguen esperando a que llegues a casa, y la charla usa el cerebro del móvil.
+
+Seguridad: Tailscale es una red privada y cifrada entre tus aparatos; no se abre nada en el router. Kira solo deja
+entrar por esa red (puertos 8770 y 8771 en `tailscale0`) y sigue pidiendo su llave (el token).

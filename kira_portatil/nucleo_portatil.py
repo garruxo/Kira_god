@@ -435,7 +435,8 @@ class Nucleo:
         return {"kira_nucleo": 1, "version": ver, "recuerdos": n, "llamar": llamar,
                 "ocupada": self.trabajos.ocupado(), "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
                 "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
-                "actividad": actividad(self.core), "equipo": equipo_corto(), "sincronia": sincronia_corta(self.datos)}
+                "actividad": actividad(self.core), "equipo": equipo_corto(), "sincronia": sincronia_corta(self.datos),
+                "fuera_ip": _ip_fuera()}
 
     def sincronizar(self, paquete):
         """v2.87: lo nuevo del móvil entra en KiraOS (se suma, no se borra) y le devuelve lo nuevo de KiraOS."""
@@ -479,6 +480,15 @@ def actividad(core):
     except Exception:
         pass
     return d
+
+
+def _ip_fuera():
+    """v3.00: la dirección de Tailscale de este portátil (para que el móvil me encuentre fuera de casa), o None."""
+    try:
+        import fuera_kira
+        return fuera_kira.ip_tailscale()
+    except Exception:
+        return None
 
 
 def equipo_corto():

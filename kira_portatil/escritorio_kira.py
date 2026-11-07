@@ -447,6 +447,11 @@ class EscritorioMixin:
             t = "El móvil todavía no se ha sincronizado conmigo."
         t += ("\n\nCuando Kira app llega a casa me pasa sola lo que ha aprendido y yo le paso lo mío. Si aún no está "
               "emparejado: en el móvil di «Kira, conéctate al portátil» y dale el código de abajo.")
+        try:                                          # v3.00: ¿también fuera de casa (Tailscale)?
+            import fuera_kira
+            t += "\n\n" + fuera_kira.texto_estado()
+        except Exception:
+            pass
         return {"titulo": "Móvil", "texto": t, "botones": [{"texto": "Ver el código para emparejar",
                                                              "accion": "hacer:codigo"}]}
 

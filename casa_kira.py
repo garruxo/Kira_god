@@ -103,6 +103,16 @@ def _desde_lab():
     return [{"url": prueba, "ip": ip, "nombre": pc.leer_config().get("nombre") or ip}] if _salud(prueba) else []
 
 
+def _es_tailscale(ip):
+    """¿Es una dirección de Tailscale (100.64.0.0/10)? Solo esas se aceptan como «dirección de fuera»."""
+    import ipaddress
+    try:
+        d = ipaddress.ip_address(str(ip).strip())
+    except ValueError:
+        return False
+    return d.version == 4 and d in ipaddress.ip_network("100.64.0.0/10")
+
+
 def _salud(url, timeout=0.6):
     try:
         with urllib.request.urlopen(url + "/salud", timeout=timeout) as r:
@@ -242,9 +252,32 @@ class Casa:
             raise CasaError(f"No se pudo pintar en casa: {e}")
 
     # ---- v2.84: la Kira COMPLETA del portátil (el móvil solo le manda órdenes) ----
+    # ---- v3.00: fuera de casa, por Tailscale (solo sincronía y ver qué hace KiraOS) ----
+    @property
+    def url_fuera(self):
+        """La dirección del portátil en Tailscale (100.x.y.z), que KiraOS le dio al móvil estando en casa."""
+        return str(pc.leer_config().get("portatil_fuera") or "").rstrip("/")
+
+    @property
+    def via(self):
+        """Por dónde se llegó a KiraOS la última vez: «casa» (la WiFi), «fuera» (Tailscale) o None."""
+        return getattr(self, "_via", None)
+
+    def _aprender_fuera(self, hola):
+        """En casa, KiraOS dice su dirección de Tailscale: me la guardo para encontrarla luego fuera."""
+        ip = str((hola or {}).get("fuera_ip") or "").strip()
+        if not _es_tailscale(ip):
+            return
+        url = f"http://{ip}:{PUERTO_HTTP}"
+        if url != self.url_fuera:
+            try:
+                pc.guardar_config(pc.leer_config().get("url"), self.token, portatil_fuera=url)
+            except OSError:
+                pass
+
     @property
     def nucleo_url(self):
-        u = self.url
+        u = self.url_fuera if getattr(self, "_via", None) == "fuera" else self.url
         if not u:
             return ""
         try:
@@ -254,11 +287,12 @@ class Casa:
         except (ValueError, IndexError):
             return ""
 
-    def _nucleo(self, ruta, datos=None, timeout=10, crudo=None, tipo="application/json", maximo=4_000_000):
-        if not self.nucleo_url or not self.token:
+    def _nucleo(self, ruta, datos=None, timeout=10, crudo=None, tipo="application/json", maximo=4_000_000, base=None):
+        base = base or self.nucleo_url
+        if not base or not self.token:
             raise CasaError("No sé dónde está el portátil.")
         cuerpo = crudo if crudo is not None else (None if datos is None else json.dumps(datos).encode("utf-8"))
-        req = urllib.request.Request(self.nucleo_url + ruta, data=cuerpo, method="GET" if cuerpo is None else "POST",
+        req = urllib.request.Request(base + ruta, data=cuerpo, method="GET" if cuerpo is None else "POST",
                                      headers={"X-Kira-Token": self.token, "Content-Type": tipo})
         try:
             with self._abrir(req, timeout=timeout) as r:
@@ -276,19 +310,68 @@ class Casa:
         except Exception as e:
             raise CasaError(f"No llego al portátil: {e}")
 
-    def nucleo_disponible(self):
-        """¿Está la Kira completa del portátil? (cache 20 s, como el cerebro)."""
+    def nucleo_disponible(self, fuera=False):
+        """¿Está la Kira completa del portátil? (cache 20 s, como el cerebro). Por defecto SOLO en la WiFi de casa (para
+        las órdenes de trabajo y el cerebro, como siempre). Con fuera=True (sincronía y ver qué hace), si no está en
+        casa la busca también por Tailscale. `via` dice por dónde se llegó."""
         t, ok = getattr(self, "_cache_nucleo", (0.0, None))
-        if ok is not None and self._reloj() - t < 20:
-            return ok
-        ok = False
-        if self.disponible():
+        if ok is None or self._reloj() - t >= 20:
+            ok = False
+            if self.disponible():
+                try:
+                    h = self._nucleo("/hola", timeout=2, base=self._base_casa())
+                    ok = h.get("kira_nucleo") == 1
+                    if ok:
+                        self._via = "casa"
+                        self._aprender_fuera(h)
+                except CasaError:
+                    ok = False
+            self._cache_nucleo = (self._reloj(), ok)
+        if ok:
+            self._via = "casa"
+            return True
+        if not fuera or not self.url_fuera:
+            return False
+        t, okf = getattr(self, "_cache_fuera", (0.0, None))
+        if okf is None or self._reloj() - t >= 20:
+            okf = False
             try:
-                ok = self._nucleo("/hola", timeout=2).get("kira_nucleo") == 1
+                okf = self._nucleo("/hola", timeout=4, base=self._base_fuera()).get("kira_nucleo") == 1
             except CasaError:
-                ok = False
-        self._cache_nucleo = (self._reloj(), ok)
-        return ok
+                okf = False
+            self._cache_fuera = (self._reloj(), okf)
+        if okf:
+            self._via = "fuera"
+        return okf
+
+    def _base(self, u):
+        try:
+            esquema, resto = u.split("//", 1)
+            host = resto.split("/", 1)[0].rsplit(":", 1)[0]
+            return f"{esquema}//{host}:{PUERTO_NUCLEO}"
+        except (ValueError, IndexError):
+            return ""
+
+    def _base_casa(self):
+        return self._base(self.url) if self.url else ""
+
+    def _base_fuera(self):
+        return self._base(self.url_fuera) if self.url_fuera else ""
+
+    def estado_nucleo(self):
+        """v3.00: lo que hace KiraOS ahora (ocupada, en cola, en pausa…), o None."""
+        try:
+            return self._nucleo("/estado", timeout=4)
+        except CasaError:
+            return None
+
+    def pausar_nucleo(self, si=True):
+        """v3.00: los botones Pausar / Seguir del panel. Devuelve True si KiraOS lo recibió."""
+        try:
+            r = self._nucleo("/pausar" if si else "/seguir", {"si": bool(si)} if si else {})
+            return bool(r.get("pausada")) == bool(si)
+        except CasaError:
+            return False
 
     def nucleo_hola(self):
         try:
