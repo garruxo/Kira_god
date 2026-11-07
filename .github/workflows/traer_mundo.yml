@@ -1,0 +1,31 @@
+name: Traer el mapa del mundo (Natural Earth)
+on:
+  push:
+    branches: [mundo]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mundo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bajar world-atlas 2.0.2 (Natural Earth, dominio público; paquete con licencia ISC)
+        run: |
+          mkdir -p mundo_bajado
+          for f in countries-110m.json countries-50m.json land-50m.json LICENSE.md package.json; do
+            curl -fsSL "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/$f" -o "mundo_bajado/$f" \
+              || curl -fsSL "https://unpkg.com/world-atlas@2.0.2/$f" -o "mundo_bajado/$f" || echo "no $f"
+          done
+          ls -la mundo_bajado
+          sha256sum mundo_bajado/* > mundo_bajado/SHA256SUMS
+      - name: Guardarlo en la rama
+        run: |
+          git config user.name "kira-mundo"
+          git config user.email "kira-mundo@users.noreply.github.com"
+          git add -f mundo_bajado
+          git commit -m "Mapa del mundo bajado" || true
+          git push
