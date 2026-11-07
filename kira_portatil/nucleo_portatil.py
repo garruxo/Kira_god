@@ -568,8 +568,24 @@ class ClienteNucleo:
             return False
 
     def orden(self, texto, al_paso=None, cada=1.0, parar=None, espera_max=6 * 3600):
-        """Manda la orden y espera el resultado contando los pasos. Devuelve la tarea final (dict)."""
-        tid = self._pedir("/orden", {"orden": texto})["id"]
+        """Manda la orden y espera el resultado contando los pasos. Devuelve la tarea final (dict).
+        v2.94: si está ocupada (409), lo dice con buenas palabras en vez de soltar «HTTP Error 409»."""
+        import urllib.error
+        try:
+            tid = self._pedir("/orden", {"orden": texto})["id"]
+        except urllib.error.HTTPError as e:
+            if e.code == 409:                        # el núcleo solo hace una cosa a la vez
+                hago = ""
+                try:
+                    d = json.loads((e.read() or b"{}").decode("utf-8"))
+                    act = [k for k, v in (d.get("actividad") or {}).items() if v]
+                    hago = (" (estoy con: " + ", ".join(act) + ")") if act else ""
+                except Exception:
+                    pass
+                return {"estado": "ocupada",
+                        "respuesta": "Estoy ocupada terminando lo anterior" + hago +
+                                     ". Dame un momento y vuelve a pedírmelo."}
+            raise
         vistos, fin = 0, time.time() + espera_max
         while time.time() < fin:
             t = self._pedir("/tarea?id=" + tid)

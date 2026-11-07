@@ -99,6 +99,24 @@ ok(not npo.ClienteNucleo(f"http://127.0.0.1:{P}", "malo" * 8).disponible(), "con
 t = cli.orden("tus preguntas", cada=0.1)
 ok(t["estado"] == "hecho" and isinstance(t["respuesta"], str) and t["respuesta"], "una orden de verdad se hace allí")
 
+# v2.94: si está ocupada (409), lo dice con buenas palabras (no «HTTP Error 409. Conflict»)
+import urllib.error, io  # noqa: E402
+def _ocupada(req, timeout=10):
+    raise urllib.error.HTTPError(req.full_url, 409, "Conflict", {}, io.BytesIO(b'{"actividad": {"pensando": true}}'))
+cli_ocup = npo.ClienteNucleo(f"http://127.0.0.1:{P}", TOKEN, abrir=_ocupada)
+r = cli_ocup.orden("estudia python")
+ok(r["estado"] == "ocupada" and "HTTP" not in r["respuesta"] and "ocupada" in r["respuesta"].lower()
+   and "pensando" in r["respuesta"], "ocupada (409): mensaje amable, no el error crudo")
+def _otro(req, timeout=10):
+    raise urllib.error.HTTPError(req.full_url, 500, "Boom", {}, io.BytesIO(b""))
+try:
+    npo.ClienteNucleo(f"http://127.0.0.1:{P}", TOKEN, abrir=_otro).orden("x")
+    ok(False, "un 500 sí debe propagarse")
+except urllib.error.HTTPError as e:
+    ok(e.code == 500, "otros errores (500) siguen saliendo como antes")
+ok("WEBKIT_DISABLE_COMPOSITING_MODE" in open(os.path.join(RAIZ, "kira_portatil", "kiraos.py"), encoding="utf-8").read(),
+   "kiraos desactiva la aceleración gráfica (efecto agua en gráficas viejas)")
+
 # ---------- el MÓVIL: su memoria viaja al portátil ----------
 import memoria_kira as mk
 import recuerdos_kira as rk

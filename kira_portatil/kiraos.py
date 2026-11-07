@@ -241,7 +241,16 @@ def abrir_programando(archivo=None, pedido="", pantalla=False):
     webview.start()
 
 
+def _ajustes_grafica_vieja():
+    """v2.94: en gráficas viejas (como el Packard Bell) WebKit dibuja con «efecto agua»/artefactos al animar las
+    ventanas. Desactivando su compositor acelerado se ve estable. Solo se pone si no estaba ya puesto, y no afecta a
+    equipos modernos de forma notable."""
+    os.environ.setdefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
+    os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+
+
 def main(argv=None):
+    _ajustes_grafica_vieja()
     ap = argparse.ArgumentParser(description="El arranque de KiraOS en el portátil")
     ap.add_argument("--url", default="http://127.0.0.1:8770")
     ap.add_argument("--pantalla", action="store_true", help="a pantalla completa (modo KiraOS)")
