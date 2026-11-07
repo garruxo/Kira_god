@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
@@ -43,6 +44,57 @@ CEREBRO_NOMBRE = "Qwen 35B"          # un solo cerebro
 # =====================================================================================
 #  LA VOZ («Sistema Kira activado») — con lo que haya en el portátil; si no hay, calla
 # =====================================================================================
+# ---------- v2.96: las fronteras del mundo para el mapa (se bajan una vez y se guardan) ----------
+RUTA_MUNDO = os.path.join(os.path.expanduser("~"), ".kira_mundo_110m.json")
+URLS_MUNDO = ("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json",
+              "https://unpkg.com/world-atlas@2.0.2/countries-110m.json")
+
+
+def _mundo_valido(d):
+    return isinstance(d, dict) and d.get("type") == "Topology" and "countries" in (d.get("objects") or {}) \
+        and isinstance(d.get("arcs"), list) and len(d["arcs"]) > 100
+
+
+def mundo_kira(ruta=None, abrir=None, urls=URLS_MUNDO):
+    """Devuelve {"ok": True, "mundo": topojson} o {"ok": False, "error"}. Primero mira el guardado; si no está,
+    lo baja (una sola vez) y lo guarda. `abrir(url)` -> bytes se inyecta en las pruebas."""
+    import json
+    ruta = ruta or RUTA_MUNDO
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            d = json.load(f)
+        if _mundo_valido(d):
+            return {"ok": True, "mundo": d, "de": "guardado"}
+    except (OSError, ValueError):
+        pass
+    if abrir is None:
+        import urllib.request
+
+        def abrir(url):
+            req = urllib.request.Request(url, headers={"User-Agent": "KiraOS-mapa/1"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                return r.read(5_000_000)
+    ultimo = "sin internet"
+    for url in urls:
+        try:
+            d = json.loads(abrir(url).decode("utf-8"))
+        except Exception as e:                        # noqa: BLE001
+            ultimo = str(e)
+            continue
+        if not _mundo_valido(d):
+            ultimo = "lo bajado no es un mapa válido"
+            continue
+        tmp = ruta + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(d, f)
+            os.replace(tmp, ruta)
+        except OSError:
+            pass
+        return {"ok": True, "mundo": d, "de": "bajado"}
+    return {"ok": False, "error": ultimo}
+
+
 def voz_portatil(texto, correr=None):
     """Dice `texto` en voz alta con el lector de Ubuntu (spd-say / espeak), sin bloquear. Si no hay ninguno, no pasa
     nada (devuelve False). `correr` se puede inyectar en las pruebas."""
@@ -108,9 +160,22 @@ class Api(EscritorioMixin):
         return bl.biometria_disponible()
 
     def mapa_ataques(self):
-        """Los datos para el mapa del mundo: de dónde intentan atacarte (país, dueño, tipo)."""
+        """Los datos para el mapa del mundo: de dónde intentan atacarte (país, dueño, tipo, cada ataque con su hora y
+        puerto). v2.96: antes de enseñarlo, recoge lo nuevo de los registros (como mucho una vez por minuto)."""
         import ataques_kira as at
+        if time.time() - getattr(self, "_ataques_leidos", 0) > 60:
+            self._ataques_leidos = time.time()
+            try:
+                at.paso()
+            except Exception:                         # sin permiso para leer los registros: enseña lo guardado
+                pass
         return at.mapa_datos(at.cargar())
+
+    def mapa_mundo(self):
+        """v2.96: las fronteras de verdad del mundo (Natural Earth 1:110m, datos libres) para el mapa. Se bajan UNA vez
+        y se guardan en el portátil; después funciona sin internet. Si no se pueden bajar, el mapa usa el dibujo
+        esquemático de siempre."""
+        return mundo_kira()
 
     def explicar_codigo(self, codigo):
         """Explica un código línea por línea (técnico, para aprender). Lo usa la pantalla «Kira programando»."""

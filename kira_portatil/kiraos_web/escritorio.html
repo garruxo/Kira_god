@@ -308,6 +308,7 @@ var FAKE = {
     return Promise.resolve(T[n]||{titulo:n,texto:"",botones:[]}); },
   app_hacer:function(n,a){ return Promise.resolve({texto:"(ejemplo) "+a}); },
   sistema:function(a){ return Promise.resolve({ok:true,texto:"(ejemplo) "+a}); },
+  mapa_mundo:function(){ return Promise.resolve({ok:false}); },
   mapa_ataques:function(){ return Promise.resolve({ataques:[
     {ip:"5.188.0.5",pais_nombre:"Rusia",org:"SELECTEL hosting",infra_clase:"hosting",lat:61.5,lon:105.3,veces:42,tipos:["Intento de entrar por SSH (fuerza bruta)"]},
     {ip:"80.58.0.1",pais_nombre:"España",org:"Telefonica broadband",infra_clase:"isp",lat:40.2,lon:-3.7,veces:3,tipos:["Conexión bloqueada / escaneo de puertos"]}]}); },
@@ -330,7 +331,7 @@ function llama(m){ var a=[].slice.call(arguments,1); var o=api(); if(!o[m]) retu
 // mapa y programando (en un marco) piden sus datos al escritorio
 window.addEventListener("message", function(ev){
   var d=ev.data||{}; if(!d.kira_pide) return;
-  if(["mapa_ataques","programando_datos"].indexOf(d.metodo)<0) return;
+  if(["mapa_ataques","mapa_mundo","programando_datos"].indexOf(d.metodo)<0) return;
   llama(d.metodo).then(function(v){ ev.source.postMessage({kira_resp:d.id,ok:true,valor:v},"*"); })
     .catch(function(){ ev.source.postMessage({kira_resp:d.id,ok:false},"*"); });
 });

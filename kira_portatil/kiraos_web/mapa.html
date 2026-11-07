@@ -2,68 +2,170 @@
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mapa de ataques · KiraOS</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif}
-html,body{width:100%;height:100%;overflow:hidden;background:#04050a;color:#e7ecf5}
-.wrap{position:fixed;inset:0;display:flex;flex-direction:column;background:radial-gradient(1000px 700px at 50% 30%,#0a1020,#05070f 60%,#03040a)}
-.top{display:flex;align-items:center;gap:14px;padding:16px 26px;border-bottom:1px solid #1a2742}
-.orb{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#16243f,#0a1020);
-  box-shadow:0 0 0 2px rgba(34,211,238,.5),0 0 16px rgba(34,211,238,.4);display:grid;place-items:center}
-.orb b{font-size:11px;font-weight:800;background:linear-gradient(90deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent}
-.top h1{font-size:18px;font-weight:700}.top h1 i{color:#7b8aa8;font-style:normal;font-weight:500;font-size:13px}
-.spacer{flex:1}
-.chip{font-size:12.5px;color:#9fb0cc;background:#0e1730;border:1px solid #1d2b49;border-radius:999px;padding:6px 13px}
-.main{flex:1;display:flex;min-height:0}
-.mapbox{flex:1;position:relative;display:grid;place-items:center;padding:14px}
-svg{width:100%;height:100%;max-height:100%}
-.land{fill:#132038;stroke:#20304f;stroke-width:.6}
-.grid{stroke:rgba(90,120,170,.10);stroke-width:.5}
-.dot{cursor:pointer}
-.panel{width:330px;border-left:1px solid #1a2742;padding:18px;overflow:auto;background:rgba(10,16,30,.5)}
-.panel h2{font-size:14px;color:#8fa6cf;font-weight:600;letter-spacing:.5px;margin-bottom:12px}
-.card{background:#0e1730;border:1px solid #1d2b49;border-radius:12px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:.12s}
-.card:hover{border-color:#2a3c63}
-.card.sel{border-color:rgba(34,211,238,.6);box-shadow:0 0 0 1px rgba(34,211,238,.3)}
-.card .ip{font-size:14.5px;font-weight:700}
-.card .pais{font-size:12.5px;color:#9fb0cc;margin-top:2px}
-.tag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:999px;margin-top:8px;margin-right:5px}
-.tag.hosting{background:rgba(244,114,208,.16);color:#f7a8df;border:1px solid rgba(244,114,208,.3)}
-.tag.isp{background:rgba(34,211,238,.16);color:#8fe6ff;border:1px solid rgba(34,211,238,.3)}
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--fondo:#020308;--panel:rgba(6,14,30,.86);--borde:rgba(34,211,238,.35);--cab:rgba(14,60,96,.55);--texto:#dbe7f7;
+  --tenue:#7f93b4;--cian:#22d3ee;--rosa:#f472d0;--letra:"Ubuntu Condensed","DejaVu Sans Condensed","Liberation Sans Narrow","Arial Narrow","Noto Sans",system-ui,sans-serif}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto);font-family:var(--letra);font-stretch:condensed}
+#todo{position:fixed;inset:0;display:flex;flex-direction:column}
+/* cabecera */
+#cab{display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid rgba(34,211,238,.18);background:linear-gradient(#060b18,#03050c)}
+#logo{font-size:30px;font-weight:800;letter-spacing:2px;line-height:1;background:linear-gradient(90deg,#2ee6ff,#f472d0);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+#cab h1{font-size:15px;font-weight:700;letter-spacing:2px;color:#cfe3ff;text-transform:uppercase}
+#cab h1 i{display:block;font-style:normal;font-weight:400;letter-spacing:.5px;font-size:11.5px;color:var(--tenue);text-transform:none}
+#estado{font-size:11.5px;font-weight:700;letter-spacing:1.5px;padding:4px 10px;border-radius:4px;border:1px solid var(--borde);color:var(--cian);text-transform:uppercase}
+#estado.demo{color:#fbbf24;border-color:rgba(251,191,36,.5)}
+#estado.vivo:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:6px;vertical-align:1px;animation:latir 1s infinite}
+@keyframes latir{50%{opacity:.25}}
+.hueco{flex:1}
+#cuenta{font-size:12px;color:var(--tenue);letter-spacing:.5px}
+#cuenta b{color:#fff;font-size:15px}
+#btnDemo{font-family:var(--letra);font-size:12px;letter-spacing:.5px;padding:6px 12px;border-radius:5px;border:1px solid var(--borde);background:rgba(34,211,238,.08);color:var(--texto);cursor:pointer}
+#btnDemo:hover{background:rgba(34,211,238,.2)}
+/* mapa */
+#zona{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#07101f 0%,#020308 70%)}
+#mapa{position:absolute;inset:0;width:100%;height:100%}
+.pais{fill:#060a14;stroke:rgba(214,230,255,.62);stroke-width:.32;stroke-linejoin:round}
+.cont{fill:#08101f;stroke:rgba(214,230,255,.5);stroke-width:.5}
+.rej{stroke:rgba(90,130,190,.08);stroke-width:.4}
+.casa{fill:#fff}
+.casaAnillo{fill:none;stroke:var(--cian);stroke-width:1.1;transform-box:fill-box;transform-origin:center;animation:onda 2.2s ease-out infinite}
+.punto{cursor:pointer;opacity:.85}
+.punto:hover{opacity:1}
+.linea{fill:none;stroke-width:1.15;stroke-linecap:round}
+.onda{fill:none;stroke-width:1.2;transform-box:fill-box;transform-origin:center;animation:onda 1.4s ease-out forwards}
+.impacto{fill:none;stroke-width:1.4;transform-box:fill-box;transform-origin:center;animation:onda .9s ease-out forwards}
+@keyframes onda{0%{transform:scale(.3);opacity:1}100%{transform:scale(3.2);opacity:0}}
+/* paneles (encima del mapa, como en Norse) */
+.pan{position:absolute;background:var(--panel);border:1px solid var(--borde);border-radius:6px;overflow:hidden;
+  box-shadow:0 0 24px rgba(0,0,0,.6);font-size:12px}
+.pan h2{font-size:12.5px;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:5px 8px;background:var(--cab);
+  border-bottom:1px solid var(--borde);color:#e8f6ff}
+.pan table{width:100%;border-collapse:collapse}
+.pan th{font-size:10.5px;font-weight:600;color:var(--tenue);text-align:left;padding:3px 7px;letter-spacing:.4px}
+.pan td{padding:2.5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.pan td.n{text-align:right;color:#fff;font-weight:700;width:1%}
+.pan tr.top td{color:#fff}
+.cod{display:inline-block;min-width:22px;font-size:9.5px;font-weight:700;text-align:center;padding:1px 3px;border-radius:3px;background:rgba(255,255,255,.1);color:#cfe3ff;margin-right:5px}
+.bola{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:0}
+.vacioPan{padding:8px 10px;color:var(--tenue);font-size:11.5px}
+#pOrigen{left:12px;top:12px;width:230px}
+#pBuscan{right:12px;top:12px;width:230px}
+#pTipos{right:12px;bottom:12px;width:230px}
+#pAtaques{left:12px;bottom:12px;right:254px;max-width:880px}
+#pAtaques td{max-width:170px}
+#pAtaques tr.nuevo td{animation:fila 2.4s ease-out}
+@keyframes fila{0%{background:rgba(34,211,238,.35)}100%{background:transparent}}
+#pAtaques td.hora{color:#7ee3ff;font-variant-numeric:tabular-nums}
+#pAtaques td.ip{color:#fca5a5;font-variant-numeric:tabular-nums}
+#pAtaques tr{cursor:pointer}
+#pAtaques tr:hover td{background:rgba(255,255,255,.04)}
+/* ficha de una IP */
+#ficha{position:absolute;left:254px;top:12px;width:300px;display:none;background:rgba(6,14,30,.95);border:1px solid rgba(244,114,208,.5);
+  border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;box-shadow:0 10px 40px rgba(0,0,0,.7);z-index:5}
+#ficha.on{display:block}
+#ficha .ip{font-size:18px;font-weight:800;color:#fff;letter-spacing:.5px}
+#ficha .x{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--tenue);font-size:18px;cursor:pointer}
+#ficha .fila{color:var(--tenue)}#ficha .fila b{color:var(--texto);font-weight:600}
+.tag{display:inline-block;font-size:10.5px;padding:1px 8px;border-radius:999px;margin:4px 0}
+.tag.hosting{background:rgba(244,114,208,.16);color:#f7a8df;border:1px solid rgba(244,114,208,.35)}
+.tag.isp{background:rgba(34,211,238,.16);color:#8fe6ff;border:1px solid rgba(34,211,238,.35)}
 .tag.desconocido{background:#1a2742;color:#9fb0cc}
-.card .veces{float:right;font-size:12px;color:#f472d0;font-weight:700}
-.det{font-size:12.5px;color:#aab8d4;line-height:1.5;margin-top:6px}
-.vacio{color:#6c7fa3;font-size:13px;text-align:center;margin-top:40px;line-height:1.6}
-.aviso{font-size:11px;color:#55668a;padding:8px 26px;border-top:1px solid #1a2742}
-.leyenda{position:absolute;left:18px;bottom:14px;font-size:11px;color:#7b8aa8;background:rgba(10,16,30,.6);padding:6px 10px;border-radius:8px}
-.leyenda span{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 10px;vertical-align:middle}
+#ficha .nota{margin-top:8px;font-size:11px;color:#8a99b6}
+/* sin ataques todavía */
+#vacio{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);display:none;text-align:center;max-width:430px;
+  background:rgba(6,14,30,.9);border:1px solid var(--borde);border-radius:10px;padding:18px 22px;font-size:13.5px;line-height:1.55;z-index:4}
+#vacio.on{display:block}
+#vacio b{color:#fff}
+#vacio button{margin-top:12px;font-family:var(--letra);font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid var(--borde);
+  background:rgba(34,211,238,.15);color:#fff;cursor:pointer}
+#pie{font-size:10.5px;color:#5d6f8f;padding:4px 16px;border-top:1px solid rgba(34,211,238,.12);background:#03050c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* pantallas más pequeñas */
+@media (max-width:1050px){#pBuscan,#pTipos{width:190px}#pAtaques{right:212px}#pOrigen{width:190px}#ficha{left:212px}}
+@media (max-height:560px){#pOrigen tr:nth-child(n+8),#pBuscan tr:nth-child(n+7){display:none}}
 </style></head>
 <body>
-<div class="wrap">
-  <div class="top">
-    <div class="orb"><b>K</b></div>
-    <h1>Mapa de ataques <i>· de dónde intentan atacarte</i></h1>
-    <div class="spacer"></div>
-    <div class="chip" id="resumen">—</div>
+<div id="todo">
+  <div id="cab">
+    <div id="logo">KIRA</div>
+    <h1>Mapa de ataques<i>de dónde intentan entrar en tu portátil</i></h1>
+    <div id="estado">Cargando…</div>
+    <div class="hueco"></div>
+    <div id="cuenta"></div>
+    <button id="btnDemo">Ver demostración</button>
   </div>
-  <div class="main">
-    <div class="mapbox">
-      <svg id="mapa" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet"></svg>
-      <div class="leyenda"><span style="background:#22d3ee"></span>particular (ISP)
-        <span style="background:#f472d0"></span>empresa/hosting</div>
-    </div>
-    <div class="panel">
-      <h2>ATAQUES DETECTADOS</h2>
-      <div id="lista"></div>
-    </div>
+  <div id="zona">
+    <svg id="mapa" viewBox="0 0 1000 394" preserveAspectRatio="xMidYMid meet">
+      <defs><clipPath id="recorte"><rect x="0" y="0" width="1000" height="394"/></clipPath></defs>
+      <g id="gMundo" clip-path="url(#recorte)"></g><g id="gPuntos"></g><g id="gLineas"></g><g id="gCasa"></g>
+    </svg>
+    <div class="pan" id="pOrigen"><h2>Origen</h2><div id="tOrigen"></div></div>
+    <div class="pan" id="pBuscan"><h2>Lo que buscan en ti</h2><div id="tBuscan"></div></div>
+    <div class="pan" id="pTipos"><h2>Tipo de ataque</h2><div id="tTipos"></div></div>
+    <div class="pan" id="pAtaques"><h2>Ataques</h2>
+      <table><thead><tr><th>Hora</th><th>Organización</th><th>Origen</th><th>IP</th><th>Tipo</th><th>Servicio</th><th>Puerto</th></tr></thead>
+      <tbody id="tAtaques"></tbody></table></div>
+    <div id="ficha"></div>
+    <div id="vacio"></div>
   </div>
-  <div class="aviso" id="aviso">El origen es APARENTE: con VPN, proxy o equipos infectados (botnet) la IP puede no ser la del atacante real. Ubicación a nivel de país.</div>
+  <div id="pie">El origen es APARENTE: con VPN, proxy o equipos infectados (botnet) la IP puede no ser la del atacante real. Se sitúa por país, nunca por calle. Kira solo mira y apunta: no responde ni ataca a nadie.</div>
 </div>
 
 <script>
-var W=1000, H=500;
-function proj(lon,lat){ return [ (lon+180)/360*W, (90-lat)/180*H ]; }
+var W=1000, H=394, LAT_N=84, LAT_S=-58;
+function proj(lon,lat){ return [ (lon+180)/360*W, (LAT_N-lat)/(LAT_N-LAT_S)*H ]; }
+var $=function(id){ return document.getElementById(id); };
+var NS="http://www.w3.org/2000/svg";
+function el(tag, at){ var e=document.createElementNS(NS, tag); for(var k in at) e.setAttribute(k, at[k]); return e; }
+function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 
-// Mundo esquemático (contornos aproximados, en [lon,lat]). No es un mapa exacto: sitúa el país, no la calle.
-var CONT = {
+// ---------- colores por servicio (como en Norse: cada servicio, su color) ----------
+var COLOR_SERV = {ssh:"#4ade80",telnet:"#fb923c",http:"#22d3ee",https:"#38bdf8",smb:"#a78bfa",netbios:"#a78bfa",rpc:"#a78bfa",
+  "escritorio remoto":"#f472d0",vnc:"#f472d0",mysql:"#facc15","ms-sql":"#facc15",postgres:"#facc15",redis:"#facc15",mongodb:"#facc15",
+  dns:"#94a3b8",smtp:"#fda4af",ftp:"#fda4af",sip:"#fdba74","router (tr-069)":"#fb7185",adb:"#fb7185"};
+function colorServ(s){ return COLOR_SERV[s] || "#e2e8f0"; }
+var COLOR_CLASE = {"fuerza bruta":"#4ade80","escaneo":"#22d3ee","cebo":"#f472d0"};
+var NOMBRE_CLASE = {"fuerza bruta":"Fuerza bruta (contraseñas)","escaneo":"Escaneo / bloqueado","cebo":"Picó en el cebo"};
+
+// ---------- el mundo: fronteras de verdad (TopoJSON de Natural Earth) o, si no hay, el dibujo esquemático ----------
+function topoAPaises(topo){
+  var tf=topo.transform, arcos=topo.arcs.map(function(a){
+    if(!tf) return a.map(function(p){ return [p[0],p[1]]; });
+    var x=0,y=0; return a.map(function(p){ x+=p[0]; y+=p[1]; return [x*tf.scale[0]+tf.translate[0], y*tf.scale[1]+tf.translate[1]]; });
+  });
+  function arco(i){ return i<0 ? arcos[~i].slice().reverse() : arcos[i]; }
+  function anillo(lista){ var pts=[]; lista.forEach(function(i,k){ var a=arco(i); pts=pts.concat(k ? a.slice(1) : a); }); return pts; }
+  var out=[], geos=(topo.objects.countries||{}).geometries||[];
+  geos.forEach(function(g){
+    var nombre=(g.properties&&g.properties.name)||"";
+    if(nombre==="Antarctica"||g.id==="010") return;
+    var polis = g.type==="Polygon" ? [g.arcs] : (g.type==="MultiPolygon" ? g.arcs : []);
+    var anillos=[]; polis.forEach(function(p){ p.forEach(function(r){ anillos.push(anillo(r)); }); });
+    out.push({id:g.id, nombre:nombre, anillos:anillos});
+  });
+  return out;
+}
+function caminoDe(anillos){
+  // Un trozo que cruza la línea de cambio de fecha (Rusia, Fiji…) se «desenrolla» para que siga siendo una forma
+  // cerrada, y se dibuja dos veces (desplazado 360°) para que se vea a los dos lados; lo que sobra lo recorta el mapa.
+  var d="";
+  anillos.forEach(function(r){
+    var pts=[], prev=null, sale=false;
+    r.forEach(function(p){
+      var lon=p[0];
+      if(prev!==null){ while(lon-prev>180) lon-=360; while(lon-prev<-180) lon+=360; }
+      if(lon>180||lon<-180) sale=true;
+      pts.push([lon,p[1]]); prev=lon;
+    });
+    var copias = sale ? [0, (pts.some(function(p){ return p[0]>180; }) ? -360 : 360)] : [0];
+    copias.forEach(function(dx){
+      pts.forEach(function(p,i){ var q=proj(p[0]+dx,p[1]); d += (i===0?"M":"L") + q[0].toFixed(1)+","+q[1].toFixed(1); });
+      d+="Z";
+    });
+  });
+  return d;
+}
+var CONT = {   // de reserva: contornos aproximados [lon,lat]
  norteamerica:[[-168,66],[-156,71],[-128,70],[-95,72],[-82,73],[-61,66],[-56,53],[-66,49],[-70,43],[-74,40],[-81,31],[-80,26],[-97,26],[-98,19],[-105,20],[-114,31],[-124,40],[-124,48],[-130,55],[-146,60],[-168,66]],
  centroamerica:[[-92,18],[-87,16],[-83,10],[-77,8],[-83,14],[-90,16],[-92,18]],
  sudamerica:[[-77,8],[-70,12],[-60,11],[-50,0],[-35,-6],[-39,-14],[-48,-25],[-53,-34],[-62,-40],[-66,-50],[-74,-52],[-73,-44],[-71,-33],[-70,-18],[-76,-14],[-81,-6],[-80,1],[-77,8]],
@@ -73,74 +175,197 @@ var CONT = {
  oceania:[[114,-22],[122,-18],[131,-12],[142,-11],[146,-18],[153,-25],[150,-37],[141,-38],[129,-32],[115,-34],[114,-22]],
  groenlandia:[[-45,60],[-20,70],[-20,82],[-45,83],[-58,76],[-54,66],[-45,60]]
 };
-
-function dibujaMundo(){
-  var svg=document.getElementById("mapa"), ns="http://www.w3.org/2000/svg", frag="";
-  // rejilla (meridianos/paralelos)
-  for(var lon=-180;lon<=180;lon+=30){var a=proj(lon,90),b=proj(lon,-90);frag+='<line class="grid" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>';}
-  for(var lat=-60;lat<=80;lat+=30){var a2=proj(-180,lat),b2=proj(180,lat);frag+='<line class="grid" x1="'+a2[0]+'" y1="'+a2[1]+'" x2="'+b2[0]+'" y2="'+b2[1]+'"/>';}
-  for(var k in CONT){
-    var pts=CONT[k].map(function(p){var q=proj(p[0],p[1]);return q[0].toFixed(1)+","+q[1].toFixed(1);}).join(" ");
-    frag+='<polygon class="land" points="'+pts+'"/>';
+var MUNDO_REAL=false;
+function dibujaMundo(topo){
+  var g=$("gMundo"); g.innerHTML="";
+  for(var lon=-180;lon<=180;lon+=30){ var a=proj(lon,LAT_N),b=proj(lon,LAT_S); g.appendChild(el("line",{"class":"rej",x1:a[0],y1:a[1],x2:b[0],y2:b[1]})); }
+  for(var lat=-30;lat<=60;lat+=30){ var c=proj(-180,lat),d=proj(180,lat); g.appendChild(el("line",{"class":"rej",x1:c[0],y1:c[1],x2:d[0],y2:d[1]})); }
+  var paises=null;
+  try{ if(topo) paises=topoAPaises(topo); }catch(e){ paises=null; }
+  if(paises && paises.length){
+    MUNDO_REAL=true;
+    paises.forEach(function(p){ var pa=el("path",{"class":"pais",d:caminoDe(p.anillos)}); var t=el("title",{}); t.textContent=p.nombre; pa.appendChild(t); g.appendChild(pa); });
+  } else {
+    MUNDO_REAL=false;
+    for(var k in CONT) g.appendChild(el("path",{"class":"cont",d:caminoDe([CONT[k]])}));
   }
-  svg.innerHTML=frag;
 }
 
-var DATOS=[], sel=null;
-function color(c){ return c==="isp"?"#22d3ee":(c==="hosting"?"#f472d0":"#9fb0cc"); }
+// ---------- tu portátil (destino de las líneas) ----------
+var OBJ={lat:40.2,lon:-3.7,texto:"Tu portátil"};
+function dibujaCasa(){
+  var g=$("gCasa"); g.innerHTML=""; var q=proj(OBJ.lon,OBJ.lat);
+  g.appendChild(el("circle",{"class":"casaAnillo",cx:q[0],cy:q[1],r:5}));
+  var c=el("circle",{"class":"casa",cx:q[0],cy:q[1],r:2.6}); var t=el("title",{}); t.textContent=OBJ.texto; c.appendChild(t); g.appendChild(c);
+}
 
-function pinta(){
-  var svg=document.getElementById("mapa");
-  // quitar puntos viejos
-  svg.querySelectorAll(".dot,.halo").forEach(function(e){e.remove();});
-  var maxv=Math.max(1,...DATOS.map(function(d){return d.veces||1;}));
-  DATOS.forEach(function(d,i){
-    if(d.lat==null||d.lon==null) return;
-    var q=proj(d.lon,d.lat), r=4+6*Math.sqrt((d.veces||1)/maxv), c=color(d.infra_clase);
-    var halo='<circle class="halo" cx="'+q[0]+'" cy="'+q[1]+'" r="'+(r+5)+'" fill="'+c+'" opacity="0.18"/>';
-    var dot='<circle class="dot" data-i="'+i+'" cx="'+q[0]+'" cy="'+q[1]+'" r="'+r+'" fill="'+c+'" opacity="0.9" stroke="#04050a" stroke-width="1"><title>'+d.ip+' · '+(d.pais_nombre||'?')+'</title></circle>';
-    svg.insertAdjacentHTML("beforeend", halo+dot);
+// ---------- un ataque: la línea vuela desde su país hasta tu portátil ----------
+var vivas=0;
+function disparo(ev){
+  if(ev.lat==null||ev.lon==null) return;
+  if(vivas>28) return;
+  var o=proj(ev.lon,ev.lat), t=proj(OBJ.lon,OBJ.lat), col=colorServ(ev.servicio);
+  var dx=t[0]-o[0], dy=t[1]-o[1], dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<4){ impacto(t,col); return; }
+  var cx=(o[0]+t[0])/2, cy=(o[1]+t[1])/2 - Math.min(140, dist*0.32);
+  var p=el("path",{"class":"linea",d:"M"+o[0]+","+o[1]+" Q"+cx+","+cy+" "+t[0]+","+t[1],stroke:col});
+  $("gLineas").appendChild(p); vivas++;
+  var largo=p.getTotalLength ? p.getTotalLength() : dist;
+  p.style.strokeDasharray=largo; p.style.strokeDashoffset=largo; p.style.opacity="0.95";
+  p.getBoundingClientRect();
+  var dura=Math.max(700, Math.min(1700, largo*3.2));
+  p.style.transition="stroke-dashoffset "+dura+"ms ease-in, opacity 1.6s ease "+(dura+250)+"ms";
+  p.style.strokeDashoffset="0"; p.style.opacity="0";
+  $("gLineas").appendChild(el("circle",{"class":"onda",cx:o[0],cy:o[1],r:3,stroke:col}));
+  setTimeout(function(){ impacto(t,col); }, dura);
+  setTimeout(function(){ p.remove(); vivas--; }, dura+2000);
+  limpiaOndas();
+}
+function impacto(t,col){ var c=el("circle",{"class":"impacto",cx:t[0],cy:t[1],r:3,stroke:col}); $("gLineas").appendChild(c); setTimeout(function(){ c.remove(); }, 1000); }
+function limpiaOndas(){ var o=$("gLineas").querySelectorAll(".onda"); for(var i=0;i<o.length-30;i++) o[i].remove(); setTimeout(function(){ var o2=$("gLineas").querySelectorAll(".onda"); if(o2.length) o2[0].remove(); }, 1500); }
+
+// ---------- los paneles ----------
+var D=null, DEMO=false, ultimaMarca=0;
+function tabla(cab, filas){
+  return '<table><thead><tr>'+cab.map(function(c){ return '<th>'+c+'</th>'; }).join("")+'</tr></thead><tbody>'+filas.join("")+'</tbody></table>';
+}
+function pintaPaneles(){
+  var o=(D.origenes||[]);
+  $("tOrigen").innerHTML = o.length ? tabla(["#","País"], o.map(function(x,i){
+      return '<tr class="'+(i===0?"top":"")+'"><td class="n">'+x.veces+'</td><td><span class="cod">'+esc(x.pais==="??"?"?":x.pais)+'</span>'+esc(x.nombre)+'</td></tr>'; }))
+    : '<div class="vacioPan">Nadie todavía.</div>';
+  var s=(D.servicios||[]);
+  $("tBuscan").innerHTML = s.length ? tabla(["#","Servicio","Puerto"], s.map(function(x){
+      return '<tr><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+colorServ(x.servicio)+'"></span>'+esc(x.servicio)+'</td><td>'+x.puerto+'</td></tr>'; }))
+    : '<div class="vacioPan">Nada todavía.</div>';
+  var c=(D.clases||[]);
+  $("tTipos").innerHTML = c.length ? tabla(["#","Tipo"], c.map(function(x){
+      return '<tr><td class="n">'+x.veces+'</td><td><span class="bola" style="background:'+(COLOR_CLASE[x.clase]||"#ccc")+'"></span>'+esc(NOMBRE_CLASE[x.clase]||x.clase)+'</td></tr>'; }))
+    : '<div class="vacioPan">Nada todavía.</div>';
+  var nE=(D.eventos||[]).length, nP=(D.origenes||[]).filter(function(x){ return x.pais!=="??"; }).length;
+  $("cuenta").innerHTML = '<b>'+(D.total||0)+'</b> IP · <b>'+nP+'</b> países · <b>'+nE+'</b> ataques apuntados';
+}
+function pintaPuntos(){
+  var g=$("gPuntos"); g.innerHTML="";
+  (D.ataques||[]).forEach(function(a, i){
+    if(a.lat==null||a.lon==null) return;
+    var q=proj(a.lon,a.lat), r=1.6+Math.min(3.5, Math.sqrt(a.veces||1)*0.45);
+    var c=el("circle",{"class":"punto",cx:q[0],cy:q[1],r:r,fill:a.infra_clase==="hosting"?"#f472d0":(a.infra_clase==="isp"?"#22d3ee":"#94a3b8")});
+    var t=el("title",{}); t.textContent=a.ip+" · "+(a.pais_nombre||"?"); c.appendChild(t);
+    c.addEventListener("click", function(){ ficha(a.ip); }); g.appendChild(c);
   });
-  svg.querySelectorAll(".dot").forEach(function(e){ e.onclick=function(){ selecciona(+e.getAttribute("data-i")); }; });
+}
+function hora(t){
+  var d=new Date(t*1000), h=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)+":"+("0"+d.getSeconds()).slice(-2);
+  var hoy=new Date(); if(d.toDateString()!==hoy.toDateString()) h=("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+" "+h.slice(0,5);
+  return h;
+}
+function fila(ev, nuevo){
+  var tb=$("tAtaques"), tr=document.createElement("tr");
+  if(nuevo) tr.className="nuevo";
+  tr.innerHTML='<td class="hora">'+hora(ev.t)+'</td><td>'+esc(ev.org||"desconocido")+'</td><td>'+esc(ev.pais_nombre||"?")+'</td>'+
+    '<td class="ip">'+esc(ev.ip)+'</td><td>'+esc(NOMBRE_CLASE[ev.clase]?ev.clase:(ev.clase||"escaneo"))+'</td>'+
+    '<td><span class="bola" style="background:'+colorServ(ev.servicio)+'"></span>'+esc(ev.servicio||"?")+'</td><td>'+(ev.puerto==null?"—":ev.puerto)+'</td>';
+  tr.addEventListener("click", function(){ ficha(ev.ip); });
+  tb.insertBefore(tr, tb.firstChild);
+  while(tb.children.length>7) tb.removeChild(tb.lastChild);
+}
+function ficha(ip){
+  var a=(D.ataques||[]).filter(function(x){ return x.ip===ip; })[0];
+  if(!a){ var e=(D.eventos||[]).filter(function(x){ return x.ip===ip; })[0]; if(!e) return; a={ip:ip,pais_nombre:e.pais_nombre,org:e.org,infra_clase:e.infra_clase,veces:1,tipos:[e.tipo],puertos:[e.puerto]}; }
+  var cls=a.infra_clase||"desconocido";
+  var serv=(a.puertos||[]).filter(function(p){ return p!=null; }).map(function(p){ var s=(D.eventos||[]).filter(function(x){ return x.puerto===p; })[0]; return p+(s?" ("+s.servicio+")":""); });
+  $("ficha").innerHTML='<button class="x" id="fichaX" title="Cerrar">×</button><div class="ip">'+esc(a.ip)+'</div>'+
+    '<span class="tag '+cls+'">'+(cls==="isp"?"posible particular (proveedor de casa)":(cls==="hosting"?"empresa / servidor alquilado":"sin clasificar"))+'</span>'+
+    '<div class="fila">País: <b>'+esc(a.pais_nombre||"desconocido")+'</b></div>'+
+    '<div class="fila">Dueño de la IP: <b>'+esc(a.org||"desconocido")+'</b>'+(a.asn?' <span style="color:#5d6f8f">(AS'+esc(a.asn)+')</span>':'')+'</div>'+
+    '<div class="fila">Veces: <b>'+(a.veces||1)+'</b>'+(a.primera?' · desde <b>'+hora(a.primera)+'</b>':'')+(a.ultima?' · última <b>'+hora(a.ultima)+'</b>':'')+'</div>'+
+    (serv.length?'<div class="fila">Puertos: <b>'+esc(serv.join(", "))+'</b></div>':'')+
+    '<div class="fila">Qué hizo: <b>'+esc((a.tipos||[]).join(" · ")||"?")+'</b></div>'+
+    '<div class="nota">Es su origen APARENTE. Kira no le responde ni le ataca: solo lo apunta para que sepas qué pasa.</div>';
+  $("ficha").classList.add("on");
+  $("fichaX").onclick=function(){ $("ficha").classList.remove("on"); };
 }
 
-function lista(){
-  var cont=document.getElementById("lista");
-  if(!DATOS.length){ cont.innerHTML='<div class="vacio">Aún no hay ataques detectados.<br>Kira está vigilando. 🛡️</div>'; return; }
-  cont.innerHTML=DATOS.map(function(d,i){
-    var cls=d.infra_clase||"desconocido";
-    return '<div class="card" data-i="'+i+'"><span class="veces">'+(d.veces||1)+'×</span>'
-      +'<div class="ip">'+d.ip+'</div>'
-      +'<div class="pais">'+(d.pais_nombre||"país desconocido")+(d.org?(" · "+d.org):"")+'</div>'
-      +'<span class="tag '+cls+'">'+(cls==="isp"?"posible particular":(cls==="hosting"?"empresa / hosting":"sin clasificar"))+'</span>'
-      +'<div class="det">'+( (d.tipos||[]).join(" · ") )+'</div></div>';
-  }).join("");
-  cont.querySelectorAll(".card").forEach(function(e){ e.onclick=function(){ selecciona(+e.getAttribute("data-i")); }; });
+// ---------- la reproducción: cada ataque apuntado se ve llegar, uno tras otro ----------
+var cola=[], vistos={}, reloj=null, repitiendo=false;
+function clave(e){ return e.t+"|"+e.ip+"|"+e.puerto+"|"+e.clase; }
+function estado(txt, cls){ var s=$("estado"); s.textContent=txt; s.className=cls||""; }
+function siguiente(){
+  if(!cola.length){
+    if(!(D.eventos||[]).length) return;
+    repitiendo=true; cola=(D.eventos||[]).slice(-60).map(function(e){ return {ev:e,nuevo:false}; });
+    estado(DEMO?"Demostración":"Repitiendo tus últimos ataques reales", DEMO?"demo":"");
+  }
+  var x=cola.shift(); disparo(x.ev); fila(x.ev, x.nuevo);
+}
+function arranca(){ if(reloj) clearInterval(reloj); reloj=setInterval(siguiente, DEMO?260:900); }
+
+function eventosDe(d){
+  // datos de antes de la v2.96: sin ataques uno a uno, se hace uno por IP
+  if((d.eventos||[]).length || !(d.ataques||[]).length) return d.eventos||[];
+  return d.ataques.map(function(a){ var cl=/ssh|fuerza/i.test((a.tipos||[]).join(" "))?"fuerza bruta":(/cebo/i.test((a.tipos||[]).join(" "))?"cebo":"escaneo");
+    var p=(a.puertos&&a.puertos[0]!=null)?a.puertos[0]:(cl==="fuerza bruta"?22:null);
+    return {t:a.ultima||0,ip:a.ip,puerto:p,servicio:p===22?"ssh":(p==null?"desconocido":"puerto "+p),clase:cl,tipo:(a.tipos||[])[0],
+            pais:a.pais,pais_nombre:a.pais_nombre,org:a.org,lat:a.lat,lon:a.lon,infra_clase:a.infra_clase}; })
+    .sort(function(x,y){ return x.t-y.t; });
+}
+function carga(d, primera){
+  d=d||{}; d.eventos=eventosDe(d);
+  if(!d.origenes && d.ataques){ var o={}; d.ataques.forEach(function(a){ var k=a.pais||"??"; o[k]=o[k]||{pais:k,nombre:a.pais_nombre||"desconocido",veces:0}; o[k].veces+=a.veces||1; });
+    d.origenes=Object.keys(o).map(function(k){ return o[k]; }).sort(function(x,y){ return y.veces-x.veces; }); }
+  if(!d.clases){ var c={}; d.eventos.forEach(function(e){ c[e.clase]=(c[e.clase]||0)+1; }); d.clases=Object.keys(c).map(function(k){ return {clase:k,veces:c[k]}; }); }
+  if(!d.servicios){ var s={}; d.eventos.forEach(function(e){ if(e.puerto==null) return; s[e.puerto]=s[e.puerto]||{puerto:e.puerto,servicio:e.servicio,veces:0}; s[e.puerto].veces++; });
+    d.servicios=Object.keys(s).map(function(k){ return s[k]; }).sort(function(x,y){ return y.veces-x.veces; }); }
+  D=d; if(d.objetivo&&d.objetivo.lat!=null) OBJ=d.objetivo;
+  dibujaCasa(); pintaPaneles(); pintaPuntos();
+  var nuevos=d.eventos.filter(function(e){ return !vistos[clave(e)]; });
+  d.eventos.forEach(function(e){ vistos[clave(e)]=true; });
+  $("vacio").classList.toggle("on", !d.eventos.length && !DEMO);
+  if(!d.eventos.length && !DEMO){
+    $("vacio").innerHTML='<b>Aún no ha llegado ningún ataque a tu portátil.</b><br>Es lo normal en casa: el router frena casi todo antes de llegar. '+
+      'Kira sigue vigilando sola y, en cuanto alguien lo intente, saldrá aquí.<br><button id="vacioDemo">Ver cómo se vería (demostración)</button>';
+    $("vacioDemo").onclick=function(){ demo(true); };
+    estado("Vigilando", "vivo"); return;
+  }
+  if(primera){ cola=nuevos.slice(-60).map(function(e){ return {ev:e,nuevo:false}; }); estado(DEMO?"Demostración":"Repitiendo tus últimos ataques reales", DEMO?"demo":""); }
+  else if(nuevos.length){ cola=nuevos.map(function(e){ return {ev:e,nuevo:true}; }).concat(cola); estado("En vivo · "+nuevos.length+" nuevo(s)", "vivo"); }
+  arranca();
 }
 
-function selecciona(i){
-  sel=i;
-  document.querySelectorAll(".card").forEach(function(e){ e.classList.toggle("sel", +e.getAttribute("data-i")===i); });
-  var card=document.querySelector('.card[data-i="'+i+'"]');
-  if(card) card.scrollIntoView({block:"nearest"});
+// ---------- demostración: datos INVENTADOS (IPs de documentación 203.0.113.x / 198.51.100.x), bien marcados ----------
+var DEMO_PAISES=[["CN","China",35.9,104.2,"Proveedor de hosting (demo)","hosting",9],["US","Estados Unidos",39,-98,"Centro de datos (demo)","hosting",8],
+  ["RU","Rusia",61.5,105.3,"Servidores alquilados (demo)","hosting",6],["BR","Brasil",-10.3,-53.2,"ISP doméstico (demo)","isp",4],
+  ["IN","India",21,78,"ISP doméstico (demo)","isp",4],["NL","Países Bajos",52.2,5.3,"Hosting europeo (demo)","hosting",3],
+  ["DE","Alemania",51.2,10.4,"Centro de datos (demo)","hosting",3],["VN","Vietnam",14.1,108.3,"ISP doméstico (demo)","isp",2],
+  ["KR","Corea del Sur",36.5,127.9,"ISP doméstico (demo)","isp",2],["CO","Colombia",4.6,-74.1,"ISP doméstico (demo)","isp",1]];
+var DEMO_PUERTOS=[[22,"ssh","fuerza bruta",10],[23,"telnet","escaneo",6],[2222,"ssh","cebo",3],[80,"http","escaneo",3],[445,"smb","escaneo",2],
+  [3389,"escritorio remoto","escaneo",2],[5900,"vnc","escaneo",1],[3306,"mysql","escaneo",1],[7547,"router (tr-069)","escaneo",1]];
+function azar(lista){ var tot=lista.reduce(function(s,x){ return s+x[x.length-1]; },0), r=Math.random()*tot; for(var i=0;i<lista.length;i++){ r-=lista[i][lista[i].length-1]; if(r<=0) return lista[i]; } return lista[0]; }
+function datosDemo(){
+  var ahora=Date.now()/1000, ev=[], ips={};
+  for(var i=0;i<120;i++){
+    var p=azar(DEMO_PAISES), q=azar(DEMO_PUERTOS), ip=(i%2?"203.0.113.":"198.51.100.")+(1+Math.floor(Math.random()*250));
+    var e={t:Math.floor(ahora-(120-i)*7),ip:ip,puerto:q[0],servicio:q[1],clase:q[2],tipo:q[2],pais:p[0],pais_nombre:p[1],
+      org:p[4],lat:p[2]+(Math.random()-.5)*6,lon:p[3]+(Math.random()-.5)*8,infra_clase:p[5]};
+    ev.push(e);
+    var a=ips[ip]=ips[ip]||{ip:ip,pais:p[0],pais_nombre:p[1],org:p[4],infra_clase:p[5],lat:e.lat,lon:e.lon,veces:0,tipos:[],puertos:[],primera:e.t};
+    a.veces++; a.ultima=e.t; if(a.tipos.indexOf(q[2])<0) a.tipos.push(q[2]); if(a.puertos.indexOf(q[0])<0) a.puertos.push(q[0]);
+  }
+  var lista=Object.keys(ips).map(function(k){ return ips[k]; });
+  return {ataques:lista,total:lista.length,eventos:ev,objetivo:OBJ};
 }
-
-function resumen(){
-  var n=DATOS.length, m=DATOS.filter(function(d){return d.lat!=null;}).length;
-  document.getElementById("resumen").textContent = n ? (n+" IP(s) · "+m+" en el mapa") : "sin ataques";
+var REAL=null;
+function demo(si){
+  DEMO=si; $("btnDemo").textContent=si?"Volver a mis ataques reales":"Ver demostración";
+  vistos={}; cola=[]; $("tAtaques").innerHTML=""; $("ficha").classList.remove("on");
+  if(si){ $("vacio").classList.remove("on"); carga(datosDemo(), true); estado("Demostración · datos inventados", "demo"); }
+  else carga(REAL||{}, true);
 }
+$("btnDemo").onclick=function(){ demo(!DEMO); };
 
-function cargar(datos){ DATOS=(datos&&datos.ataques)||[]; dibujaMundo(); pinta(); lista(); resumen(); }
-
-// ---- datos: de Python (pywebview) o, en prueba, de mentira ----
-var FAKE={ataques:[
-  {ip:"5.188.0.5",pais_nombre:"Rusia",org:"SELECTEL hosting",infra_clase:"hosting",lat:61.5,lon:105.3,veces:42,tipos:["Intento de entrar por SSH (fuerza bruta)"]},
-  {ip:"1.0.0.1",pais_nombre:"Estados Unidos",org:"CLOUDFLARENET",infra_clase:"hosting",lat:39.0,lon:-98.0,veces:12,tipos:["Conexión bloqueada / escaneo de puertos"]},
-  {ip:"80.58.0.1",pais_nombre:"España",org:"Telefonica broadband",infra_clase:"isp",lat:40.2,lon:-3.7,veces:3,tipos:["Intento de entrar por SSH (fuerza bruta)"]}
-]};
-
-// v2.90: dentro del escritorio de KiraOS (en un marco), los datos se piden al escritorio
-function puente(metodo){
+// ---------- datos: de Python (pywebview), del escritorio (marco) o, en un navegador, de ejemplo ----------
+function puente(metodo, espera){
   return new Promise(function(res, rej){
     if(window.pywebview && window.pywebview.api && window.pywebview.api[metodo]){
       Promise.resolve(window.pywebview.api[metodo]()).then(res, rej); return;
@@ -151,19 +376,27 @@ function puente(metodo){
         window.removeEventListener("message", oye); if(d.ok) res(d.valor); else rej(); };
       window.addEventListener("message", oye);
       window.parent.postMessage({kira_pide: true, id: id, metodo: metodo}, "*");
-      setTimeout(function(){ rej(); }, 5000); return;
+      setTimeout(function(){ rej(); }, espera||8000); return;
     }
     rej();
   });
 }
-var pedido=false;
-function pide(){
-  if(pedido) return; pedido=true;
-  var dentro = (window.pywebview && window.pywebview.api) || (window.parent && window.parent !== window);
-  if(dentro){ puente("mapa_ataques").then(cargar).catch(function(){ cargar({ataques:[]}); }); }
-  else { cargar(FAKE); }
+function dentro(){ return (window.pywebview && window.pywebview.api) || (window.parent && window.parent !== window); }
+function pideDatos(primera){
+  if(DEMO && !primera) return;
+  if(!dentro()){ REAL=window.KIRA_EJEMPLO||{ataques:[]}; if(!DEMO) carga(REAL, primera); return; }
+  puente("mapa_ataques").then(function(d){ REAL=d; if(!DEMO) carga(d, primera); }).catch(function(){ if(primera){ REAL={ataques:[]}; carga(REAL, true); } });
 }
-if(window.pywebview && window.pywebview.api){ pide(); }
-else { window.addEventListener("pywebviewready", pide); setTimeout(pide, 400); }
+var empezado=false;
+function empieza(){
+  if(empezado) return; empezado=true;
+  dibujaMundo(null); dibujaCasa();
+  var mundo = dentro() ? puente("mapa_mundo", 40000) : Promise.resolve(window.KIRA_MUNDO_EJEMPLO ? {ok:true,mundo:window.KIRA_MUNDO_EJEMPLO} : {ok:false});
+  mundo.then(function(r){ if(r&&r.ok&&r.mundo){ dibujaMundo(r.mundo); dibujaCasa(); } }).catch(function(){});
+  pideDatos(true);
+  setInterval(function(){ pideDatos(false); }, 60000);
+}
+if(window.pywebview && window.pywebview.api){ empieza(); }
+else { window.addEventListener("pywebviewready", empieza); setTimeout(empieza, 400); }
 </script>
 </body></html>
