@@ -117,7 +117,14 @@ class R:
 net = ik.Internet(T, abrir=lambda req, timeout=20: R(HTML, BASE))
 pg = net.leer(BASE)
 ok(len(pg.get("enlaces", [])) >= 5, "al leer una página, Kira se queda con sus enlaces")
-ok("estudia sus enlaces" in ik.Internet.texto_pagina(pg), "y te dice que puede estudiarlos")
+ok("estudia sus enlaces" in ik.Internet.texto_pagina(pg) and "TODOS" in ik.Internet.texto_pagina(pg),
+   "y te dice que puede estudiarlos todos")
+ok(ik.interpretar("haz un estudio completo de esta página https://a.es/x") == {"accion": "estudiar_enlaces",
+                                                                              "url": "https://a.es/x"},
+   "«haz un estudio completo de esta página URL»")
+ok(ik.interpretar("lee todos sus enlaces")["accion"] == "estudiar_enlaces", "«lee todos sus enlaces»")
+ok(ik.interpretar("sigue estudiando la página") == {"accion": "estudiar_enlaces", "url": None, "seguir": True},
+   "«sigue estudiando la página»")
 
 # ---------- núcleo: sigue los enlaces ----------
 import kira_god  # noqa: E402
@@ -134,6 +141,9 @@ leidas = []
 
 class Falso:
     pagina = None
+
+    def es_orden(self, texto):
+        return ik.interpretar(texto) is not None
 
     def buscar(self, consulta, tipo="web", n=8):
         return [{"url": BASE, "fuente": "ejemplo.es", "titulo": "Curso"}]
@@ -155,23 +165,55 @@ ok(r.startswith("[OK]") and "3 enlace(s) de dentro" in r, "«estudia en internet
 ok(leidas[0] == BASE and len(leidas) == 4 and not any("cocina" in u for u in leidas),
    "lee la página y solo los enlaces del tema, con tope")
 
+# v3.03: ESTUDIO COMPLETO: la página y TODOS sus enlaces (no solo los del tema), sin repetir, y sigue donde lo dejó
+import internet_kira as ik2  # noqa: E402
+todos = [e["url"] for e in ik2.elegir_enlaces(pag, "python", n=500, todos=True)]
+ok(len(todos) == len(enl) and todos == [e["url"] for e in enl], "con todos=True: TODOS los enlaces, en el orden de la página")
 leidas.clear()
-r = core.estudiar_pagina(BASE, maximo=10)
-ok(r.startswith("[OK]") and "página(s) que enlaza" in r, "«estudia esta página y sus enlaces»: " + r.splitlines()[0])
-ok("https://ejemplo.es/curso/python/capitulo-1b.html" in leidas, "llega a un segundo salto (el enlace del capítulo 1)")
+barra = []
+r = core.estudiar_pagina(BASE, al_avance=lambda fr, t: barra.append((fr, t)))
+ok(r.startswith("[OK]") and "Estudio completo" in r, "«estudia esta página y sus enlaces»: " + r[:90])
+ok(all(u in leidas for u in todos), "lee TODOS los enlaces de la página (también los que no son del tema)")
+ok("https://ejemplo.es/curso/python/capitulo-1b.html" in leidas, "y del capítulo 1, lo que sigue el tema (2.º salto)")
 ok(len(set(leidas)) == len(leidas), "nunca lee dos veces la misma página")
+ok(barra and barra[-1][0] == 1.0 and any("de " in t and "Leyendo enlace" in t for _f, t in barra),
+   "la barra avanza: «Leyendo enlace N de M»")
+# parar a mitad y seguir donde lo dejó (apuntado en DISCO)
+import json as _js  # noqa: E402
+os.remove(core._ruta_estudio_web())
+leidas.clear()
+cuenta = {"n": 0}
+
+
+def cancelar_a_las_3():
+    cuenta["n"] += 1
+    return cuenta["n"] > 3
+
+
+core.cancelado = cancelar_a_las_3
+r = core.estudiar_pagina(BASE)
+ok("Me quedan" in r and "sigue estudiando la página" in r, "si le dices «para», lo deja apuntado: " + r[-90:])
+primera = list(leidas)
+ok(os.path.exists(core._ruta_estudio_web()) and _js.load(open(core._ruta_estudio_web()))[BASE.rstrip("/")]["pendientes"],
+   "lo que le queda está en disco")
+del core.cancelado
+leidas.clear()
+core.internet.pagina = None
+r = core.procesar_orden("sigue estudiando la página")
+ok("Estudio completo" in r and not (set(leidas) & set(primera[1:])), "«sigue estudiando la página» continúa SIN repetir")
+ok(set(primera[1:]) | set(leidas) >= set(todos), "y entre las dos veces, las ha leído todas")
+core.internet.pagina = None
+ok("No tengo ningún estudio a medias" in core.estudiar_pagina(None, seguir=True), "si no queda nada a medias, lo dice")
 leidas.clear()
 r = core.estudiar_pagina(BASE, maximo=2)
-ok(len(leidas) == 3 and "tope" in r, "respeta el tope de páginas y lo dice")
-core.internet.pagina = PAGINAS[BASE]
-leidas.clear()
-ok(core.estudiar_pagina(None, maximo=1).startswith("[OK]"), "«estudia sus enlaces» usa la última página leída")
-core.cancelado = lambda: True
-leidas.clear()
-core.estudiar_pagina(BASE, maximo=10)
-ok(leidas == [BASE], "si le dices «para», deja de seguir enlaces")
-del core.cancelado
+ok(len(leidas) == 3 and "Me quedan" in r, "tope por vez: lee hasta el tope y deja el resto apuntado")
 ok("estudiar_enlaces" in open(os.path.join(RAIZ, "kira_god.py"), encoding="utf-8").read(), "la orden está enganchada")
+
+itf = open(os.path.join(RAIZ, "interfaz_kira.py"), encoding="utf-8").read()
+ok(itf.count("estudiar_web_por_voz(o_web)") == 2 and "al_avance=lambda fr, txt: avance(txt, fr)" in itf,
+   "la app lo hace con BARRA (en los dos modos)")
+nuc = open(os.path.join(RAIZ, "kira_portatil", "nucleo_portatil.py"), encoding="utf-8").read()
+ok("core.estudiar_pagina(o_web.get(\"url\")" in nuc, "KiraOS también, con su barra")
 
 # ---------- KiraOS: el lector del Buscador enseña los enlaces ----------
 import escritorio_kira as esk  # noqa: E402
@@ -227,7 +269,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
         d = json.loads(out)
         ok(not d["errs"], "Chromium: sin errores " + str(d["errs"]))
         ok(len(d["enl"]) == 3 and d["tema"] == 2, "Chromium: el lector enseña los enlaces de la página (los del tema marcados)")
-        ok(d["boton"], "Chromium: botón «Estúdiala con sus enlaces»")
+        ok(d["boton"], "Chromium: botón «Estúdiala entera (todos sus enlaces)»")
         ok("Atrás" in d["atras"] and "Resultados" in d["vuelta"] and d["hay"] == 3,
            "Chromium: pulsar un enlace lo abre y «‹ Atrás» vuelve a la página de antes")
         print("captura:", os.path.join(T, "enlaces.png"))

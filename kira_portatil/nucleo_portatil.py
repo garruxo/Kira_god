@@ -190,6 +190,14 @@ def ejecutar(core, orden, paso):
     en_maquina = bool(re.search(_Y_PRUEBALO, o, flags=re.I))
     if en_maquina:
         o = re.sub(_Y_PRUEBALO, "", o, flags=re.I).strip()
+    try:
+        import internet_kira as ik_w
+        o_web = ik_w.interpretar(o)
+    except Exception:
+        o_web = None
+    if o_web is not None and o_web.get("accion") == "estudiar_enlaces":     # v3.03: estudio completo, con barra
+        return {"texto": core.estudiar_pagina(o_web.get("url"), seguir=bool(o_web.get("seguir")),
+                                              al_avance=lambda fr, t: paso(fr, t))}
     tema = None
     try:
         tema = core.es_estudia_general(o)

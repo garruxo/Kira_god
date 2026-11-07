@@ -1765,34 +1765,128 @@ class KiraGodCore:
                 f"{extra}, y he guardado {guardadas} ficha(s) nuevas en mi baúl" +
                 (", y Claude las ha repasado" if repaso else "") + ". Pregúntame cuando quieras.")
 
-    def estudiar_pagina(self, url=None, al_paso=None, maximo=8, profundidad=2):
-        """v3.01: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras leer una): la estudia y sigue
-        sus enlaces del tema, hasta 2 saltos y `maximo` páginas. Para webs con varios capítulos o lecciones."""
+    def _ruta_estudio_web(self):
+        return os.path.join(self.dir, "estudio_web.json")
+
+    def _estudio_web(self, guardar=None):
+        """Lo que lleva estudiado de cada web (para seguir donde lo dejó). En DISCO: si se para o se cierra, sigue."""
+        ruta = self._ruta_estudio_web()
+        if guardar is not None:
+            try:
+                tmp = ruta + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(guardar, f, ensure_ascii=False)
+                os.replace(tmp, ruta)
+                os.chmod(ruta, 0o600)
+            except OSError:
+                pass
+            return guardar
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def estudiar_pagina(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False):
+        """v3.03 ESTUDIO COMPLETO de una web: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras
+        leer una). Lee la página y TODOS los enlaces de su contenido (no los menús, ni entrar/registrarse/comprar/redes,
+        ni descargas), en el orden de la página; y de cada uno, los que siguen el tema o el curso (2.º salto).
+        Lo lleva apuntado en disco: si le dices «para» o se cierra, «sigue estudiando la página» continúa donde lo dejó.
+        Tope de seguridad: `maximo` páginas por vez. `al_avance(fraccion, texto)` mueve la barra."""
         import internet_kira as ik_
         net = self.internet
-        try:
-            pag = net.leer(url) if url else getattr(net, "pagina", None)
-        except ik_.InternetError as e:
-            return f"[x] {e}"
-        if not pag:
-            return "[i] Dime qué página: «estudia esta página y sus enlaces: https://…» (o lee una antes)."
-        tema = pag.get("titulo") or ik_.dominio(pag.get("url", ""))
+
+        def paso(fr, txt):
+            for cb, args in ((al_avance, (fr, txt)), (al_paso, (txt,))):
+                if cb:
+                    try:
+                        cb(*args)
+                    except Exception:
+                        pass
+        reg = self._estudio_web()
+        clave, rec, pag = None, None, None
+        if url:
+            clave = str(url).split("#", 1)[0].rstrip("/")
+            rec = reg.get(clave)
+        elif seguir or not getattr(net, "pagina", None):      # «sigue estudiando la página»: la última sin acabar
+            sin_acabar = [(k, v) for k, v in reg.items() if v.get("pendientes")]
+            if sin_acabar:
+                clave, rec = max(sin_acabar, key=lambda kv: kv[1].get("cuando", 0))
+        if clave is None:
+            pag = getattr(net, "pagina", None)
+            if not pag:
+                return ("[i] Dime qué página: «estudia esta página y sus enlaces: https://…» (o lee una antes). "
+                        "No tengo ningún estudio a medias.")
+            clave = str(pag.get("url", "")).split("#", 1)[0].rstrip("/")
+            rec = reg.get(clave)
+        if rec and not rec.get("pendientes") and not seguir:
+            rec = None                                         # ya acabado: lo vuelvo a estudiar entero (por si cambió)
+        nueva = rec is None
+        if nueva:
+            if pag is None:
+                try:
+                    pag = net.leer(url or clave)
+                except ik_.InternetError as e:
+                    return f"[x] {e}"
+            tema = pag.get("titulo") or ik_.dominio(pag.get("url", ""))
+            paso(0.02, f"Estudiando «{tema[:50]}»…")
+            ok, _ = self.guardar_pagina(pag, tema)
+            todos = ik_.elegir_enlaces(pag, tema, n=ik_.MAX_ENLACES, todos=True)
+            rec = {"tema": tema, "url": pag.get("url", clave), "cuando": int(time.time()), "hechas": [],
+                   "fallidas": [], "guardadas": int(bool(ok)), "total": len(todos),
+                   "pendientes": [{"url": e["url"], "texto": e.get("texto", ""), "nivel": 1} for e in todos]}
+            reg[clave] = rec
+            self._estudio_web(reg)
+        tema = rec.get("tema") or "esta web"
         self._apuntar_tema_mio(tema)
-        if al_paso:
-            al_paso(f"Estudiando «{tema[:50]}»…")
-        ok, _ = self.guardar_pagina(pag, tema)
-        if not pag.get("enlaces"):
-            return (f"[OK] He estudiado «{tema}»" + (" y lo he guardado en mi baúl" if ok else "") +
-                    ". No tiene enlaces del tema que seguir.")
-        hijas, g = self.seguir_enlaces(pag, tema, por_pagina=4, maximo=maximo, profundidad=profundidad, al_paso=al_paso)
-        if not hijas:
-            return (f"[OK] He estudiado «{tema}»" + (" y lo he guardado" if ok else "") + ". Tiene enlaces, pero "
-                    "ninguno trata del tema (menús, registro, redes…), así que no los he seguido.")
-        lista = "\n".join(f"- {t[:70]}" for t, _u in hijas)
-        return (f"[OK] He estudiado «{tema}» y {len(hijas)} página(s) que enlaza sobre lo mismo; he guardado "
-                f"{g + int(bool(ok))} ficha(s) nuevas en mi baúl:\n{lista}" +
-                ("\n(He parado al llegar al tope de páginas; dime «estudia sus enlaces» otra vez para seguir.)"
-                 if len(hijas) >= maximo else ""))
+        if not rec["pendientes"] and nueva:
+            return (f"[OK] He estudiado «{tema}»" + (" y lo he guardado en mi baúl" if rec["guardadas"] else "") +
+                    ". No tiene enlaces que seguir (o solo menús, cuentas o redes).")
+        vistos = {u.rstrip("/") for u in rec["hechas"] + rec["fallidas"]} | {clave}
+        vistos |= {e["url"].rstrip("/") for e in rec["pendientes"]}
+        leidas_ahora, parada = 0, False
+        while rec["pendientes"] and leidas_ahora < maximo:
+            if self.cancelado():
+                parada = True
+                break
+            e = rec["pendientes"].pop(0)
+            hechas = len(rec["hechas"]) + len(rec["fallidas"])
+            total = hechas + len(rec["pendientes"]) + 1
+            paso(min(0.98, 0.05 + 0.93 * hechas / max(1, total)),
+                 f"Leyendo enlace {hechas + 1} de {total}: «{(e.get('texto') or ik_.dominio(e['url']))[:40]}»…")
+            try:
+                hija = net.leer(e["url"])
+            except ik_.InternetError:
+                rec["fallidas"].append(e["url"])
+                self._estudio_web(reg)
+                continue
+            ok, _ = self.guardar_pagina(hija, tema)
+            rec["hechas"].append(e["url"])
+            rec["guardadas"] += int(bool(ok))
+            leidas_ahora += 1
+            if e.get("nivel", 1) < profundidad:                 # 2.º salto: solo lo que sigue el tema o el curso
+                for n2 in ik_.elegir_enlaces(hija, tema, n=4, ya=vistos):
+                    vistos.add(n2["url"].rstrip("/"))
+                    rec["pendientes"].append({"url": n2["url"], "texto": n2.get("texto", ""),
+                                              "nivel": e.get("nivel", 1) + 1})
+            rec["cuando"] = int(time.time())
+            self._estudio_web(reg)                              # en disco tras CADA página
+        quedan = len(rec["pendientes"])
+        if not quedan:
+            paso(1.0, "Estudio completo.")
+        texto = (f"[OK] Estudio de «{tema}»: he leído {len(rec['hechas'])} página(s) de sus enlaces"
+                 + (f" ({leidas_ahora} esta vez)" if leidas_ahora != len(rec["hechas"]) else "")
+                 + f" y tengo {rec['guardadas']} ficha(s) nuevas en mi baúl.")
+        if rec["fallidas"]:
+            texto += f" {len(rec['fallidas'])} no se pudieron abrir (piden cuenta, no existen o no son texto)."
+        if quedan:
+            texto += (f" Me quedan {quedan} por leer" + (" (me has dicho que pare)" if parada else
+                                                        " (paro aquí por esta vez)")
+                      + ": dime «sigue estudiando la página» y continúo donde lo dejé.")
+        else:
+            texto += " ¡Estudio completo! Ya lo pienso cuando no esté haciendo otra cosa."
+        return texto
 
     def estudiar_ciberseguridad(self, al_paso=None, con_internet=False):
         """El botón «ESTUDIAR» de la Sala de Ciberseguridad y «estudia ciberseguridad».
@@ -3070,7 +3164,7 @@ class KiraGodCore:
                 self._apuntar_tema_mio(p["consulta"])
                 return self.estudiar_en_internet(p["consulta"])
             if p["accion"] == "estudiar_enlaces":
-                return self.estudiar_pagina(p.get("url"))
+                return self.estudiar_pagina(p.get("url"), seguir=bool(p.get("seguir")))
             if p["accion"] == "navegador":
                 url = net.resultado(p["n"])["url"]
                 movil = getattr(self, "movil", None)

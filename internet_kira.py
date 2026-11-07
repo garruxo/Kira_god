@@ -76,6 +76,12 @@ _LEER_URL = re.compile(r"^(?:l[eé]e(?:me)?|abre|resume(?:me)?|guarda)\s+(?:esta
                        r"(?P<url>https?://\S+)$", re.I)
 
 
+_SIGUE_WEB = re.compile(r"^(?:sigue|contin[uú]a)\s+(?:estudiando|leyendo|con)\s+(?:la\s+(?:p[aá]gina|web)|sus\s+enlaces|"
+                       r"los\s+enlaces|el\s+estudio(?:\s+de\s+la\s+(?:p[aá]gina|web))?)$", re.I)
+_ESTUDIO_COMPLETO = re.compile(
+    r"^(?:haz(?:me)?\s+)?(?:un\s+)?estudio\s+completo\s+(?:de\s+)?(?:(?:esta|la)\s+(?:p[aá]gina|web)\s*)?:?\s*"
+    r"(?P<url>https?://\S+)?$|^l[eé]e(?:te)?\s+todos\s+(?:sus|los)\s+enlaces(?:\s+de\s+(?:esta|la)\s+(?:p[aá]gina|web))?"
+    r"\s*:?\s*(?P<url2>https?://\S+)?$", re.I)
 _ESTUDIA_ENLACES = re.compile(
     r"^(?:estudia|aprende|lee)\s+(?:(?:esta|la)\s+(?:p[aá]gina|web)\s+)?(?:y\s+)?(?:(?:todos\s+)?(?:sus|los)\s+enlaces|"
     r"(?:a\s+)?fondo\s+(?:esta|la)\s+(?:p[aá]gina|web)|(?:esta|la)\s+(?:p[aá]gina|web)\s+(?:entera|completa|a\s+fondo))"
@@ -112,6 +118,11 @@ def interpretar(texto):
     t = " ".join(str(texto or "").split()).strip(" .!¡?¿")
     if not t:
         return None
+    if _SIGUE_WEB.match(t):
+        return {"accion": "estudiar_enlaces", "url": None, "seguir": True}
+    m = _ESTUDIO_COMPLETO.match(t)
+    if m:
+        return {"accion": "estudiar_enlaces", "url": m.group("url") or m.group("url2")}
     m = _ESTUDIA_ENLACES.match(t)
     if m:
         return {"accion": "estudiar_enlaces", "url": m.group("url")}
@@ -333,7 +344,7 @@ def enlaces_de(crudos, base):
     return salida
 
 
-def elegir_enlaces(pag, tema="", n=3, ya=()):
+def elegir_enlaces(pag, tema="", n=3, ya=(), todos=False):
     """De los enlaces de la página, los que merece la pena SEGUIR para estudiar `tema`: los que hablan del tema (en su
     texto o su dirección), los de la misma web y los que parecen la continuación de un curso (capítulo, lección,
     siguiente…). Lo que no tiene nada que ver no se sigue. Devuelve [{'url','texto','puntos'}] de mejor a peor."""
@@ -350,12 +361,14 @@ def elegir_enlaces(pag, tema="", n=3, ya=()):
         comun = len(claves & palabras)
         estudio = bool(_ESTUDIO.search(txt)) or bool(_ESTUDIO.search(urllib.parse.urlsplit(e["url"]).path))
         misma = dominio(e["url"]) == dom
-        if not comun and not (misma and estudio):
-            continue                                        # no habla del tema ni sigue el curso: no se sigue
-        if len(txt) < 3 and not comun:
-            continue
+        if not todos:                                       # v3.03: con todos=True, TODOS los de la página
+            if not comun and not (misma and estudio):
+                continue                                    # no habla del tema ni sigue el curso: no se sigue
+            if len(txt) < 3 and not comun:
+                continue
         cand.append(dict(e, puntos=3 * comun + 2 * estudio + 1 * misma))
-    cand.sort(key=lambda e: -e["puntos"])
+    if not todos:                                           # todos: en el orden de la página (el de un curso)
+        cand.sort(key=lambda e: -e["puntos"])
     return cand[:max(0, int(n))]
 
 
@@ -728,8 +741,8 @@ class Internet:
         return (f"{pag['titulo']}\n{pag['url']}\n\n{corte}" + ("…\n\n(sigue: «resume» para el resumen)" if len(t) > maximo
                                                                else "") +
                 (f"\n\nTiene {len(pag['codigos'])} bloque(s) de código: «abre en el editor»." if pag["codigos"] else "") +
-                (f"\n\nTiene {len(pag['enlaces'])} enlace(s) a otras páginas: «estudia sus enlaces» y sigo los que "
-                 "tratan del tema." if pag.get("enlaces") else ""))
+                (f"\n\nTiene {len(pag['enlaces'])} enlace(s) a otras páginas: «estudia sus enlaces» y los leo TODOS "
+                 "(estudio completo)." if pag.get("enlaces") else ""))
 
     @staticmethod
     def codigo_de(pag):

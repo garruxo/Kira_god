@@ -616,6 +616,10 @@ def construir_interfaz(core, consola=None, modo=None):
         if cod_net is not None:                         # «aprende código de…» / «aprende a programar…»: lo busca y guarda
             codigo_internet_por_voz(cod_net)
             return
+        o_web = net_.interpretar(orden)
+        if o_web is not None and o_web.get("accion") == "estudiar_enlaces":   # v3.03: estudio completo de una web
+            estudiar_web_por_voz(o_web)
+            return
         tema_est = None
         try:
             tema_est = core.es_estudia_general(orden)   # «estudia X» genérico: con barra, webs + cursos de YouTube
@@ -832,6 +836,27 @@ def construir_interfaz(core, consola=None, modo=None):
             decir(r if isinstance(r, str) else "He terminado de estudiar.")
         en_hilo(trabajo, hecho)
 
+    def estudiar_web_por_voz(o):
+        """v3.03: ESTUDIO COMPLETO de una web (la página y TODOS sus enlaces), con barra. «para» lo deja apuntado y
+        «sigue estudiando la página» continúa donde lo dejó."""
+        url, seguir = o.get("url"), bool(o.get("seguir"))
+        tarea_empieza("estudio", "estudio completo de una web", lambda o_=o: estudiar_web_por_voz(o_), {"web": url})
+        oid = apuntar(("sigue estudiando la página" if seguir else f"estudio completo de {url or 'la página'}"), "movil")
+        decir("Sigo con el estudio de la web donde lo dejé." if seguir else
+              "Me pongo con el estudio completo: leo la página y TODOS sus enlaces, uno a uno, y lo guardo en mi baúl. "
+              "Verás la barra; si me dices «para», lo dejo apuntado y luego sigo donde iba.")
+
+        def trabajo():
+            return core.estudiar_pagina(url, seguir=seguir, al_avance=lambda fr, txt: avance(txt, fr))
+
+        def hecho(r):
+            t = tarea_fin(isinstance(r, str) and not r.startswith("[x]"))
+            apuntar_fin(oid, r, not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
+            decir(r if isinstance(r, str) else f"[x] {r}")
+        en_hilo(trabajo, hecho)
+
     def mando_por_voz(orden):
         """v2.84 MÓVIL COMO MANDO: le paso la orden a mi Kira completa del portátil; aquí solo enseño la barra y la
         respuesta (y, si es un programa, te lo dejo en el editor). «para» la corta también allí."""
@@ -1010,6 +1035,14 @@ def construir_interfaz(core, consola=None, modo=None):
                 decir("No veo a KiraOS en la WiFi de casa: quizá su WiFi está caída. Ella intenta volver a conectarse "
                       "sola cada 2 minutos; si no, en el portátil toca «WiFi» en la ventana de Kira (o «arregla la wifi»).",
                       hablar=False)
+            return
+        try:
+            import internet_kira as net2_
+            o_web = net2_.interpretar(orden)
+        except Exception:
+            o_web = None
+        if o_web is not None and o_web.get("accion") == "estudiar_enlaces":   # v3.03: estudio completo de una web
+            estudiar_web_por_voz(o_web)
             return
         tema_est = None
         try:

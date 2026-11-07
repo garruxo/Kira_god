@@ -513,7 +513,7 @@ function htmlEnlaces(p){
   var tema=l.filter(function(e){return e.tema;}), otros=l.filter(function(e){return !e.tema;});
   function fila(e){ return '<button class="enl'+(e.tema?' tema':'')+'" data-u="'+esc(e.url)+'">'+esc(e.texto)+'</button>'; }
   return '<div class="enlaces"><div class="cab">Enlaces de esta página'+(p.total_enlaces?' ('+p.total_enlaces+')':'')+'</div>'+
-    (tema.length?'<div class="sub">Del mismo tema — los que sigo al estudiar</div>'+tema.map(fila).join(""):'')+
+    (tema.length?'<div class="sub">Del mismo tema</div>'+tema.map(fila).join(""):'')+
     (otros.length?'<div class="sub">Otros</div>'+otros.map(fila).join(""):'')+'</div>';
 }
 function leerUrl(url, dom){
@@ -525,7 +525,7 @@ function leerUrl(url, dom){
     else {
       b.innerHTML='<div class="botones">'+atras+'<button class="b prin" id="busResume">Resúmelo</button>'+
         '<button class="b" id="busGuarda">Guárdalo en mi baúl</button>'+
-        ((p.enlaces||[]).some(function(e){return e.tema;})?'<button class="b" id="busEnlaces">Estúdiala con sus enlaces</button>':'')+'</div>'+
+        ((p.enlaces||[]).length?'<button class="b" id="busEnlaces">Estúdiala entera (todos sus enlaces)</button>':'')+'</div>'+
         '<div class="lectura"><h3>'+esc(p.titulo)+'</h3><div class="dom">'+esc(p.url)+' · '+esc(p.via)+
         (p.codigos?' · '+p.codigos+' bloque(s) de código':'')+'</div><div class="texto">'+esc(p.texto)+'</div></div>'+htmlEnlaces(p);
       $("busResume").onclick=function(){ enviar("resume "+p.url); };
