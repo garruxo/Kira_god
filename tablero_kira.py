@@ -115,7 +115,10 @@ def tarjeta_movil(d):
         eqs.append(f"batería {eq['bateria']} %" + (" (cargando)" if eq.get("cargando") else ""))
     if eqs:
         lineas.append("Móvil: " + " · ".join(eqs) + ".")
-    botones = [("Deja de pensar" if act.get("pensando") else "Ponte a pensar", "pensar")]
+    lineas.append("Estudio y pienso: " + ("SOLO lo que tú me mandas." if act.get("solo_mio") else
+                                          "lo tuyo primero y, si no hay nada, lo que yo quiera."))
+    botones = [("Deja de pensar" if act.get("pensando") else "Ponte a pensar", "pensar"),
+               ("Pensar también libre" if act.get("solo_mio") else "Solo lo que yo mande", "solo_mio")]
     return {"id": "movil", "titulo": "KIRA APP (este móvil)", "texto": "\n".join(lineas), "botones": botones}
 
 
@@ -152,8 +155,10 @@ def tarjeta_kiraos(d):
     if eqs:
         lineas.append("Portátil: " + " · ".join(eqs) + ".")
     if h.get("via") == "fuera":                       # v3.00
-        lineas.append("Conectada por Tailscale (fuera de casa): me sincronizo y veo lo que hace; el trabajo que me "
-                      "pidas se lo doy al volver a casa.")
+        lineas.append("Conectada por Tailscale (fuera de casa): me sincronizo, veo lo que hace y le paso lo "
+                      "tranquilo (estudiar, investigar, pensar, programar); lo que toca el portátil o tu casa, al volver.")
+    if act.get("solo_mio"):
+        lineas.append("Estudia y piensa SOLO lo que tú le mandas.")
     botones = [("Parar lo que hace", "parar_kiraos")] if h.get("ocupada") else []
     botones.append(("Seguir", "seguir_kiraos") if h.get("pausada") else ("Pausar", "pausar_kiraos"))
     return {"id": "kiraos", "titulo": "KIRAOS (el portátil)", "texto": "\n".join(lineas), "botones": botones}

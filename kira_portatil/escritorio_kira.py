@@ -481,7 +481,9 @@ class EscritorioMixin:
                 "botones": [{"texto": "Cerebro rápido", "accion": "hacer:rapido"},
                             {"texto": "Cerebro grande", "accion": "hacer:grande"},
                             {"texto": "Con voz", "accion": "hacer:voz_si"},
-                            {"texto": "Sin voz", "accion": "hacer:voz_no"}]}
+                            {"texto": "Sin voz", "accion": "hacer:voz_no"},
+                            {"texto": "Estudia solo lo mío", "accion": "decir:estudia solo lo que yo te mande"},
+                            {"texto": "Piensa también libre", "accion": "decir:piensa libre"}]}
 
     # ---------- apagar / reiniciar ----------
     # v2.98: apagar/reiniciar prueban varias formas, por orden, hasta que una funcione (antes solo `systemctl` y sin

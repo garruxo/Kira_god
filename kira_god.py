@@ -1643,6 +1643,7 @@ class KiraGodCore:
                     pass
 
         self._estudiando = True
+        self._apuntar_tema_mio(tema)                       # v3.02: lo que TÚ le mandas estudiar
         partes, titulos, repaso = [], [], False
         try:
             paso(0.1, f"Buscando «{tema}» en webs oficiales, tutoriales y cursos gratis…")
@@ -1776,6 +1777,7 @@ class KiraGodCore:
         if not pag:
             return "[i] Dime qué página: «estudia esta página y sus enlaces: https://…» (o lee una antes)."
         tema = pag.get("titulo") or ik_.dominio(pag.get("url", ""))
+        self._apuntar_tema_mio(tema)
         if al_paso:
             al_paso(f"Estudiando «{tema[:50]}»…")
         ok, _ = self.guardar_pagina(pag, tema)
@@ -1977,11 +1979,82 @@ class KiraGodCore:
                 pass
         return pk.probar_programa(codigo)
 
+    # ---------- v3.02: «estudia solo lo que yo te mande» ----------
+    def solo_lo_mio(self):
+        try:
+            import solo_mio_kira as sm_
+            return sm_.encendido(self.dir)
+        except Exception:
+            return False
+
+    def _temas_mios(self):
+        """Lo TUYO para pensar: el tema en que la centraste, tus encargos y lo que le mandaste estudiar."""
+        import solo_mio_kira as sm_
+        out, vistos = [], set()
+
+        def poner(t):
+            t = " ".join(str(t or "").split())[:80]
+            if len(t) >= 2 and t.lower() not in vistos:
+                vistos.add(t.lower())
+                out.append(t)
+        try:
+            foco = self._foco_cargar()
+            if foco and foco.get("tema"):
+                poner(foco["tema"])
+        except Exception:
+            pass
+        try:
+            import investigar_kira as iv_
+            for p_ in reversed(iv_.listar(self.dir)):
+                poner(p_.get("texto"))
+        except Exception:
+            pass
+        for t in sm_.temas(self.dir):
+            poner(t)
+        return out
+
+    def _apuntar_tema_mio(self, tema):
+        try:
+            import solo_mio_kira as sm_
+            sm_.apuntar_tema(self.dir, tema)
+        except Exception:
+            pass
+
+    def _orden_solo_mio(self, que):
+        """«estudia solo lo que yo te mande» / «piensa libre». En el móvil, además se lo digo a KiraOS si la veo."""
+        import solo_mio_kira as sm_
+        on = sm_.encender(self.dir, que == "on")
+        texto = sm_.texto_estado(self.dir, on)
+        if not getattr(self, "es_kiraos", False):
+            c = self._casa()
+            try:
+                if c is not None and c.nucleo_disponible(fuera=True):
+                    import threading
+                    orden = "estudia solo lo que yo te mande" if on else "piensa libre"
+                    threading.Thread(target=lambda: c.orden_empezar(orden), daemon=True).start()
+                    texto += " Se lo he dicho también a KiraOS."
+                else:
+                    texto += " A KiraOS se lo digo en cuanto la vea (díselo otra vez entonces si quieres asegurarte)."
+            except Exception:
+                pass
+        return texto
+
+    def kiraos_fuera(self):
+        """v3.02: ¿veo a KiraOS FUERA de casa (por Tailscale)? (para pasarle las órdenes tranquilas)."""
+        c = self._casa()
+        try:
+            return bool(c is not None and not c.nucleo_disponible() and c.nucleo_disponible(fuera=True)
+                        and getattr(c, "via", "") == "fuera")
+        except Exception:
+            return False
+
     def _semillas_pensar(self, k=15):
         """Las SEMILLAS sobre las que piensa: PRIMERO lo que ha ESTUDIADO (los temas de su baúl, de lo más reciente),
         y detrás los temas de serie, para que no se quede corta. Así se cuestiona lo que de verdad aprende, no solo
         una lista fija. (Solo el NOMBRE del tema va de semilla; luego estudia/responde como siempre.)"""
         import pensador_kira as pn
+        if self.solo_lo_mio():                        # v3.02: solo lo que el dueño le mandó (puede quedar vacío)
+            return self._temas_mios()
         rec = getattr(self, "recuerdos", None)
         temas, vistos = [], set()
         if rec is not None:
@@ -2010,6 +2083,16 @@ class KiraGodCore:
         # El cerebro del móvil es lento: la mayoría de pensamientos son RÁPIDOS (solo pensar/estudiar); experimenta
         # y compara solo de vez en cuando, para que el cuaderno se llene pronto y no se quede 10 min en blanco.
         i = estado.get("i", 0)
+        semillas = self._semillas_pensar()
+        if self.solo_lo_mio():
+            if not semillas:
+                return None                                # no me queda nada tuyo: me quedo quieta
+            sols = estado.get("soluciones", {})
+            mios = {pn._norm(x) for x in semillas}
+            if sols and i % 5 == 4:                       # no vuelvo a una solución vieja que no sea tuya
+                viejo = min(sols.values(), key=lambda s_: s_.get("cuando", 0))
+                if pn._norm(viejo.get("semilla", "")) not in mios:
+                    estado["i"] = i = i + 1
         experimenta = (i % 2 == 1)
         compara = estudiar and (i % 3 == 2)
         nota = pn.pensar_una(estado, self._pensar_preguntar,
@@ -2017,7 +2100,7 @@ class KiraGodCore:
                              experimentar=self._experimentar_pensando if experimenta else None,
                              comparar=self._comparar_codigo if compara else None,
                              insistir=2,                   # si no lo sabe, busca y repiensa 2 veces antes de rendirse
-                             semillas=self._semillas_pensar())
+                             semillas=semillas)
         pn.guardar(estado, ruta)
         return nota
 
@@ -2459,7 +2542,10 @@ class KiraGodCore:
         ruta = self._ruta_pensar()
         estado = pn.cargar(ruta)
         if not semilla:
-            semilla = pn.proxima_semilla(estado, self._semillas_pensar())   # sobre lo que ha estudiado
+            semillas = self._semillas_pensar()
+            if not semillas:                               # v3.02: modo «solo lo mío» y no queda nada tuyo
+                return None
+            semilla = pn.proxima_semilla(estado, semillas)   # sobre lo que ha estudiado
         nota = pn.ciclo(estado, semilla, self._pensar_preguntar,
                         estudiar=self._estudiar_pensando, experimentar=self._experimentar_pensando,
                         comparar=self._comparar_codigo, rondas=rondas)
@@ -2592,14 +2678,13 @@ class KiraGodCore:
             est["resumen"] = sc.texto_resumen({"enviados": tot_env}, {"recuerdos": tot_rec, "mejoras": mejoras,
                                                                        "tema": tema})
             sc.guardar_estado_movil(self.dir, est)
-        ordenes = ""
-        if not fuera:                       # las órdenes de trabajo, solo en casa (decisión del dueño, v2.88)
-            paso(0.95, "Miro las órdenes que te tenía apuntadas…")
-            ordenes = self.ordenes_a_kiraos()
+        paso(0.95, "Miro las órdenes que te tenía apuntadas…")
+        ordenes = self.ordenes_a_kiraos(fuera=fuera)   # v3.02: fuera de casa, solo las tranquilas
         paso(1.0, "Hecho.")
         texto = est["resumen"] + ((" " + ordenes) if ordenes else "")
         if fuera:
-            texto += " (Por Tailscale, fuera de casa. Las órdenes de trabajo apuntadas se las doy al volver.)"
+            texto += (" (Por Tailscale, fuera de casa. Las órdenes tranquilas —estudiar, investigar, pensar, "
+                      "programar— ya le van; las que tocan el portátil o tu casa se las doy al volver.)")
         if mejoras and self.auto_mejora_encendida():
             texto += " " + self._auto_mejoras_recibidas()
         if (mejoras or tema) and callable(getattr(self, "al_sincronia", None)):
@@ -2626,7 +2711,7 @@ class KiraGodCore:
                 hechas.append(m["nombre"])
         return ("Con la auto-mejora encendida he instalado: " + ", ".join(hechas) + ".") if hechas else ""
 
-    def ordenes_a_kiraos(self):
+    def ordenes_a_kiraos(self, fuera=False):
         """Las órdenes de trabajo que apunté fuera de casa: le pregunto a KiraOS cómo van las que ya tiene y le doy la
         siguiente (una cada vez: KiraOS hace un trabajo cada vez). Devuelve un texto corto (o "")."""
         import casa_kira
@@ -2657,6 +2742,9 @@ class KiraGodCore:
         mandada = ""
         if not ok_.en_kiraos(self.dir):
             pend = ok_.pendientes_kiraos(self.dir)
+            if fuera:                                 # v3.02: fuera de casa, solo las tranquilas (las demás esperan)
+                import mando_kira as mk_
+                pend = [o_ for o_ in pend if mk_.permitida_fuera(o_.get("texto", ""))[0]]
             if pend:
                 o = pend[0]
                 try:
@@ -2687,7 +2775,7 @@ class KiraGodCore:
                 c = self._casa()
                 try:
                     en_casa = bool(c is not None and c.nucleo_disponible())
-                    # v3.00: fuera de casa, por Tailscale: SOLO la sincronía (las órdenes de trabajo esperan a casa)
+                    # v3.00/v3.02: fuera de casa, por Tailscale: la sincronía y las órdenes TRANQUILAS
                     conectada = en_casa or bool(c is not None and c.nucleo_disponible(fuera=True))
                 except Exception:
                     en_casa = conectada = False
@@ -2704,9 +2792,9 @@ class KiraGodCore:
                         except Exception:
                             pass
                         ultima = time.time()
-                    elif en_casa and (ok_.pendientes_kiraos(self.dir) or ok_.en_kiraos(self.dir)):
-                        try:
-                            self.ordenes_a_kiraos()
+                    elif ok_.pendientes_kiraos(self.dir) or ok_.en_kiraos(self.dir):
+                        try:                          # v3.02: fuera de casa, solo las tranquilas
+                            self.ordenes_a_kiraos(fuera=not en_casa)
                         except Exception:
                             pass
                 en_casa_antes = conectada
@@ -2721,7 +2809,7 @@ class KiraGodCore:
         """Qué está haciendo esta Kira (para el panel)."""
         import pensador_kira as pn
         d = {"pensando": bool(getattr(self, "_pensar_on", False)), "estudiando": bool(getattr(self, "_estudiando", False)),
-             "pausada": False, "foco": "", "pensamientos": 0, "soluciones": 0}
+             "pausada": False, "foco": "", "pensamientos": 0, "soluciones": 0, "solo_mio": self.solo_lo_mio()}
         if d["pensando"]:
             d["pausada"] = time.time() - getattr(self, "_ultima_actividad", 0) < getattr(self, "_inactivo_seg", 300)
         try:
@@ -2979,6 +3067,7 @@ class KiraGodCore:
                 net.buscar(p["consulta"], p["tipo"])
                 return net.texto_resultados()
             if p["accion"] == "estudiar":
+                self._apuntar_tema_mio(p["consulta"])
                 return self.estudiar_en_internet(p["consulta"])
             if p["accion"] == "estudiar_enlaces":
                 return self.estudiar_pagina(p.get("url"))
@@ -3349,6 +3438,13 @@ class KiraGodCore:
             r = self._comando_modulo(cmd_lower, command)
             if r is not None:
                 return r
+        try:
+            import solo_mio_kira as _sm
+            _q = _sm.es_orden(command)
+        except ImportError:
+            _q = None
+        if _q:                                         # v3.02: «estudia solo lo que yo te mande» / «piensa libre»
+            return self._orden_solo_mio(_q)
         # La clave de API nunca pasa por el búfer ni por el log
         if cmd_lower.startswith("config clave:"):
             clave = command.split(":", 1)[1].strip()

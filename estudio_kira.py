@@ -74,6 +74,12 @@ def es_estudia_general(texto):
     tema = m.group(2).strip(" .?!¡¿")
     if len(tema) < 2:
         return None
+    try:                                         # v3.02: «estudia solo lo que yo te mande» es el interruptor
+        import solo_mio_kira as _sm
+        if _sm.es_orden(t):
+            return None
+    except ImportError:
+        pass
     try:                                         # v3.01: «estudia esta página y sus enlaces…» va por internet
         import internet_kira as _ik
         if (_ik.interpretar(t) or {}).get("accion") == "estudiar_enlaces":

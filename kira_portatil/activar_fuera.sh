@@ -6,7 +6,8 @@
 #   1) instala Tailscale (red privada y cifrada entre TUS aparatos; no abre nada en el router);
 #   2) lo conecta a tu cuenta: saca un código QR en esta terminal (o un enlace) para entrar con tu cuenta;
 #   3) deja pasar a Kira SOLO por esa red privada (puertos 8770 y 8771 en la interfaz tailscale0);
-#   4) te dice la dirección del portátil en Tailscale. El móvil la aprende solo la próxima vez que estéis en casa.
+#   4) te dice la dirección del portátil en Tailscale.
+#   (v3.02) y desactiva los registros técnicos que Tailscale manda a su empresa (--no-logs-no-support). El móvil la aprende solo la próxima vez que estéis en casa.
 # En el móvil: instala la app «Tailscale» (Play Store) y entra con LA MISMA cuenta.
 set -uo pipefail
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
@@ -20,7 +21,21 @@ else
     exit 1
   fi
 fi
-$SUDO systemctl enable --now tailscaled >/dev/null 2>&1 || true
+# v3.02: que Tailscale NO mande sus registros técnicos a la empresa (lo pidió el dueño). Contra: si algún día hay
+# que pedirles ayuda, no tendrán esos registros. El contenido entre tus aparatos va cifrado igual, esto es aparte.
+DEF="${KIRA_TAILSCALED_DEFAULT:-/etc/default/tailscaled}"
+if [ -f "$DEF" ] && grep -q -- "--no-logs-no-support" "$DEF"; then
+  echo "   registros técnicos a Tailscale: ya estaban desactivados"
+elif [ -f "$DEF" ] && grep -q '^FLAGS=' "$DEF"; then
+  $SUDO sed -i 's/^FLAGS="\(.*\)"$/FLAGS="--no-logs-no-support \1"/' "$DEF"
+  echo "   registros técnicos a Tailscale: desactivados"
+else
+  echo 'FLAGS="--no-logs-no-support"' | $SUDO tee -a "$DEF" >/dev/null
+  echo "   registros técnicos a Tailscale: desactivados"
+fi
+$SUDO systemctl enable tailscaled >/dev/null 2>&1 || true
+$SUDO systemctl restart tailscaled >/dev/null 2>&1 || true
+sleep 2
 
 echo "== 2. Conectar a tu cuenta"
 if tailscale ip -4 >/dev/null 2>&1; then

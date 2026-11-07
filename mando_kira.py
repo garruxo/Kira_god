@@ -136,3 +136,41 @@ def wifi_solo_en_portatil(texto):
     """Apagar, desconectar, olvidar o dar una clave: eso se hace EN el portátil (desde el móvil te quedarías sin
     KiraOS, y la clave viajaría)."""
     return bool(_WIFI_PELIGRO.search(_norm(texto)))
+
+
+# ---------- v3.02: órdenes FUERA DE CASA (por Tailscale), solo las tranquilas ----------
+# Decisión del dueño (v3.02, cambia la de la v2.88): desde fuera de casa SÍ puede mandarle a KiraOS lo que solo
+# estudia, investiga, piensa o programa en modo seguro / en su máquina. Lo que toca el portátil, la casa, la WiFi,
+# la cámara, instalar, claves o GitHub sigue esperando a que vuelva a casa. El portátil lo comprueba OTRA VEZ.
+_Y_PRUEBALO = re.compile(r"\s*,?\s*y\s+pruebalo\s+en\s+(?:tu|la)\s+maquina(?:\s+virtual)?$")
+_NO_FUERA = re.compile(
+    r"\b(?:wifi|wi-fi|wi fi|router|aparatos|puertos?\s+abiertos|camara|webcam|microfono|apk|github|compila(?:me|lo|la|r)?|"
+    r"libreria\w*|clave|contrasena|password|token|cebo|honeypot|emparejar)\b|"
+    r"\b(?:mi|tu|nuestra)\s+red\b|\bred\s+de\s+casa\b|app\s+de\s+verdad|"
+    r"^(?:apaga\w*|reinicia\w*|enciende\w*|arranca\w*|instala\w*|desinstala\w*|ejecuta\w*|borra\w*|elimina\w*|"
+    r"cambia\s+el\s+aspecto|pon\s+el\s+tema|prepara(?:me)?\s+una\s+mejora|mejora(?:te)?\b)|"
+    r"^(?:lee|mira|que\s+(?:hay|pone))\b.{0,20}\bpantalla\b|^(?:haz|saca)(?:me)?\s+una\s+(?:foto|captura)|"
+    r"^que\s+(?:ves|tengo\s+delante)|(?:pasa|envia|manda|copia)(?:le)?\s+(?:tu|la|mi)\s+memoria")
+_SI_FUERA = re.compile(
+    r"^(?:estudia|aprende|investiga|preguntate|pregunta|averigua|mira\s+a\s+ver|busca(?:me)?|lee(?:me)?|"
+    r"resume(?:me)?|guarda|piensa|ponte\s+a\s+pensar|centrate|concentrate|enfocate|resuelve(?:me)?|retoma|dejalo|"
+    r"aparca|vuelve\s+al\s+tema|experimenta|programa(?:me)?|desarrolla(?:me)?|sincroniza(?:te)?|"
+    r"tu\s+cuaderno|tus\s+(?:soluciones|preguntas)|que\s+has\s+(?:pensado|resuelto)|"
+    r"(?:estudia\s+)?solo\s+lo\s+(?:que\s+yo\s+te\s+mande|mio)|piensa\s+libre)\b")
+_HAZ_FUERA = re.compile(r"\b(?:programa|juego|videojuego|algoritmo|script|codigo|funcion|calculadora|herramienta|"
+                        r"bot|app|aplicacion|web|pagina|maqueta|diseno)\b")
+
+
+def permitida_fuera(texto):
+    """¿Esta orden se la puedo pasar a KiraOS FUERA de casa (por Tailscale)? -> (bool, motivo para decírtelo).
+    Solo lo tranquilo: estudiar, investigar, pensar, buscar y programar (en modo seguro o en su máquina)."""
+    t = _Y_PRUEBALO.sub("", _norm(texto))
+    no = ("Eso, fuera de casa, no se lo paso: toca el portátil o tu casa. Te lo apunto y se lo doy en cuanto "
+          "volvamos a estar en la misma WiFi.")
+    if not t:
+        return False, no
+    if _NO_FUERA.search(t) or es_de_maquina(t) or orden_control(t) or orden_modo_app(t):
+        return False, no
+    if _SI_FUERA.match(t) or (_HAZ.match(t) and _HAZ_FUERA.search(t)):
+        return True, ""
+    return False, no

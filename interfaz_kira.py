@@ -934,10 +934,26 @@ def construir_interfaz(core, consola=None, modo=None):
         if listo:
             mando_por_voz(orden)
             return
+        import mando_kira as mdk2_
+        vale_fuera, _porque = mdk2_.permitida_fuera(orden)
+        fuera = False
+        if vale_fuera:
+            try:
+                fuera = core.kiraos_fuera()           # v3.02: KiraOS por Tailscale, fuera de casa
+            except Exception:
+                fuera = False
+        if fuera:
+            mando_por_voz(orden)
+            return
         apuntar(orden, "kiraos", "pendiente")
         n = len(ordk_.pendientes_kiraos(core.dir))
-        decir("Eso lo hace KiraOS y ahora no la veo en la WiFi de casa. Te lo apunto"
-              + (f" (ya van {n})" if n > 1 else "") + " y se lo doy yo sola en cuanto llegue. Mientras, sigo "
+        if not vale_fuera:
+            decir("Eso lo hace KiraOS y toca el portátil o tu casa, así que solo se lo doy estando en la misma WiFi. "
+                  "Te lo apunto" + (f" (ya van {n})" if n > 1 else "") + " y se lo doy en cuanto lleguemos.",
+                  hablar=True)
+            return
+        decir("Eso lo hace KiraOS y ahora no la veo (ni en casa ni por Tailscale). Te lo apunto"
+              + (f" (ya van {n})" if n > 1 else "") + " y se lo doy yo sola en cuanto la vea. Mientras, sigo "
               "pensando y estudiando aquí.", hablar=True)
 
     def sincronizar_ya():
@@ -2111,6 +2127,10 @@ def construir_interfaz(core, consola=None, modo=None):
                 decir("Vale, dejo de pensar sola." if on else
                       "Me pongo a pensar. Cuando me hables, paro para atenderte y vuelvo cuando lleves un rato sin "
                       "pedirme nada.", hablar=False)
+            elif a == "solo_mio":                   # v3.02: «estudia solo lo que yo te mande» (y se lo dice a KiraOS)
+                que = "off" if core.solo_lo_mio() else "on"
+                en_hilo(lambda: core._orden_solo_mio(que),
+                        lambda r: (decir(str(r).replace("[OK] ", ""), hablar=False), pintar(True)))
             elif a == "buscar_kiraos":
                 decir("Busco a KiraOS en la WiFi de casa…", hablar=False)
                 en_hilo(lambda: core.mando_listo(esperar=True),

@@ -141,11 +141,11 @@ ok(cfg["portatil_fuera"] == antes, "no se guarda una dirección que no sea de Ta
 # ---------- el núcleo del móvil: fuera = solo sincronía ----------
 kg = open(os.path.join(RAIZ, "kira_god.py"), encoding="utf-8").read()
 sinc = kg.split("def sincronizar(self, al_paso=None, viajes=50):", 1)[1].split("\n    def ", 1)[0]
-ok("nucleo_disponible(fuera=True)" in sinc and "if not fuera:" in sinc and "ordenes_a_kiraos()" in sinc,
-   "sincronizar: también por Tailscale, pero las órdenes de trabajo solo en casa")
+ok("nucleo_disponible(fuera=True)" in sinc and "ordenes_a_kiraos(fuera=fuera)" in sinc,
+   "sincronizar: también por Tailscale; fuera de casa solo pasa las órdenes tranquilas (v3.02)")
 vig = kg.split("def vigilar_casa(", 1)[1].split("\n    def ", 1)[0]
-ok("conectada = en_casa or" in vig and "elif en_casa and (ok_.pendientes_kiraos" in vig,
-   "vigilar_casa: sincroniza fuera por Tailscale; las órdenes apuntadas solo en casa")
+ok("conectada = en_casa or" in vig and "ordenes_a_kiraos(fuera=not en_casa)" in vig,
+   "vigilar_casa: sincroniza fuera por Tailscale y pasa las órdenes tranquilas (v3.02)")
 ok("def mando_listo" in kg and "nucleo_disponible(fuera" not in kg.split("def _mirar_mando", 1)[1].split("\n    def ", 1)[0],
    "el modo mando (trabajo en directo) sigue siendo solo en casa")
 
@@ -153,7 +153,7 @@ ok("def mando_listo" in kg and "nucleo_disponible(fuera" not in kg.split("def _m
 base = {"version": "3.00", "recuerdos": 5, "actividad": {}}
 t = tbk.tarjeta_kiraos({"kiraos": dict(base, ocupada=True, haciendo="estudia Python", en_cola=2, via="fuera")})
 ok("OCUPADA: estudia Python" in t["texto"] and "2 tarea(s) en espera" in t["texto"], "el panel enseña lo que hace y la cola")
-ok("Tailscale" in t["texto"] and "al volver a casa" in t["texto"], "y que está conectada por Tailscale (fuera de casa)")
+ok("Tailscale" in t["texto"] and "tranquilo" in t["texto"], "y que está conectada por Tailscale (fuera de casa)")
 ok(("Parar lo que hace", "parar_kiraos") in t["botones"] and ("Pausar", "pausar_kiraos") in t["botones"],
    "botones Parar y Pausar")
 t = tbk.tarjeta_kiraos({"kiraos": dict(base, pausada=True)})

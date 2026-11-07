@@ -355,6 +355,10 @@ class Nucleo:
         return kira_god.KiraGodCore()
 
     def _enganchar(self):
+        try:
+            self.core.es_kiraos = True           # v3.02: soy KiraOS (no reenvío órdenes a KiraOS: sería a mí misma)
+        except Exception:
+            pass
         if self.con_maquina:
             try:
                 enganchar_maquina(self.core)
@@ -588,6 +592,14 @@ def crear_servidor(host, puerto, token, nucleo):
                     vale, porque = wk.permitida_remota(orden)
                     if not vale:
                         return self._json(403, {"error": porque})
+                    import fuera_kira as fk_
+                    if fk_.es_ip_tailscale(self.client_address[0]):   # v3.02: desde FUERA de casa, solo lo tranquilo
+                        import mando_kira as mk_
+                        vale, porque = mk_.permitida_fuera(orden)
+                        if not vale:
+                            return self._json(403, {"error": "Por seguridad, eso no lo hago si me lo pides desde "
+                                                              "fuera de casa: toca el portátil o tu casa. Pídemelo "
+                                                              "cuando estés en la misma WiFi."})
                 tid = nucleo.trabajos.empezar(orden)   # v2.95: se encola (si está ocupada, espera su turno)
                 return self._json(200, {"id": tid, "en_cola": nucleo.trabajos.en_cola()})
             if u.path == "/pausar":
