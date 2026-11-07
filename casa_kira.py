@@ -314,7 +314,7 @@ class Casa:
                 if al_paso:
                     al_paso(t.get("fraccion"), linea)
             vistos = len(av)
-            if t.get("estado") != "en curso":
+            if t.get("estado") not in ("en curso", "en cola"):     # v2.95: KiraOS encola; «en cola» = esperar
                 return t
             if parar is not None and not cancelada and parar():
                 cancelada = True

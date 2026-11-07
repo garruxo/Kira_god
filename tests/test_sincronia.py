@@ -268,13 +268,24 @@ core.al_sincronia = avisos.append
 core.sincronizar()
 ok(sc.tema_del_movil(MOVIL)["nombre"] == "violeta" and avisos, "el aspecto que le puso KiraOS llega al móvil (y avisa)")
 
-# KiraOS ocupada: la orden se queda en la cola, no se pierde
-nucleo.trabajos.actual = "x"
-nucleo.trabajos.tareas["x"] = {"estado": "en curso", "orden": "otra", "inicio": time.time(), "avance": []}
+# KiraOS ocupada (v2.95: aquí, en pausa): la orden entra en SU cola, no se pierde ni sale como error
+nucleo.pausar(True)
 oid2 = okr.apuntar(MOVIL, "cambia el aspecto del móvil a fuego", "kiraos", "pendiente")
 core.ordenes_a_kiraos()
-ok(next(x for x in okr.ultimas(MOVIL, 50) if x["id"] == oid2)["estado"] == "pendiente", "si KiraOS está ocupada, espera")
-nucleo.trabajos.tareas["x"]["estado"] = "hecho"
+o2 = next(x for x in okr.ultimas(MOVIL, 50) if x["id"] == oid2)
+ok(o2["estado"] == "enviada" and nucleo.trabajos.ver(o2["tarea"])["estado"] == "en cola",
+   "si KiraOS está ocupada, la orden espera en su cola")
+core.ordenes_a_kiraos()
+o2 = next(x for x in okr.ultimas(MOVIL, 50) if x["id"] == oid2)
+ok(o2["estado"] == "en curso" and "En cola" in o2["respuesta"], "y en el móvil se ve «en cola», no error: " + str(o2))
+nucleo.seguir()
+for _ in range(60):
+    core.ordenes_a_kiraos()
+    o2 = next(x for x in okr.ultimas(MOVIL, 50) if x["id"] == oid2)
+    if o2["estado"] not in ("enviada", "en curso"):
+        break
+    time.sleep(0.05)
+ok(o2["estado"] == "hecha", "al seguir, KiraOS la hace y el móvil recoge el resultado")
 
 # la mejora para el móvil: KiraOS la escribe (aquí, con un cerebro de mentira) y la prueba en SU laboratorio
 nucleo.core.generar_mejora = lambda pedido, quien=None: ("hora_movil", MOD)

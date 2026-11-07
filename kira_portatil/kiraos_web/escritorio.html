@@ -182,6 +182,22 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #aviso .puntos i:nth-child(2){animation-delay:.15s;background:#7dd3fc}#aviso .puntos i:nth-child(3){animation-delay:.3s;background:var(--rosa)}
 @keyframes salta{50%{transform:translateY(-4px);opacity:.6}}
 #aviso a{color:#9ff1ff;cursor:pointer;text-decoration:underline}
+/* indicador de OCUPADA / COLA en la barra (v2.95) */
+#trabajo{display:none;align-items:center;gap:8px;max-width:40vw;padding:0 10px;height:38px;border-radius:12px;
+  background:rgba(34,211,238,.10);box-shadow:inset 0 0 0 1px rgba(34,211,238,.35);font-size:12.5px}
+#trabajo.on{display:flex}
+#trabajo.pausa{background:rgba(244,114,208,.10);box-shadow:inset 0 0 0 1px rgba(244,114,208,.35)}
+#trabajo .punto{width:9px;height:9px;border-radius:50%;background:var(--cian);flex:0 0 auto;animation:latir 1.2s ease-in-out infinite}
+#trabajo.pausa .punto{background:var(--rosa);animation:none}
+#trabajo.libre{background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--borde)}
+#trabajo.libre .punto{background:#5b6b86;animation:none}
+#trabajo .qué{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22vw}
+#trabajo .cuantas{color:#9ff1ff;flex:0 0 auto}
+#trabajo button{flex:0 0 auto;height:26px;padding:0 10px;border-radius:8px;border:0;cursor:pointer;font-size:12px;
+  background:rgba(255,255,255,.08);color:#eaf2ff}
+#trabajo button:hover{background:rgba(255,255,255,.16)}
+#trabajo button.parar{background:rgba(244,114,208,.22)}
+@keyframes latir{50%{opacity:.35}}
 </style>
 </head>
 <body>
@@ -219,6 +235,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   </div>
   <button class="bb" id="btnTexto" title="Ver el texto de la conversación"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>Texto<i class="punto"></i></button>
   <button class="bb on" id="btnVoz" title="Kira contesta con su voz"><svg viewBox="0 0 24 24" id="icoVoz"></svg></button>
+  <div id="trabajo">
+    <span class="punto"></span>
+    <span class="qué" id="trabQué"></span>
+    <span class="cuantas" id="trabCuantas"></span>
+    <button class="parar" id="trabParar" title="Para lo que está haciendo ahora">Parar</button>
+    <button id="trabPausar" title="Pausar / seguir">Pausar</button>
+  </div>
   <button class="bb" id="wifi" title="WiFi"><span class="barras" id="wifiBarras"></span><span id="wifiNombre">WiFi</span></button>
   <div id="reloj"></div>
 </div>
@@ -265,6 +288,9 @@ var FAKE = {
       return Promise.resolve({estado:n>=c.r.length?"hecho":"hablando",respuesta:c.r.slice(0,n),lineas:[],pedir_clave:null}); },
   escuchar:function(){ return new Promise(function(r){ setTimeout(function(){ r({ok:true,texto:"qué tal estás"}); },1500); }); },
   voz_activa_poner:function(v){ return Promise.resolve(v); }, callar:function(){ return Promise.resolve(true); },
+  trabajo:function(){ return Promise.resolve(FAKE._trab||{nucleo:true,ocupada:false,en_cola:0,pausada:false,que:"pensando",cola:[]}); },
+  parar:function(){ FAKE._trab={nucleo:true,ocupada:false,en_cola:0,pausada:false,que:""}; return Promise.resolve({ok:true,texto:"He parado."}); },
+  pausar_trabajo:function(si){ FAKE._trab={nucleo:true,ocupada:false,en_cola:2,pausada:!!si,que:si?"":"pensando"}; return Promise.resolve({ok:true,pausada:!!si}); },
   wifi_datos:function(){ return Promise.resolve({ok:true,estado:"Conectada a «MiCasa», señal 72 %, con internet.",redes:DEMO_REDES}); },
   wifi_hacer:function(a,s){ return Promise.resolve({ok:true,texto:"(ejemplo) "+a+" "+(s||"")}); },
   hay_programa:function(){ return Promise.resolve(true); },
@@ -336,6 +362,24 @@ function pintaBarra(d){
   if(typeof d.voz==="boolean"){ vozOn=d.voz; pintaVoz(); }
 }
 function refrescaBarra(){ llama("barra").then(pintaBarra).catch(function(){}); }
+
+// ---------- OCUPADA / COLA / PARAR / PAUSAR (v2.95) ----------
+var trabPausada=false;
+function pintaTrabajo(d){
+  d=d||{}; var box=$("trabajo");
+  if(!d.nucleo){ box.classList.remove("on"); return; }
+  trabPausada=!!d.pausada;
+  box.classList.add("on");                      // siempre a la vista: «Libre» cuando no hace nada
+  box.classList.toggle("libre", !(d.ocupada || d.que || d.en_cola>0 || d.pausada));
+  box.classList.toggle("pausa", d.pausada);
+  var texto = d.pausada ? "En pausa" : (d.ocupada ? ("Ocupada: "+(d.haciendo||d.que||"una tarea")) : (d.que ? ("Ahora: "+d.que) : "Libre"));
+  $("trabQué").textContent = texto;
+  $("trabQué").title = texto;
+  $("trabCuantas").textContent = d.en_cola>0 ? ("· "+d.en_cola+" en espera") : "";
+  $("trabParar").style.display = d.ocupada ? "" : "none";
+  $("trabPausar").textContent = d.pausada ? "Seguir" : "Pausar";
+}
+function refrescaTrabajo(){ llama("trabajo").then(pintaTrabajo).catch(function(){}); }
 
 // ---------- ventanas (con «‹ Escritorio» para volver a la pantalla principal) ----------
 var actual=null;
@@ -579,8 +623,15 @@ document.addEventListener("keydown", function(e){
 });
 
 // ---------- arranque ----------
+$("trabParar").addEventListener("click", function(){
+  llama("parar").then(function(r){ aviso(esc((r&&r.texto)||"He parado."), 4); refrescaTrabajo(); }).catch(function(){}); });
+$("trabPausar").addEventListener("click", function(){
+  llama("pausar_trabajo", !trabPausada).then(function(r){
+    trabPausada=!!(r&&r.pausada); aviso(trabPausada?"En pausa. Pulsa «Seguir» cuando quieras.":"Sigo con lo que tenga.", 4);
+    refrescaTrabajo(); }).catch(function(){}); });
 pintaIconos(); pintaVoz(); reloj(); setInterval(reloj, 10000);
-function empieza(){ if(empieza.hecho) return; empieza.hecho=true; refrescaBarra(); setInterval(refrescaBarra, 20000); }
+function empieza(){ if(empieza.hecho) return; empieza.hecho=true; refrescaBarra(); setInterval(refrescaBarra, 20000);
+  refrescaTrabajo(); setInterval(refrescaTrabajo, 3000); }
 if(window.pywebview && window.pywebview.api){ empieza(); }
 else { window.addEventListener("pywebviewready", empieza); setTimeout(empieza, 400); }
 </script>

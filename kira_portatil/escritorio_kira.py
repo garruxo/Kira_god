@@ -210,6 +210,60 @@ class EscritorioMixin:
             return {"ok": False, "error": str(e)}
         return {"ok": bool(texto), "texto": texto or "", "error": "" if texto else "No te he oído. ¿Lo repites?"}
 
+    # ---------- OCUPADA / COLA / PARAR / PAUSAR (v2.95) ----------
+    def trabajo(self):
+        """Para la barra: ¿está ocupada?, ¿cuántas tareas esperan?, ¿pausada?, y qué hace por su cuenta. Cacheado
+        2,5 s para no machacar al núcleo."""
+        ahora = time.time()
+        cache = getattr(self, "_trab_cache", None)
+        if cache and ahora - cache[0] < 2.5:
+            return cache[1]
+        n = self._nucleo()
+        if n is None or not hasattr(n, "estado"):
+            d = {"nucleo": False, "ocupada": False, "en_cola": 0, "pausada": False, "haciendo": "", "que": "", "cola": []}
+        else:
+            e = n.estado() or {}
+            act = e.get("actividad") or {}
+            if e.get("ocupada"):
+                que = e.get("haciendo") or "una tarea"
+            elif act.get("estudiando"):
+                que = "estudiando"
+            elif act.get("foco"):
+                que = "pensando en: " + str(act.get("foco"))
+            elif act.get("pensando"):
+                que = "pensando"
+            else:
+                que = ""
+            d = {"nucleo": True, "ocupada": bool(e.get("ocupada")), "en_cola": int(e.get("en_cola") or 0),
+                 "pausada": bool(e.get("pausada")), "haciendo": e.get("haciendo", ""), "que": que,
+                 "cola": e.get("cola", [])}
+        self._trab_cache = (ahora, d)
+        return d
+
+    def parar(self):
+        """El botón de PARAR: corta lo que esté haciendo ahora (la cola sigue con lo siguiente)."""
+        n = self._nucleo()
+        self._trab_cache = None
+        if n is None or not hasattr(n, "cancelar"):
+            return {"ok": False, "texto": "Ahora mismo no estoy haciendo ninguna tarea."}
+        try:
+            n.cancelar()
+        except Exception:
+            pass
+        return {"ok": True, "texto": "He parado lo que estaba haciendo."}
+
+    def pausar_trabajo(self, si=True):
+        """El botón de PAUSAR / SEGUIR: pausa (deja de empezar tareas y de pensar sola) o reanuda."""
+        n = self._nucleo()
+        self._trab_cache = None
+        if n is None or not hasattr(n, "pausar"):
+            return {"ok": False, "pausada": False}
+        try:
+            r = n.pausar(True) if si else n.seguir()
+        except Exception:
+            r = {}
+        return {"ok": True, "pausada": bool(r.get("pausada", si))}
+
     # ---------- WiFi ----------
     def wifi_datos(self):
         wk = self._wifi()

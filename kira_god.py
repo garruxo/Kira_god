@@ -2571,10 +2571,11 @@ class KiraGodCore:
                 acabadas += 1
                 continue
             est = t.get("estado")
-            if est == "en curso":
+            if est in ("en curso", "en cola"):        # v2.95: en cola en KiraOS = todavía no ha acabado
                 av = t.get("avance") or []
                 ok_.actualizar(self.dir, o["id"], estado="en curso", fraccion=t.get("fraccion"),
-                               respuesta=(av[-1] if av else ""))
+                               respuesta=(av[-1] if av else ("En cola en KiraOS: va después de lo que está haciendo."
+                                                             if est == "en cola" else "")))
                 continue
             ok_.actualizar(self.dir, o["id"], estado={"hecho": "hecha", "cancelado": "cancelada"}.get(est, "error"),
                            respuesta=t.get("respuesta") or "", codigo=(t.get("codigo") or "")[:20000] or None,

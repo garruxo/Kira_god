@@ -233,55 +233,107 @@ def ejecutar(core, orden, paso):
 #  LAS TAREAS (una cada vez; el móvil pregunta cómo va)
 # =====================================================================================
 class Trabajos:
+    """Las tareas del núcleo EN COLA (v2.95). Antes solo hacía una y, si estaba ocupada, decía 409. Ahora se pueden
+    ENCOLAR varias: un solo obrero las va sacando de una en una. TUS órdenes van DELANTE de las de fondo. Se puede
+    PAUSAR (deja de sacar nuevas; la de ahora sigue hasta que la PARES con cancelar) y SEGUIR."""
+
     def __init__(self, hacer, guardar=20):
         self._hacer = hacer            # hacer(orden, paso) -> dict
         self._lock = threading.Lock()
+        self._hay = threading.Condition(self._lock)
         self.tareas = {}
+        self.cola = []                 # tids esperando, en orden (las tuyas delante)
         self.actual = None
+        self.pausada = False
         self._guardar = guardar
+        self._obrero = threading.Thread(target=self._bucle, daemon=True)
+        self._obrero.start()
 
     def ocupado(self):
         t = self.tareas.get(self.actual) if self.actual else None
         return bool(t and t["estado"] == "en curso")
 
-    def empezar(self, orden):
+    def en_cola(self):
         with self._lock:
-            if self.ocupado():
-                return None
+            return len(self.cola)
+
+    def pausar(self, si=True):
+        with self._lock:
+            self.pausada = bool(si)
+            self._hay.notify_all()
+        return self.pausada
+
+    def empezar(self, orden, tuya=True):
+        """Encola la orden y devuelve su id. Ya NO devuelve None por estar ocupada: se pone en la cola."""
+        with self._lock:
             tid = uuid.uuid4().hex[:12]
-            t = {"id": tid, "orden": str(orden)[:500], "estado": "en curso", "fraccion": 0.0, "avance": [],
-                 "respuesta": "", "codigo": None, "nombre": None, "inicio": time.time()}
+            t = {"id": tid, "orden": str(orden)[:500], "estado": "en cola", "fraccion": 0.0, "avance": [],
+                 "respuesta": "", "codigo": None, "nombre": None, "tuya": bool(tuya), "inicio": time.time()}
             self.tareas[tid] = t
-            self.actual = tid
-            for viejo in sorted(self.tareas, key=lambda k: self.tareas[k]["inicio"])[:-self._guardar]:
-                self.tareas.pop(viejo, None)
+            if tuya:                              # tu orden: delante de las de fondo (pero tras otras tuyas)
+                pos = len(self.cola)
+                for i, c in enumerate(self.cola):
+                    if not self.tareas.get(c, {}).get("tuya"):
+                        pos = i
+                        break
+                self.cola.insert(pos, tid)
+            else:
+                self.cola.append(tid)
+            self._olvidar_viejas()
+            self._hay.notify()
+        return tid
 
-        def paso(fr, texto):
-            if fr is not None:
-                try:
-                    t["fraccion"] = max(0.0, min(1.0, float(fr)))
-                except (TypeError, ValueError):
-                    pass
-            if texto:
-                t["avance"] = (t["avance"] + [str(texto)[:300]])[-40:]
+    def _olvidar_viejas(self):
+        acabadas = [k for k, v in self.tareas.items() if v["estado"] in ("hecho", "error", "cancelado")]
+        for viejo in sorted(acabadas, key=lambda k: self.tareas[k]["inicio"])[:-self._guardar]:
+            self.tareas.pop(viejo, None)
 
-        def correr():
+    def _bucle(self):
+        while True:
+            with self._lock:
+                while not self.cola or self.pausada:
+                    self._hay.wait(timeout=10)
+                tid = self.cola.pop(0)
+                t = self.tareas[tid]
+                t["estado"] = "en curso"
+                self.actual = tid
+
+            def paso(fr, texto, _t=t):
+                if fr is not None:
+                    try:
+                        _t["fraccion"] = max(0.0, min(1.0, float(fr)))
+                    except (TypeError, ValueError):
+                        pass
+                if texto:
+                    _t["avance"] = (_t["avance"] + [str(texto)[:300]])[-40:]
             try:
                 r = self._hacer(t["orden"], paso) or {}
                 t.update(respuesta=str(r.get("texto") or ""), codigo=r.get("codigo"), nombre=r.get("nombre"),
                          estado="hecho", fraccion=1.0)
-            except Exception as e:
+            except Exception as e:                 # noqa: BLE001
                 cancel = type(e).__name__ == "Cancelada"
                 t.update(estado="cancelado" if cancel else "error",
                          respuesta="Parado." if cancel else f"[x] {e}")
-        threading.Thread(target=correr, daemon=True).start()
-        return tid
+            with self._lock:
+                if self.actual == tid:
+                    self.actual = None
 
     def ver(self, tid):
         t = self.tareas.get(tid)
         if not t:
             return None
         return {k: t[k] for k in ("id", "orden", "estado", "fraccion", "avance", "respuesta", "codigo", "nombre")}
+
+    def lista(self):
+        """Lo que hay ahora mismo (la de curso primero, luego las que esperan), para enseñarlo."""
+        with self._lock:
+            out = []
+            a = self.tareas.get(self.actual) if self.actual else None
+            if a and a["estado"] == "en curso":
+                out.append({"orden": a["orden"], "estado": "en curso"})
+            for c in self.cola:
+                out.append({"orden": self.tareas.get(c, {}).get("orden", ""), "estado": "en cola"})
+            return out
 
 
 # =====================================================================================
@@ -336,6 +388,32 @@ class Nucleo:
         self.reiniciar()
         return r
 
+    def pausar(self, si=True):
+        """Pausa (o reanuda) el trabajo: la cola deja de sacar tareas nuevas y Kira deja de pensar sola. La tarea que
+        esté en curso NO se corta (para eso está «parar»/cancelar). Al seguir, solo vuelve a pensar si lo estaba."""
+        self.trabajos.pausar(si)
+        try:
+            if si:
+                self._pensaba = bool(getattr(self.core, "_pensar_on", False))
+                self.core.pensar_sola(False)
+            elif getattr(self, "_pensaba", False):
+                self.core.reanudar_pensar()
+        except Exception:
+            pass
+        return {"pausada": self.trabajos.pausada}
+
+    def seguir(self):
+        return self.pausar(False)
+
+    def estado(self):
+        """Estado ligero para la barra del escritorio (sin leer versión/recuerdos/equipo): ¿ocupada?, ¿cuántas en
+        espera?, ¿pausada?, y qué está haciendo por su cuenta (pensar/estudiar/foco)."""
+        t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
+        return {"ocupada": self.trabajos.ocupado(),
+                "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
+                "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
+                "cola": self.trabajos.lista(), "actividad": actividad(self.core)}
+
     def hola(self):
         rec = getattr(self.core, "recuerdos", None)
         try:
@@ -356,6 +434,7 @@ class Nucleo:
         t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
         return {"kira_nucleo": 1, "version": ver, "recuerdos": n, "llamar": llamar,
                 "ocupada": self.trabajos.ocupado(), "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
+                "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
                 "actividad": actividad(self.core), "equipo": equipo_corto(), "sincronia": sincronia_corta(self.datos)}
 
     def sincronizar(self, paquete):
@@ -478,6 +557,8 @@ def crear_servidor(host, puerto, token, nucleo):
                 return
             if u.path == "/hola":
                 return self._json(200, nucleo.hola())
+            if u.path == "/estado":
+                return self._json(200, nucleo.estado())
             if u.path == "/tarea":
                 tid = (urllib.parse.parse_qs(u.query).get("id") or [""])[0]
                 t = nucleo.trabajos.ver(tid)
@@ -497,10 +578,13 @@ def crear_servidor(host, puerto, token, nucleo):
                     vale, porque = wk.permitida_remota(orden)
                     if not vale:
                         return self._json(403, {"error": porque})
-                tid = nucleo.trabajos.empezar(orden)
-                if tid is None:
-                    return self._json(409, {"error": "ocupada", **nucleo.hola()})
-                return self._json(200, {"id": tid})
+                tid = nucleo.trabajos.empezar(orden)   # v2.95: se encola (si está ocupada, espera su turno)
+                return self._json(200, {"id": tid, "en_cola": nucleo.trabajos.en_cola()})
+            if u.path == "/pausar":
+                d = self._cuerpo_json()
+                return self._json(200, nucleo.pausar(bool(d.get("si", True))))
+            if u.path == "/seguir":
+                return self._json(200, nucleo.seguir())
             if u.path == "/sincronizar":
                 d = self._cuerpo_json(maximo=40_000_000)
                 try:
@@ -572,13 +656,17 @@ class ClienteNucleo:
         v2.94: si está ocupada (409), lo dice con buenas palabras en vez de soltar «HTTP Error 409»."""
         import urllib.error
         try:
-            tid = self._pedir("/orden", {"orden": texto})["id"]
+            d = self._pedir("/orden", {"orden": texto})
+            tid = d["id"]
+            if d.get("en_cola"):                     # v2.95: hay cosas antes; se hará al llegar su turno
+                if al_paso:
+                    al_paso(None, "En cola: lo haré en cuanto acabe lo de antes.")
         except urllib.error.HTTPError as e:
-            if e.code == 409:                        # el núcleo solo hace una cosa a la vez
+            if e.code == 409:                        # núcleo antiguo (antes de la v2.95 no encolaba)
                 hago = ""
                 try:
-                    d = json.loads((e.read() or b"{}").decode("utf-8"))
-                    act = [k for k, v in (d.get("actividad") or {}).items() if v]
+                    dd = json.loads((e.read() or b"{}").decode("utf-8"))
+                    act = [k for k, v in (dd.get("actividad") or {}).items() if v]
                     hago = (" (estoy con: " + ", ".join(act) + ")") if act else ""
                 except Exception:
                     pass
@@ -586,19 +674,43 @@ class ClienteNucleo:
                         "respuesta": "Estoy ocupada terminando lo anterior" + hago +
                                      ". Dame un momento y vuelve a pedírmelo."}
             raise
-        vistos, fin = 0, time.time() + espera_max
+        vistos, fin, avisada = 0, time.time() + espera_max, False
         while time.time() < fin:
             t = self._pedir("/tarea?id=" + tid)
             for linea in t.get("avance", [])[vistos:]:
                 if al_paso:
                     al_paso(t.get("fraccion"), linea)
             vistos = len(t.get("avance", []))
-            if t.get("estado") != "en curso":
+            if t.get("estado") not in ("en curso", "en cola"):   # v2.95: «en cola» también es esperar
                 return t
             if parar and parar():
                 self._pedir("/cancelar", {})
             time.sleep(cada)
         return {"estado": "error", "respuesta": "Ha tardado demasiado."}
+
+    def estado(self):
+        try:
+            return self._pedir("/estado", timeout=4)
+        except Exception:
+            return {}
+
+    def cancelar(self):
+        try:
+            return self._pedir("/cancelar", {})
+        except Exception:
+            return {"ok": False}
+
+    def pausar(self, si=True):
+        try:
+            return self._pedir("/pausar", {"si": bool(si)})
+        except Exception:
+            return {"ok": False}
+
+    def seguir(self):
+        try:
+            return self._pedir("/seguir", {})
+        except Exception:
+            return {"ok": False}
 
 
 def main(argv=None):

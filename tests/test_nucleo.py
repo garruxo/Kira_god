@@ -69,18 +69,52 @@ ok(npo.ejecutar(f, "experimenta con algoritmos de ordenación", paso)["codigo"] 
 ok(npo.ejecutar(f, "piensa", paso)["texto"] == "hola desde el núcleo" and f.hecho[-1] == ("orden", "piensa"),
    "lo demás (pensar, foco, charla…) → procesar_orden")
 
-# ---------- tareas: una cada vez ----------
-lento = threading.Event()
-tr = npo.Trabajos(lambda o, p: (p(0.3, "uno"), lento.wait(5), {"texto": "fin " + o})[2])
+# ---------- tareas EN COLA (v2.95): varias esperan; las TUYAS, delante ----------
+puertas = {}
+hechas = []
+
+
+def _hacer(o, p):
+    p(0.3, "uno:" + o)
+    puertas.setdefault(o, threading.Event()).wait(5)
+    hechas.append(o)
+    return {"texto": "fin " + o}
+
+
+tr = npo.Trabajos(_hacer)
 a = tr.empezar("A")
-ok(a and tr.ocupado() and tr.empezar("B") is None, "una orden cada vez (la segunda espera)")
-lento.set()
-for _ in range(50):
-    if not tr.ocupado():
+for _ in range(60):
+    if tr.ocupado():
+        break
+    time.sleep(0.02)
+ok(a and tr.ocupado(), "la primera arranca sola")
+b = tr.empezar("B")                                  # tuya, en cola (ya NO devuelve None)
+ok(b and tr.ver(b)["estado"] == "en cola" and tr.en_cola() == 1, "la segunda no da error: se pone en cola")
+fondo = tr.empezar("fondo", tuya=False)              # de fondo (pensar/encargo): al final
+c = tr.empezar("C")                                  # tuya: delante de la de fondo
+ok(tr.cola == [b, c, fondo], "tus órdenes van delante de las de fondo")
+for ev in ("A", "B", "fondo", "C"):
+    puertas.setdefault(ev, threading.Event()).set()
+for _ in range(100):
+    if len(hechas) == 4 and not tr.ocupado():
         break
     time.sleep(0.05)
+ok(hechas == ["A", "B", "C", "fondo"], "se hacen en orden: la de curso, luego las tuyas, y al final la de fondo")
 v = tr.ver(a)
-ok(v["estado"] == "hecho" and v["respuesta"] == "fin A" and v["avance"] == ["uno"], "la tarea acaba con su respuesta")
+ok(v["estado"] == "hecho" and v["respuesta"] == "fin A" and v["avance"] == ["uno:A"], "cada tarea acaba con su respuesta")
+
+# pausar: no empieza nuevas; al seguir, sí
+tr2 = npo.Trabajos(lambda o, p: (p(0.5, "x"), {"texto": "fin " + o})[1])
+tr2.pausar(True)
+x = tr2.empezar("X")
+time.sleep(0.2)
+ok(tr2.ver(x)["estado"] == "en cola" and tr2.en_cola() == 1, "pausada: la tarea espera, no empieza")
+tr2.pausar(False)
+for _ in range(60):
+    if tr2.ver(x)["estado"] == "hecho":
+        break
+    time.sleep(0.05)
+ok(tr2.ver(x)["estado"] == "hecho", "al seguir, la hace")
 
 # ---------- el núcleo DE VERDAD en el portátil, con su servidor ----------
 DATOS = os.path.join(T, "kira_datos")
@@ -114,6 +148,13 @@ try:
     ok(False, "un 500 sí debe propagarse")
 except urllib.error.HTTPError as e:
     ok(e.code == 500, "otros errores (500) siguen saliendo como antes")
+# v2.95: estado ligero, pausar y seguir por el servidor
+est = cli.estado()
+ok(all(k in est for k in ("ocupada", "en_cola", "pausada", "cola", "actividad")), "/estado da el estado del trabajo")
+ok(cli.pausar(True).get("pausada") is True and cli.estado()["pausada"] is True, "se puede pausar")
+ok(cli.seguir().get("pausada") is False, "y seguir")
+ok("en_cola" in cli._pedir("/hola"), "/hola también dice cuántas esperan")
+ok(cli.cancelar().get("ok") is True, "el botón de parar llega al núcleo")
 ok("WEBKIT_DISABLE_COMPOSITING_MODE" in open(os.path.join(RAIZ, "kira_portatil", "kiraos.py"), encoding="utf-8").read(),
    "kiraos desactiva la aceleración gráfica (efecto agua en gráficas viejas)")
 
