@@ -298,10 +298,45 @@ _EXT_NO = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico", ".mp3", ".m
 _NO_SEGUIR = re.compile(r"(?:^|[/._?=&-])(?:login|log-in|signin|sign-in|signup|sign-up|registro|register|registrarse|"
                         r"account|cuenta|perfil|profile|cart|carrito|checkout|comprar|buy|pago|payment|donate|donar|"
                         r"subscribe|suscrib|newsletter|share|compartir|cookies?|privacy|privacidad|legal|aviso-legal|"
-                        r"terms|terminos|contact|contacto|advert|publicidad|logout|password|wp-admin|admin)(?:$|[/._?=&-])",
+                        r"terms|terminos|contact|contacto|advert|publicidad|logout|password|wp-admin|admin|"
+                        # v3.04: el «ruido» de los foros (responder, citar, votar, denunciar, perfiles, editar…)
+                        r"reply|newreply|newthread|posting|responder|quote|citar|report|reportar|denunciar|vote|votar|"
+                        r"upvote|downvote|members?|miembros|users?|usuarios?|editar|edit|bookmark|marcadores?|flag|"
+                        r"print|imprimir|rss|feed|ignore|ignorar|award|premiar)(?:$|[/._?=&-])",
                         re.I)
 _REDES = ("facebook.com", "twitter.com", "x.com", "instagram.com", "tiktok.com", "whatsapp.com", "t.me", "telegram.",
           "linkedin.com", "pinterest.", "reddit.com/submit", "doubleclick.", "googleadservices.", "amazon.", "ebay.")
+_PAGINA_TXT = re.compile(r"^\s*(?:\d{1,4}|siguiente|sig\.?|next|›|»|>|>>|más\s+respuestas|ver\s+más|"
+                         r"p[aá]gina\s+\d{1,4}|page\s+\d{1,4}|older|anterior)\s*$", re.I)
+_PAGINA_URL = re.compile(r"(?:[?&](?:page|pagina|pag|p|pg|start|offset)=\d{1,6}\b|/page[/-]?\d{1,5}\b|"
+                         r"/pagina[/-]?\d{1,5}\b|-page-?\d{1,5}\b|/p\d{1,5}(?:$|[/?#])|[-_](?:pag|page)\d{1,5}\b)", re.I)
+_FORO = re.compile(r"(?:^|[./])(?:reddit\.com|stackoverflow\.com|stackexchange\.com|superuser\.com|serverfault\.com|"
+                   r"askubuntu\.com|forocoches\.com|foros?\.|forums?\.|discourse\.|community\.|comunidad\.)|"
+                   r"/(?:foros?|forums?|community|comunidad|questions|preguntas|threads?|hilos?)/|"
+                   r"/t/[^/]+/\d+|showthread|viewtopic|/comments/", re.I)
+
+
+def es_paginacion(url, texto=""):
+    """¿Es el enlace a la página 2, 3… (o «siguiente») de la MISMA conversación/lista? (foros, hilos, listados)."""
+    return bool(_PAGINA_URL.search(str(url or "")) or _PAGINA_TXT.match(str(texto or "")))
+
+
+def es_foro(url):
+    """¿La página es de un foro (respuestas de usuarios)? Kira lo guarda avisando de que son opiniones."""
+    return bool(_FORO.search(str(url or "")))
+
+
+def reescribir(url):
+    """Reddit nuevo se monta con JavaScript; la versión clásica (old.reddit.com) sale ya escrita."""
+    try:
+        p = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url
+    if p.netloc.lower() in ("reddit.com", "www.reddit.com", "new.reddit.com", "m.reddit.com"):
+        return urllib.parse.urlunsplit((p.scheme, "old.reddit.com", p.path, p.query, ""))
+    return url
+
+
 _ESTUDIO = re.compile(r"\b(?:cap[ií]tulo|lecci[oó]n|tema|parte|m[oó]dulo|unidad|siguiente|continuar|curso|tutorial|"
                       r"gu[ií]a|manual|introducci[oó]n|ejemplos?|ejercicios?|documentaci[oó]n|referencia|chapter|"
                       r"lesson|part|module|unit|next|course|guide|docs?|reference|examples?|exercises?|learn)\b", re.I)
@@ -361,10 +396,12 @@ def elegir_enlaces(pag, tema="", n=3, ya=(), todos=False):
         comun = len(claves & palabras)
         estudio = bool(_ESTUDIO.search(txt)) or bool(_ESTUDIO.search(urllib.parse.urlsplit(e["url"]).path))
         misma = dominio(e["url"]) == dom
+        pagina_n = misma and es_paginacion(e["url"], txt)  # v3.04: la página 2, 3… del hilo
+        estudio = estudio or pagina_n
         if not todos:                                       # v3.03: con todos=True, TODOS los de la página
             if not comun and not (misma and estudio):
                 continue                                    # no habla del tema ni sigue el curso: no se sigue
-            if len(txt) < 3 and not comun:
+            if len(txt) < 3 and not comun and not pagina_n:
                 continue
         cand.append(dict(e, puntos=3 * comun + 2 * estudio + 1 * misma))
     if not todos:                                           # todos: en el orden de la página (el de un curso)
@@ -684,6 +721,7 @@ class Internet:
         """{'url', 'titulo', 'texto', 'codigos', 'tipo'} de una página (o PDF, o código)."""
         if not re.match(r"^https?://", str(url or "")):
             raise InternetError("Esa dirección no es una página web.")
+        url = reescribir(url)                                # v3.04: Reddit, en su versión que se puede leer
         gh = self._github(url)
         destino, cab = gh if gh else (url, None)
         try:

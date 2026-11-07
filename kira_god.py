@@ -1563,6 +1563,12 @@ class KiraGodCore:
         resumen, _ = self.resumir_pagina(pag, tema)
         if len(resumen) < 40:
             return False, resumen
+        try:
+            import internet_kira as ik_f
+            if ik_f.es_foro(pag.get("url", "")):          # v3.04: un foro son opiniones de gente: lo apunto así
+                resumen = ("Según un foro (opiniones de usuarios; puede haber errores, compruébalo): " + resumen)
+        except ImportError:
+            pass
         n = rec.guardar(resumen, tema=(tema or pag.get("titulo") or "internet")[:80], fuente=pag.get("url", "internet"))
         return bool(n), resumen
 
@@ -1865,6 +1871,13 @@ class KiraGodCore:
             rec["hechas"].append(e["url"])
             rec["guardadas"] += int(bool(ok))
             leidas_ahora += 1
+            dom_h = ik_.dominio(e["url"])
+            for pg in hija.get("enlaces") or []:                # v3.04: TODAS las páginas de un hilo/listado
+                if (ik_.dominio(pg["url"]) == dom_h and ik_.es_paginacion(pg["url"], pg.get("texto", ""))
+                        and pg["url"].rstrip("/") not in vistos):
+                    vistos.add(pg["url"].rstrip("/"))
+                    rec["pendientes"].insert(0, {"url": pg["url"], "texto": pg.get("texto", ""),
+                                                 "nivel": e.get("nivel", 1)})
             if e.get("nivel", 1) < profundidad:                 # 2.º salto: solo lo que sigue el tema o el curso
                 for n2 in ik_.elegir_enlaces(hija, tema, n=4, ya=vistos):
                     vistos.add(n2["url"].rstrip("/"))
