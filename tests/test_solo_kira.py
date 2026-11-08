@@ -144,6 +144,25 @@ ok(kiraos.tam_pantalla(lambda a: "") is None, "si no lo sabe, None (no inventa)"
 o = kiraos.opciones_ventana(True, (1366, 768), sesion_propia=True)
 ok(o["fullscreen"] and (o["width"], o["height"], o["x"], o["y"]) == (1366, 768, 0, 0) and o["frameless"],
    "en la sesión de Kira: pantalla completa, del tamaño exacto, en la esquina y sin barra de título")
+ok(o["easy_drag"] is False, "v3.07: la pantalla ya no se arrastra con el ratón (easy_drag apagado)")
+
+
+class _WV:                                        # un pywebview antiguo que no conoce easy_drag
+    def __init__(self):
+        self.vistas = []
+
+    def create_window(self, titulo, url, js_api=None, **o):
+        self.vistas.append(dict(o))
+        if "easy_drag" in o:
+            raise TypeError("create_window() got an unexpected keyword argument 'easy_drag'")
+        return "ventana"
+
+
+wv = _WV()
+ok(kiraos.crear_ventana(wv, "KiraOS", "x.html", None, {"fullscreen": True, "easy_drag": False}) == "ventana"
+   and wv.vistas[-1] == {"fullscreen": True}, "con un pywebview antiguo, quita esa opción y abre igual")
+ok("win.events.moved" in open(os.path.join(os.path.dirname(kiraos.__file__), "kiraos.py"), encoding="utf-8").read(),
+   "si aun así se mueve, vuelve a su sitio")
 o = kiraos.opciones_ventana(True, None, sesion_propia=False)
 ok(o["fullscreen"] and "width" not in o and "frameless" not in o, "sin tamaño ni sesión propia: como antes")
 ok("_NET_SUPPORTING_WM_CHECK" in open(ses, encoding="utf-8").read(),

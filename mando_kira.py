@@ -114,6 +114,12 @@ def es_trabajo(texto):
     return bool(_SIEMPRE.match(t) or _HAZ.match(t))
 
 
+def mejora_es_de_kiraos(texto):
+    """v3.07: «mejora KiraOS: …» / «mejora el portátil…» es una mejora para KiraOS (se la pasa tal cual)."""
+    return bool(re.match(r"^(?:por favor\s+)?(?:mejora|prepara(?:le)?\s+una\s+mejora\s+(?:a|para))\s+(?:a\s+)?"
+                         r"(?:kira ?os|el portatil|el sistema del portatil)\b", _norm(texto)))
+
+
 def orden_de_mejora(pedido):
     """Una mejora para el móvil la escribe y la prueba KiraOS (la orden que entiende su núcleo)."""
     return "prepara una mejora para el móvil: " + str(pedido or "").strip()
@@ -146,7 +152,7 @@ _Y_PRUEBALO = re.compile(r"\s*,?\s*y\s+pruebalo\s+en\s+(?:tu|la)\s+maquina(?:\s+
 _NO_FUERA = re.compile(
     r"\b(?:wifi|wi-fi|wi fi|router|aparatos|puertos?\s+abiertos|camara|webcam|microfono|apk|github|compila(?:me|lo|la|r)?|"
     r"libreria\w*|clave|contrasena|password|token|cebo|honeypot|emparejar)\b|"
-    r"\b(?:mi|tu|nuestra)\s+red\b|\bred\s+de\s+casa\b|app\s+de\s+verdad|"
+    r"\b(?:mi|tu|nuestra)\s+red\b|\bred\s+de\s+casa\b|app\s+de\s+verdad|\bandroid\b|\binstalable\b|^anadete\b|"
     r"^(?:apaga\w*|reinicia\w*|enciende\w*|arranca\w*|instala\w*|desinstala\w*|ejecuta\w*|borra\w*|elimina\w*|"
     r"cambia\s+el\s+aspecto|pon\s+el\s+tema|prepara(?:me)?\s+una\s+mejora|mejora(?:te)?\b)|"
     r"^(?:lee|mira|que\s+(?:hay|pone))\b.{0,20}\bpantalla\b|^(?:haz|saca)(?:me)?\s+una\s+(?:foto|captura)|"

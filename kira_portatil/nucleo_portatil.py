@@ -138,6 +138,93 @@ def mejora_para_movil(core, pedido, paso):
             "nombre": nombre, "ok": True}
 
 
+# =====================================================================================
+#  v3.07: KiraOS SE MEJORA A SÍ MISMA, con la misma red de seguridad que el móvil
+#  «mejórate: …» -> la escribe, la prueba en SU laboratorio y la deja ESPERANDO. Instalarla solo desde ESTE portátil,
+#  en la ventana «Mejoras» del escritorio, con DOS toques. Antes de instalar se guarda copia: «Volver atrás» la deshace.
+# =====================================================================================
+_MEJORA_TI = (r"^(?:por\s+favor\s+)?(?:mej[oó]rate|mejora\s+(?:a\s+)?(?:kira\s?os|tu\s+(?:propio\s+)?sistema|"
+              r"a\s+ti\s+misma|el\s+sistema\s+del\s+port[aá]til)|prepara(?:te)?\s+una\s+mejora\s+para\s+"
+              r"(?:ti(?:\s+misma)?|kira\s?os)|a[ñn][aá]dete(?:\s+una\s+funci[oó]n)?|prepara\s+una\s+mejora\s+para\s+"
+              r"el\s+port[aá]til)\s*(?P<sep>[:,]|para\s+que|para|con|que|y)?\s*(?P<p>.*)$")
+_NO_ES_MEJORA_TI = r"^(?:sola|solita|sin\s+parar|constantemente|siempre|cada\s+d[ií]a)$"
+
+
+def pedido_mejora_kiraos(texto):
+    """Lo que pide de mejora PARA KiraOS (o None). «mejórate sola» es el interruptor de la auto-mejora: no es esto."""
+    import re
+    m = re.match(_MEJORA_TI, str(texto or "").strip().rstrip(" .!?"), flags=re.I)
+    if not m:
+        return None
+    p = m.group("p").strip(" ,.:")
+    if len(p) < 4 or re.match(_NO_ES_MEJORA_TI, p, flags=re.I):
+        return None
+    sep = (m.group("sep") or "").lower()
+    return (sep + " " + p).strip() if sep in ("para que", "que") else p
+
+
+def panel_de(core):
+    """El panel de mejoras de KiraOS (el mismo PanelControl del móvil: laboratorio, pendiente, aplicar, volver atrás)."""
+    pan = getattr(core, "_panel", None)
+    if pan is None:
+        import panel_kira
+        pan = panel_kira.PanelControl(core)
+        core._panel = pan
+    return pan
+
+
+def mejora_para_kiraos(core, pedido, paso):
+    paso(0.1, "Escribo la mejora para mí y la pruebo en mi laboratorio…")
+    try:
+        r = panel_de(core).enviar_orden(pedido)
+    except Exception as e:                            # noqa: BLE001
+        return {"texto": f"[x] No he podido preparar la mejora: {e}", "ok": False}
+    if r.get("aprobable"):
+        pend = panel_de(core).pendiente
+        nombre = getattr(pend, "nombre", "") or r.get("nombre", "")
+        return {"texto": f"Mejora «{nombre}» escrita y aprobada por mi laboratorio. NO la he instalado: ábrela en "
+                         "mi escritorio, icono «Mejoras», mira el código y pulsa «Instalar» DOS veces (solo se puede "
+                         "desde este portátil). Si luego no te gusta, «Volver atrás».",
+                "codigo": getattr(pend, "codigo", None), "nombre": nombre, "ok": True}
+    return {"texto": "No la instalo: " + str(r.get("texto", "no pasó el laboratorio")).strip(), "ok": False}
+
+
+def mejoras_estado(core):
+    """Para la ventana «Mejoras»: la pendiente (con su código) y las instaladas."""
+    pan = panel_de(core)
+    pend = pan.pendiente
+    d = {"pendiente": None, "instaladas": [], "auto": False}
+    if pend is not None:
+        d["pendiente"] = {"nombre": pend.nombre, "pedido": pan.pedido_actual, "codigo": pend.codigo[:12000],
+                          "aprobable": bool(pend.aprobable), "resumen": str(pend.resumen())[:1500]}
+    try:
+        d["instaladas"] = pan.modulos()
+    except Exception:
+        pass
+    try:
+        d["auto"] = bool(pan.auto_mejora())
+    except Exception:
+        pass
+    return d
+
+
+def mejora_hacer(core, accion, nombre="", confirmado=False):
+    pan = panel_de(core)
+    if accion == "aplicar":
+        return pan.aplicar(confirmado=confirmado is True)
+    if accion == "rechazar":
+        return pan.rechazar("descartada en el escritorio de KiraOS")
+    if accion == "revertir":
+        return pan.revertir(nombre)
+    if accion == "quitar":
+        if confirmado is not True:
+            return {"ok": False, "texto": "[x] Falta tu confirmación."}
+        return pan.quitar(nombre)
+    if accion == "ver":
+        return pan.ver_modulo(nombre)
+    return {"ok": False, "texto": "[x] No conozco esa acción."}
+
+
 def ejecutar(core, orden, paso):
     """Hace la orden con el núcleo. `paso(fraccion|None, texto)` va contando. Devuelve {texto, codigo?, nombre?}."""
     import re
@@ -187,6 +274,19 @@ def ejecutar(core, orden, paso):
     m_m = re.match(_MEJORA_MOVIL, o_limpia, flags=re.I)
     if m_m:
         return mejora_para_movil(core, m_m.group("p").strip(), paso)
+    p_ti = pedido_mejora_kiraos(o_limpia)          # v3.07: una mejora para MÍ (KiraOS): laboratorio + tus dos toques
+    if p_ti:
+        return mejora_para_kiraos(core, p_ti, paso)
+    import apk_juegos_kira as apk_                 # v3.07: app ANDROID de verdad de cualquier programa
+    p_apk = apk_.pedido_apk(o)
+    if p_apk is not None:
+        paso(0.0, "Preparo la app Android…")
+        if not getattr(core, "ultimo_codigo", None):
+            try:
+                core.ultimo_codigo = maquina().ultimo_codigo
+            except Exception:
+                pass
+        return core.app_android(p_apk.get("pedido"), al_paso=lambda fr, t: paso(fr, t))
     en_maquina = bool(re.search(_Y_PRUEBALO, o, flags=re.I))
     if en_maquina:
         o = re.sub(_Y_PRUEBALO, "", o, flags=re.I).strip()
@@ -212,6 +312,7 @@ def ejecutar(core, orden, paso):
         r = core.experimentar(exp, al_progreso=lambda fr, t: paso(fr, t), mejorar=ex.quiere_mejorar(o))
         if r.get("ok") and r.get("codigo"):
             maquina().ultimo_codigo = r.get("codigo")
+            core.ultimo_codigo = r.get("codigo")
         return {"texto": r.get("texto", ""), "codigo": r.get("codigo") if r.get("ok") else None,
                 "nombre": r.get("nombre"), "ok": bool(r.get("ok"))}
     prog = pk.pedido_programa(o)
@@ -221,6 +322,7 @@ def ejecutar(core, orden, paso):
         if not r.get("ok"):
             return {"texto": str(r.get("texto", "No me salió el programa.")).split("\n")[0], "ok": False}
         maquina().ultimo_codigo = r.get("codigo")
+        core.ultimo_codigo = r.get("codigo")
         texto = "Programa escrito y probado en modo seguro en el portátil."
         if en_maquina:
             try:
@@ -581,6 +683,13 @@ def crear_servidor(host, puerto, token, nucleo):
                 return self._json(200, nucleo.hola())
             if u.path == "/estado":
                 return self._json(200, nucleo.estado())
+            if u.path == "/mejoras":                    # v3.07: solo desde este portátil
+                if not es_local(self.client_address[0]):
+                    return self._json(403, {"error": "Las mejoras de KiraOS solo se miran en el propio portátil."})
+                try:
+                    return self._json(200, mejoras_estado(nucleo.core))
+                except Exception as e:                 # noqa: BLE001
+                    return self._json(500, {"error": str(e)})
             if u.path == "/tarea":
                 tid = (urllib.parse.parse_qs(u.query).get("id") or [""])[0]
                 t = nucleo.trabajos.ver(tid)
@@ -610,6 +719,16 @@ def crear_servidor(host, puerto, token, nucleo):
                                                               "cuando estés en la misma WiFi."})
                 tid = nucleo.trabajos.empezar(orden)   # v2.95: se encola (si está ocupada, espera su turno)
                 return self._json(200, {"id": tid, "en_cola": nucleo.trabajos.en_cola()})
+            if u.path == "/mejora":                     # v3.07: instalar/descartar/volver atrás, SOLO en el portátil
+                if not es_local(self.client_address[0]):
+                    return self._json(403, {"error": "Por seguridad, las mejoras de KiraOS solo se instalan desde el "
+                                                     "propio portátil, con tus dos toques."})
+                d = self._cuerpo_json()
+                try:
+                    return self._json(200, mejora_hacer(nucleo.core, str(d.get("accion") or ""),
+                                                        str(d.get("nombre") or ""), d.get("confirmado") is True))
+                except Exception as e:                 # noqa: BLE001
+                    return self._json(500, {"ok": False, "texto": f"[x] {e}"})
             if u.path == "/pausar":
                 d = self._cuerpo_json()
                 return self._json(200, nucleo.pausar(bool(d.get("si", True))))
@@ -674,6 +793,13 @@ class ClienteNucleo:
                                      headers={"X-Kira-Token": self.token, "Content-Type": "application/json"})
         with self._abrir(req, timeout=timeout) as r:
             return json.loads(r.read(4_000_000).decode("utf-8"))
+
+    def mejoras(self):
+        return self._pedir("/mejoras", timeout=10)
+
+    def mejora(self, accion, nombre="", confirmado=False):
+        return self._pedir("/mejora", {"accion": accion, "nombre": nombre, "confirmado": confirmado is True},
+                           timeout=120)
 
     def disponible(self):
         try:

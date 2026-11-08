@@ -1512,6 +1512,77 @@ class KiraGodCore:
         except OSError:
             return ""
 
+    def app_android(self, pedido=None, codigo=None, titulo=None, al_paso=None, gh=None, bajar=None):
+        """v3.07: una APP DE VERDAD (APK) de CUALQUIER programa, no solo de juegos. Si no traes código, la escribo y
+        la pruebo en modo seguro (o uso el último programa que hice). Se compila en TU GitHub (repositorio
+        kira-juegos, con tu clave) y bajo el APK. Devuelve {texto, ok, ruta?, url?}."""
+        import apk_juegos_kira as apk
+
+        def paso(fr, t):
+            if al_paso:
+                try:
+                    al_paso(fr, t)
+                except Exception:
+                    pass
+        token = self.clave_github()
+        if not token and gh is None:
+            return {"ok": False, "texto": "Para hacer apps de verdad necesito tu clave de GitHub (solo una vez). En "
+                    "github.com: tu foto › Settings › Developer settings › Personal access tokens › Tokens (classic) "
+                    "› Generate new token (classic); marca «public_repo» y «workflow». Luego escríbeme AQUÍ "
+                    "«config github: » y la clave, y vuelve a pedirme la app."}
+        if not codigo and pedido:
+            paso(0.0, "Escribo el programa de la app…")
+            r = self.programa_acordado("un programa " + str(pedido).strip(" :"), al_paso=lambda t: paso(None, t))
+            if not r.get("ok"):
+                return {"ok": False, "texto": "No me ha salido el programa de la app: "
+                        + str(r.get("texto", "")).split("\n")[0]}
+            codigo = r.get("codigo")
+            self.ultimo_codigo = codigo
+        if not codigo:
+            codigo = getattr(self, "ultimo_codigo", None)
+        if not codigo:
+            return {"ok": False, "texto": "¿De qué hago la app? Dime, por ejemplo, «hazme una app android que "
+                    "calcule propinas», o pídeme antes un programa y luego «conviértelo en una app de verdad»."}
+        titulo = titulo or apk.titulo_de(pedido, codigo)
+        tipo = "juego" if apk.es_juego(codigo) else "programa"
+        try:
+            gh = gh or apk.GitHub(token)
+            reg = apk.Registro(os.path.join(self.dir, "apk_juegos.json"))
+            r = apk.compilar(gh, codigo, titulo, reg, progreso=lambda f, t: paso(f, t),
+                             cancelado=getattr(self, "cancelado", None), tipo=tipo)
+        except apk.ApkError as e:
+            return {"ok": False, "texto": f"[x] {e}"}
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "texto": f"[x] No he podido hacer la app: {e}"}
+        dest = os.path.join(self.dir, "apk", r["id"] + ".apk")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        texto = f"¡Lista la app «{titulo}» (versión {r['n']})!"
+        try:
+            paso(0.99, "Bajo el APK…")
+            if bajar is None:
+                import descargas_kira as dsk
+                bajar = lambda url, ruta: dsk.bajar(url, ruta, None, "el APK")   # noqa: E731
+            for viejo in (dest, dest + ".parte"):
+                if os.path.exists(viejo):
+                    os.remove(viejo)
+            bajar(r["url_apk"], dest)
+            copia = ""
+            if getattr(self, "es_kiraos", False):        # en el portátil, también a tu carpeta Descargas
+                d = os.path.expanduser("~/Descargas")
+                d = d if os.path.isdir(d) else os.path.expanduser("~/Downloads")
+                if os.path.isdir(d):
+                    import shutil
+                    copia = os.path.join(d, r["id"] + ".apk")
+                    shutil.copy2(dest, copia)
+            texto += (f" La tienes en {copia or dest}. " if (copia or os.path.exists(dest)) else " ")
+        except Exception as e:                        # noqa: BLE001
+            texto += f" No la he podido bajar ({e}). "
+        texto += (f"Para el móvil: bájala desde aquí y ábrela con Archivos › Instalar: {r['url_apk']}"
+                  + ("" if tipo == "juego" else
+                     "\n(Es una app de texto: lo que imprime el programa sale en pantalla y, cuando pregunta, "
+                     "te sale una caja para contestar.)"))
+        return {"ok": True, "texto": texto, "ruta": dest, "url": r["url_apk"], "codigo": codigo}
+
     def exportar_a_descargas(self, ruta, nombre, tipo="application/pdf"):
         """Copia un archivo a la carpeta Descargas del móvil (para abrirlo con otras apps). (ok, mensaje)."""
         try:
@@ -2164,6 +2235,11 @@ class KiraGodCore:
                 partes.append(f"Tienes {len(rec)} mejora(s) que me ha preparado KiraOS ("
                               + ", ".join(m.get("nombre", "?") for m in rec[:5]) + "): instálalas en el panel con "
                               "dos toques (es tu permiso).")
+            pan_ = getattr(self, "_panel", None)          # v3.07: una mejora para MÍ esperando tus dos toques
+            pend_ = getattr(pan_, "pendiente", None) if pan_ is not None else None
+            if pend_ is not None and getattr(self, "es_kiraos", False):
+                partes.append(f"Tengo una mejora para mí esperando tu permiso («{pend_.nombre}»): ábrela en el "
+                              "icono «Mejoras» del escritorio e instálala con dos toques.")
             pm = sc_.mejoras_para_movil(self.dir)
             if pm and getattr(self, "es_kiraos", False):
                 partes.append(f"Tengo {len(pm)} mejora(s) preparadas para el móvil: se las doy al sincronizar.")

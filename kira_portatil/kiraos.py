@@ -232,7 +232,22 @@ def opciones_ventana(pantalla, tam=None, sesion_propia=None):
         o["min_size"] = (min(900, tam[0]), min(640, tam[1]))
     if pantalla and sesion_propia:
         o["frameless"] = True                   # sin barra de título: solo Kira
+    o["easy_drag"] = False                      # v3.07: sin barra, pywebview dejaba ARRASTRAR la pantalla con el ratón
     return o
+
+
+def crear_ventana(webview, titulo, url, api, opciones):
+    """create_window; si el pywebview es antiguo y no conoce alguna opción (easy_drag…), la quita y prueba otra vez."""
+    o = dict(opciones)
+    for _ in range(4):
+        try:
+            return webview.create_window(titulo, url, js_api=api, **o)
+        except TypeError as e:
+            malo = next((k for k in list(o) if k in str(e)), None)
+            if malo is None:
+                raise
+            o.pop(malo)
+    return webview.create_window(titulo, url, js_api=api)
 
 
 def arrancar(api, pantalla=True):
@@ -243,7 +258,7 @@ def arrancar(api, pantalla=True):
     except Exception:
         return _reserva(api, pantalla)
     tam = tam_pantalla() if pantalla else None
-    win = webview.create_window("KiraOS", ARRANQUE, js_api=api, **opciones_ventana(pantalla, tam))
+    win = crear_ventana(webview, "KiraOS", ARRANQUE, api, opciones_ventana(pantalla, tam))
     api._ventana = win
     api.web = True                              # el escritorio vive en esta misma ventana
 
@@ -257,6 +272,19 @@ def arrancar(api, pantalla=True):
             pass
     try:
         win.events.shown += al_mostrarse
+    except Exception:
+        pass
+
+    def al_moverse(*_a):                        # v3.07: si aun así se mueve, vuelve a su sitio
+        if pantalla and tam:
+            try:
+                x, y = (_a[0], _a[1]) if len(_a) >= 2 else (getattr(win, "x", 0), getattr(win, "y", 0))
+                if (x, y) != (0, 0):
+                    win.move(0, 0)
+            except Exception:
+                pass
+    try:
+        win.events.moved += al_moverse
     except Exception:
         pass
     webview.start()

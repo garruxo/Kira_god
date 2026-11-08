@@ -414,6 +414,285 @@ def proyecto(codigo, titulo, n=1, dibujos=None, build_dir="/home/runner/.kira_bu
     return jid, archivos
 
 
+# =====================================================================================
+#  v3.07: APK DE CUALQUIER PROGRAMA (no solo juegos)
+#  - si el programa ya es una app de Kivy (tiene su App y su .run()), va TAL CUAL como main.py;
+#  - si es un programa de texto (print / input), va en programa.py y lo abre un reproductor: lo que imprime sale en
+#    pantalla y, cuando pregunta (input), aparece una caja para contestar.
+#  Solo la biblioteca estándar de Python y Kivy (otra librería no entraría en el APK sin cambiar la receta).
+# =====================================================================================
+REPRODUCTOR_PROGRAMA = r"""# -*- coding: utf-8 -*-
+'''Reproductor de un programa de Kira (lo genera Kira: apk_juegos_kira.py). El programa está en programa.py.'''
+import builtins
+import queue
+import runpy
+import sys
+import threading
+import traceback
+
+MAX_TEXTO = 20000
+
+
+class _Salida:
+    def __init__(self, cola):
+        self.cola = cola
+
+    def write(self, t):
+        if t:
+            self.cola.put(("texto", str(t)))
+        return len(t or "")
+
+    def flush(self):
+        pass
+
+
+class Ejecutor:
+    '''Corre programa.py en un hilo: lo que imprime va a la cola; input() espera tu respuesta.'''
+
+    def __init__(self, modulo="programa"):
+        self.modulo = modulo
+        self.cola = queue.Queue()
+        self.respuestas = queue.Queue()
+        self.corriendo = False
+        self.esperando = False
+
+    def _pedir(self, mensaje=""):
+        if mensaje:
+            self.cola.put(("texto", str(mensaje)))
+        self.esperando = True
+        self.cola.put(("pide", None))
+        r = self.respuestas.get()
+        self.esperando = False
+        if r is None:
+            raise SystemExit(0)
+        self.cola.put(("texto", str(r) + "\n"))
+        return r
+
+    def contestar(self, texto):
+        if self.esperando:
+            self.respuestas.put(str(texto))
+
+    def parar(self):
+        if self.esperando:
+            self.respuestas.put(None)
+
+    def _correr(self):
+        out, inp = sys.stdout, builtins.input
+        sys.stdout, builtins.input = _Salida(self.cola), self._pedir
+        try:
+            runpy.run_module(self.modulo, run_name="__main__")
+        except SystemExit:
+            pass
+        except Exception:
+            self.cola.put(("texto", "\n[error]\n" + traceback.format_exc()[-1500:]))
+        finally:
+            sys.stdout, builtins.input = out, inp
+            self.corriendo = False
+            self.cola.put(("fin", None))
+
+    def arrancar(self):
+        if self.corriendo:
+            return False
+        self.corriendo = True
+        threading.Thread(target=self._correr, daemon=True).start()
+        return True
+
+
+def principal():
+    from kivy.app import App
+    from kivy.clock import Clock
+    from kivy.core.window import Window
+    from kivy.metrics import dp, sp
+    from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.button import Button
+    from kivy.uix.label import Label
+    from kivy.uix.scrollview import ScrollView
+    from kivy.uix.textinput import TextInput
+
+    Window.clearcolor = (0.06, 0.09, 0.16, 1)
+
+    class ProgramaApp(App):
+        title = {titulo!r}
+
+        def build(self):
+            self.ej = Ejecutor()
+            raiz = BoxLayout(orientation="vertical", padding=dp(6), spacing=dp(6))
+            arriba = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
+            arriba.add_widget(Label(text=self.title, font_size=sp(16), bold=True))
+            arriba.add_widget(Button(text="Otra vez", size_hint_x=None, width=dp(110), on_release=self.otra))
+            raiz.add_widget(arriba)
+            self.caja = ScrollView()
+            self.salida = Label(text="", font_size=sp(15), halign="left", valign="top", size_hint_y=None)
+            self.salida.bind(width=lambda w, *_: setattr(w, "text_size", (w.width, None)),
+                             texture_size=lambda w, ts: setattr(w, "height", ts[1]))
+            self.caja.add_widget(self.salida)
+            raiz.add_widget(self.caja)
+            abajo = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(6))
+            self.entrada = TextInput(multiline=False, font_size=sp(16), hint_text="Tu respuesta…", disabled=True)
+            self.entrada.bind(on_text_validate=self.enviar)
+            self.boton = Button(text="Enviar", size_hint_x=None, width=dp(100), disabled=True, on_release=self.enviar)
+            abajo.add_widget(self.entrada)
+            abajo.add_widget(self.boton)
+            raiz.add_widget(abajo)
+            Clock.schedule_interval(self.mirar, 0.1)
+            self.ej.arrancar()
+            return raiz
+
+        def mirar(self, dt):
+            cambio = False
+            while True:
+                try:
+                    tipo, dato = self.ej.cola.get_nowait()
+                except queue.Empty:
+                    break
+                if tipo == "texto":
+                    self.salida.text = (self.salida.text + dato)[-MAX_TEXTO:]
+                    cambio = True
+                elif tipo == "pide":
+                    self.entrada.disabled = self.boton.disabled = False
+                    self.entrada.focus = True
+                elif tipo == "fin":
+                    self.salida.text += "\n— Fin. Pulsa «Otra vez» para repetir. —"
+                    cambio = True
+            if cambio:
+                self.caja.scroll_y = 0
+
+        def enviar(self, *_):
+            if not self.ej.esperando:
+                return
+            t = self.entrada.text
+            self.entrada.text = ""
+            self.entrada.disabled = self.boton.disabled = True
+            self.ej.contestar(t)
+
+        def otra(self, *_):
+            if self.ej.corriendo and not self.ej.esperando:
+                return                      # está trabajando: no se puede cortar a medias
+            self.ej.parar()
+            self.salida.text = ""
+            self.entrada.disabled = self.boton.disabled = True
+            Clock.schedule_once(lambda *_: self.ej.arrancar(), 0.2)
+
+    ProgramaApp().run()
+
+
+if __name__ == "__main__":
+    principal()
+"""
+
+_STDLIB = set(getattr(__import__("sys"), "stdlib_module_names", ())) | {"__future__"}
+
+
+def es_app_kivy(codigo):
+    """¿El programa ya es una app de Kivy (importa kivy y llama a .run())? Entonces va tal cual."""
+    import ast
+    try:
+        arbol = ast.parse(codigo)
+    except SyntaxError:
+        return False
+    kivy = run = False
+    for n in ast.walk(arbol):
+        if isinstance(n, ast.Import) and any(a.name.split(".")[0] == "kivy" for a in n.names):
+            kivy = True
+        elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "kivy":
+            kivy = True
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "run":
+            run = True
+    return kivy and run
+
+
+def es_juego(codigo):
+    """¿Es un juego del motor de Kira (una clase que hereda de Juego)?"""
+    import ast
+    try:
+        arbol = ast.parse(codigo)
+    except SyntaxError:
+        return False
+    for n in ast.walk(arbol):
+        if isinstance(n, ast.ClassDef):
+            for b in n.bases:
+                if (isinstance(b, ast.Name) and b.id == "Juego") or (isinstance(b, ast.Attribute) and b.attr == "Juego"):
+                    return True
+    return False
+
+
+def librerias_raras(codigo):
+    """Las librerías que importa y que NO son de Python ni Kivy (no entrarían en el APK)."""
+    import ast
+    try:
+        arbol = ast.parse(codigo)
+    except SyntaxError as e:
+        raise ApkError(f"El programa tiene un error de escritura (línea {e.lineno}): arréglalo antes.")
+    raras = set()
+    for n in ast.walk(arbol):
+        nombres = []
+        if isinstance(n, ast.Import):
+            nombres = [a.name for a in n.names]
+        elif isinstance(n, ast.ImportFrom) and not n.level:
+            nombres = [n.module or ""]
+        for x in nombres:
+            r = x.split(".")[0]
+            if r and r not in _STDLIB and r not in ("kivy", "motor_juegos_kira"):
+                raras.add(r)
+    return sorted(raras)
+
+
+def proyecto_programa(codigo, titulo, n=1, build_dir="/home/runner/.kira_build"):
+    """{ruta: bytes} de una app de un PROGRAMA cualquiera (va en la misma carpeta juegos/<id>/ que compila GitHub)."""
+    raras = librerias_raras(codigo)
+    if raras:
+        raise ApkError("Ese programa usa librerías que no van dentro de la app (" + ", ".join(raras) + "). "
+                       "Pídemelo solo con Python normal (y Kivy si quieres botones).")
+    jid = id_de(titulo)
+    base = f"juegos/{jid}/"
+    tit = re.sub(r"[\r\n=]", " ", titulo).strip()[:40] or "App de Kira"
+    archivos = {base + "icono.png": icono_png(titulo),
+                base + "buildozer.spec": ESPEC.format(titulo=tit, id=jid, n=int(n),
+                                                      build_dir=build_dir).encode("utf-8")}
+    if es_app_kivy(codigo):
+        archivos[base + "main.py"] = codigo.encode("utf-8")
+    else:
+        archivos[base + "main.py"] = REPRODUCTOR_PROGRAMA.replace("{titulo!r}", repr(tit)).encode("utf-8")
+        archivos[base + "programa.py"] = codigo.encode("utf-8")
+    return jid, archivos
+
+
+# ---------- la orden: «hazme una app android que…», «conviértelo en una app de verdad» ----------
+_APP = r"(?:una?\s+)?(?:app|aplicacion|apk)"
+_DONDE_APK = r"(?:de\s+verdad|(?:para\s+)?android|(?:para\s+)?(?:el\s+)?movil|instalable|apk)"
+_PIDE_APK = re.compile(r"^(?:por favor\s+)?(?:hazme|haz|creame|crea|fabricame|fabrica|construyeme|construye|"
+                       r"programame|programa|generame|genera)\s+" + _APP + r"\s+" + _DONDE_APK +
+                       r"(?:\s+" + _DONDE_APK + r")?\s*(?P<p>.*)$")
+_PIDE_APK2 = re.compile(r"^(?:por favor\s+)?(?:hazme|haz|creame|crea)\s+un\s+apk\s+(?P<p>(?:que|de|para|con)\b.+|:.+)$")
+_CONVIERTE = re.compile(r"^(?:conviertelo|convierte(?:\s+(?:el\s+programa|esto|eso|lo))?|pasalo|hazlo|"
+                        r"haz(?:\s+(?:el\s+programa|esto|eso))?)\s+(?:en|a|como)\s+" + _APP + r"\s+" + _DONDE_APK)
+
+
+def pedido_apk(texto):
+    """None si no es esto; si no, {'pedido': lo que debe hacer la app} o {'pedido': None} (= el último programa)."""
+    t = _plano(re.sub(r"^\s*(?:oye\s+)?kira[\s,:]+", "", str(texto or ""), flags=re.I)).strip(" .!?¡¿")
+    t = re.sub(r"\s+", " ", t)
+    if _CONVIERTE.match(t):
+        return {"pedido": None}
+    m = _PIDE_APK.match(t) or _PIDE_APK2.match(t)
+    if not m:
+        return None
+    p = m.group("p").strip(" ,.:")
+    return {"pedido": p if len(p) >= 3 else None}
+
+
+def titulo_de(pedido, codigo=""):
+    """Un título corto para la app («una calculadora de propinas» -> «Calculadora de propinas»)."""
+    t = str(pedido or "").strip(" :")
+    for _ in range(3):
+        t = re.sub(r"^(?:un|una|el|la|que|me|de|para|con|sirva para)\s+", "", t, flags=re.I)
+    t = re.sub(r"\s+", " ", t)[:30].strip(" ,.:")
+    if not t:
+        m = re.search(r"^\s*['\"]{3}\s*(.+)", codigo or "")
+        t = (m.group(1).strip()[:30] if m else "") or "Mi app"
+    return t[0].upper() + t[1:]
+
+
 def repo_base():
     return {".github/workflows/" + FLUJO: FLUJO_YML.encode("utf-8"), "compilar_juego.sh": COMPILAR.encode("utf-8"),
             "README.md": LEEME.encode("utf-8")}
@@ -588,7 +867,8 @@ class Registro:
         return 12 * 60 if self.datos else 30 * 60
 
 
-def compilar(gh, codigo, titulo, registro, dibujos=None, progreso=None, cancelado=None, reloj=time.monotonic):
+def compilar(gh, codigo, titulo, registro, dibujos=None, progreso=None, cancelado=None, reloj=time.monotonic,
+             tipo="juego"):
     """Sube el juego, lo compila en GitHub y espera. Devuelve {'id', 'url_apk', 'n', 'run'}. Lanza ApkError.
     progreso(fraccion, texto)."""
     def avisa(f, t):
@@ -603,7 +883,10 @@ def compilar(gh, codigo, titulo, registro, dibujos=None, progreso=None, cancelad
     rama = gh.preparar_repo()
     mira_cancelado()
     n = registro.siguiente(id_de(titulo))
-    jid, archivos = proyecto(codigo, titulo, n, dibujos)
+    if tipo == "programa":                         # v3.07: un programa cualquiera (no un juego)
+        jid, archivos = proyecto_programa(codigo, titulo, n)
+    else:
+        jid, archivos = proyecto(codigo, titulo, n, dibujos)
     todo = dict(repo_base())
     todo.update(archivos)
     gh.subir(todo, rama, f"Kira: {titulo}", progreso=lambda f, r: avisa(0.02 + 0.06 * f, f"Subo {r}…"))
@@ -627,7 +910,7 @@ def compilar(gh, codigo, titulo, registro, dibujos=None, progreso=None, cancelad
         gh.dormir(20)
     if r.get("conclusion") != "success":
         motivo = gh.motivo_fallo(run["id"])
-        raise ApkError("GitHub no ha podido compilar el juego" + (f": {motivo}" if motivo else "")
+        raise ApkError("GitHub no ha podido compilar " + ("la app" if tipo == "programa" else "el juego") + (f": {motivo}" if motivo else "")
                        + f". Detalle: {gh.url_ejecucion(run['id'])}")
     url = gh.url_apk(jid)
     registro.apuntar(jid, n, url)

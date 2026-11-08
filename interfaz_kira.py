@@ -1069,6 +1069,9 @@ def construir_interfaz(core, consola=None, modo=None):
             decir("En el móvil ya no tengo editor: el código lo escribe y lo prueba KiraOS. Pídeme «mejora para el "
                   "móvil: …» y KiraOS me la prepara; luego la instalas tú desde el panel con dos toques.", hablar=False)
             return
+        if mdk_.mejora_es_de_kiraos(orden):            # v3.07: una mejora para KiraOS (se instala allí, dos toques)
+            trabajo_a_kiraos(orden)
+            return
         pedido = ik2_.pedido_mejora(orden)
         if pedido is not None:                          # una mejora para MÍ: la escribe y prueba KiraOS
             trabajo_a_kiraos(mdk_.orden_de_mejora(pedido))

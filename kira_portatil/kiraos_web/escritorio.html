@@ -9,6 +9,7 @@
   -webkit-user-select:none;user-select:none}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto)}
 input{-webkit-user-select:text;user-select:text}
+img,svg,a{-webkit-user-drag:none;user-drag:none}
 svg{display:block}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
@@ -68,6 +69,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .b{padding:9px 16px;border-radius:10px;background:rgba(130,170,230,.1);box-shadow:inset 0 0 0 1px var(--borde);font-size:14px}
 .b:hover{background:rgba(130,170,230,.18)}
 .b.prin{background:linear-gradient(100deg,#0ea5c7,#2563eb);box-shadow:none;color:#fff}
+.b.aviso{background:#e11d74;color:#fff;box-shadow:none}
 .b.peligro{box-shadow:inset 0 0 0 1px rgba(251,113,133,.5);color:#ffc2cc}
 .resultado{margin-top:16px;padding:12px 14px;border-radius:10px;background:rgba(5,8,16,.6);box-shadow:inset 0 0 0 1px var(--borde);
   white-space:pre-wrap;line-height:1.5;font-size:14px;display:none}
@@ -264,6 +266,7 @@ var ICO = {
   cuaderno:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   programando:'<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   movil:'<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/>',
+  mejoras:'<path d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.4l-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/>',
   ajustes:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   bloquear:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   reiniciar:'<path d="M20 11a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
@@ -277,6 +280,7 @@ var ICONOS = [
   {id:"red",titulo:"Mi red",sub:"aparatos de casa"},{id:"mapa",titulo:"Mapa de ataques",sub:"de dónde vienen"},
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
+  {id:"mejoras",titulo:"Mejoras",sub:"mejorarme a mí misma"},
   {id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
 function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; } return id; }
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -310,6 +314,8 @@ var FAKE = {
         botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Últimas visitas",accion:"hacer:visitas"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
       movil:{titulo:"Móvil",texto:"El móvil se sincronizó conmigo hace 7 min. En total me ha pasado 348 cosa(s) (se suman, no se borra nada).\n\nCuando Kira app llega a casa me pasa sola lo que ha aprendido y yo le paso lo mío.",
         botones:[{texto:"Ver el código para emparejar",accion:"hacer:codigo"}]},
+      mejoras:{titulo:"Mejoras",texto:"ESPERANDO TU PERMISO: «decir_hora»\nMi laboratorio la ha APROBADO.\n\nEl código:\ndef registrar(k):\n    k.orden('qué hora es', lambda t: 'Son las…')",
+        botones:[{texto:"Instalar",accion:"hacer:aplicar",dos:true},{texto:"Descartar",accion:"hacer:rechazar"}]},
       ajustes:{titulo:"Ajustes",texto:"KiraOS versión 2.90.\nCerebro: rápido.\nVoz: puesta.\n\nPARTIDA DE NACIMIENTO DE KIRA\nNací el sábado 7 de noviembre de 2026.",
         botones:[{texto:"Cerebro rápido",accion:"hacer:rapido"},{texto:"Cerebro grande",accion:"hacer:grande"},{texto:"Con voz",accion:"hacer:voz_si"},{texto:"Sin voz",accion:"hacer:voz_no"}]}};
     return Promise.resolve(T[n]||{titulo:n,texto:"",botones:[]}); },
@@ -419,16 +425,24 @@ $("volver").onclick=volver; $("cerrar").onclick=volver;
 function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
   c.innerHTML='<div class="texto">'+esc(d.texto||"")+'</div><div class="botones">'+(d.botones||[]).map(function(b,i){
-    return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'">'+esc(b.texto)+'</button>'; }).join("")+
+    return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'"'+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+
     '</div><div class="resultado" id="resultado"></div>';
-  [].forEach.call(c.querySelectorAll("[data-acc]"), function(b){ b.onclick=function(){ accion(id, b.dataset.acc); }; });
+  [].forEach.call(c.querySelectorAll("[data-acc]"), function(b){ b.onclick=function(){
+    if(b.dataset.dos && !b.dataset.armado){            // DOS toques: el primero solo avisa
+      b.dataset.armado="1"; b.dataset.antes=b.textContent; b.textContent="¿Seguro? Pulsa otra vez"; b.classList.add("aviso");
+      setTimeout(function(){ if(b.dataset.armado){ delete b.dataset.armado; b.textContent=b.dataset.antes; b.classList.remove("aviso"); } }, 5000);
+      return;
+    }
+    delete b.dataset.armado; accion(id, b.dataset.acc); }; });
 }
 function accion(id, acc){
   var dos=acc.indexOf(":"), tipo=acc.slice(0,dos), arg=acc.slice(dos+1);
   if(tipo==="decir"){ enviar(arg); return; }
   if(tipo==="app"){ abrir(arg); return; }
   var r=$("resultado"); if(r){ r.className="resultado on"; r.textContent="Un momento…"; }
-  llama("app_hacer", id, arg).then(function(d){ if(r) r.textContent=(d&&d.texto)||"Hecho."; refrescaBarra(); })
+  llama("app_hacer", id, arg).then(function(d){
+      if(d&&d.refrescar&&actual===id){ return llama("app", id).then(function(a){ pintaApp(id, a); var r2=$("resultado"); if(r2){ r2.className="resultado on"; r2.textContent=d.texto||"Hecho."; } }); }
+      if(r) r.textContent=(d&&d.texto)||"Hecho."; refrescaBarra(); })
     .catch(function(e){ if(r) r.textContent="No he podido: "+e; });
 }
 

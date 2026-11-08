@@ -48,6 +48,7 @@ ICONOS = [
     {"id": "cuaderno", "titulo": "Cuaderno", "sub": "lo que piensa"},
     {"id": "programando", "titulo": "Programando", "sub": "verla escribir código"},
     {"id": "movil", "titulo": "Móvil", "sub": "sincronía con Kira app"},
+    {"id": "mejoras", "titulo": "Mejoras", "sub": "mejorarme a mí misma"},
     {"id": "ajustes", "titulo": "Ajustes", "sub": "cerebro, voz, nacimiento"},
 ]
 
@@ -398,6 +399,8 @@ class EscritorioMixin:
                 self.voz_activa_poner(accion == "voz_si")
                 return {"texto": "Voz " + ("puesta: te contesto hablando." if self.voz_activa else
                                            "quitada: te contesto solo por escrito.")}
+        if nombre == "mejoras":                       # v3.07: sus propias mejoras (solo aquí, en el portátil)
+            return self._mejoras_hacer(accion)
         if nombre == "movil" and accion == "codigo":
             return {"texto": codigo_movil()}
         if nombre == "maquina" and accion == "visitas":
@@ -406,6 +409,59 @@ class EscritorioMixin:
             return {"texto": ("Lo último que ha pasado por la puerta de mi máquina (solo el sitio, nunca el contenido):\n"
                               + "\n".join(v)) if v else "Mi máquina aún no ha salido a internet."}
         return {"texto": "No conozco ese botón."}
+
+    # ---------- v3.07: MEJORAS de KiraOS (laboratorio + tus dos toques + volver atrás) ----------
+    def _app_mejoras(self):
+        n = self._nucleo()
+        if n is None:
+            return {"titulo": "Mejoras", "texto": "No encuentro mi núcleo: sin él no puedo mirar mis mejoras.",
+                    "botones": []}
+        try:
+            d = n.mejoras()
+        except Exception as e:                        # noqa: BLE001
+            return {"titulo": "Mejoras", "texto": f"[x] No he podido mirarlas: {e}", "botones": []}
+        partes, botones = [], []
+        pend = d.get("pendiente")
+        if pend:
+            partes.append(f"ESPERANDO TU PERMISO: «{pend.get('nombre')}»"
+                          + (f" — lo que pediste: {pend.get('pedido')}" if pend.get("pedido") else "")
+                          + "\nMi laboratorio la ha " + ("APROBADO." if pend.get("aprobable") else "rechazado.")
+                          + "\n\nEl código:\n" + str(pend.get("codigo") or ""))
+            if pend.get("aprobable"):
+                botones.append({"texto": "Instalar", "accion": "hacer:aplicar", "dos": True})
+            botones.append({"texto": "Descartar", "accion": "hacer:rechazar"})
+        else:
+            partes.append("No tengo ninguna mejora esperando. Pídemela en la barra de abajo, por ejemplo: "
+                          "«mejórate: que me digas la hora cuando te pregunte qué hora es». La escribo, la pruebo en "
+                          "mi laboratorio y aquí la verás con su código; NO se instala hasta que tú pulses «Instalar» "
+                          "dos veces (y solo desde este portátil).")
+        inst = d.get("instaladas") or []
+        if inst:
+            partes.append("INSTALADAS:\n" + "\n".join(
+                "· " + m.get("nombre", "?") + (" (órdenes: " + ", ".join(m.get("comandos") or []) + ")"
+                                                if m.get("comandos") else "") for m in inst))
+            for m in inst[:8]:
+                nom = m.get("nombre", "")
+                botones.append({"texto": f"Volver atrás «{nom}»", "accion": f"hacer:revertir:{nom}", "dos": True})
+                botones.append({"texto": f"Quitar «{nom}»", "accion": f"hacer:quitar:{nom}", "dos": True})
+        partes.append("Cada vez que instalo una guardo copia de lo de antes: «Volver atrás» deja la versión anterior "
+                      "y «Quitar» la saca (también con copia). Mis mejoras añaden órdenes y funciones; no cambian "
+                      "mis pantallas.")
+        return {"titulo": "Mejoras", "texto": "\n\n".join(partes), "botones": botones}
+
+    def _mejoras_hacer(self, accion):
+        n = self._nucleo()
+        if n is None:
+            return {"texto": "No encuentro mi núcleo.", "refrescar": False}
+        partes = str(accion or "").split(":", 1)
+        que, nombre = partes[0], (partes[1] if len(partes) > 1 else "")
+        if que not in ("aplicar", "rechazar", "revertir", "quitar"):
+            return {"texto": "No conozco ese botón."}
+        try:
+            r = n.mejora(que, nombre, confirmado=que in ("aplicar", "quitar"))
+        except Exception as e:                        # noqa: BLE001
+            return {"texto": f"[x] No he podido: {e}"}
+        return {"texto": str(r.get("texto", "Hecho.")), "refrescar": True}
 
     def _app_red(self):
         botones = [{"texto": "Buscar aparatos", "accion": "hacer:inventario"},
