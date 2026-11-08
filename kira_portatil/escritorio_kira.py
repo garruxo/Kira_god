@@ -541,9 +541,15 @@ class EscritorioMixin:
             if ventana is None:
                 return {"ok": False, "texto": "Aquí no hay ventana de KiraOS que cerrar. Pulsa Alt + F4."}
             cerrar = ventana.destroy
+        try:                       # v3.05: la sesión propia de Kira (kiraos-sesion) abre entonces el escritorio
+            marca = os.path.join(os.path.expanduser("~"), ".kira_ir_a_xubuntu")
+            with open(marca, "w", encoding="utf-8") as f:
+                f.write("1")
+        except OSError:
+            pass
         # un momento de espera para que la pantalla reciba la respuesta antes de que se cierre la ventana
         threading.Timer(0.6, cerrar).start()
-        return {"ok": True, "texto": "Te dejo en Xubuntu. Para volver, busca «Kira» en su menú."}
+        return {"ok": True, "texto": "Te dejo en Xubuntu. Para volver, busca «Kira» en su menú (o reinicia)."}
 
 
 def codigo_movil(correr=None):

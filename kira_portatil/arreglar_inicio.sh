@@ -27,8 +27,10 @@ GDM="$R/etc/gdm3"
 # ---------------- LightDM (Xubuntu, Lubuntu…) ----------------
 if [ -d "$LDM" ]; then
   # la sesión que hay que abrir
-  SES=""
+  SES="${KIRA_SESION:-}"                       # v3.05: «kiraos» = la sesión propia de Kira (sin escritorio)
+  [ -n "$SES" ] && [ ! -f "$R/usr/share/xsessions/$SES.desktop" ] && SES=""
   for s in xubuntu xfce lubuntu LXQt; do
+    [ -n "$SES" ] && break
     if [ -f "$R/usr/share/xsessions/$s.desktop" ]; then SES="$s"; break; fi
   done
   if [ -z "$SES" ]; then

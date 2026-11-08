@@ -145,3 +145,16 @@ Las **órdenes de trabajo** siguen esperando a que llegues a casa, y la charla u
 
 Seguridad: Tailscale es una red privada y cifrada entre tus aparatos; no se abre nada en el router. Kira solo deja
 entrar por esa red (puertos 8770 y 8771 en `tailscale0`) y sigue pidiendo su llave (el token).
+
+## Solo Kira al encender (v3.05)
+
+Para que al encender NO se vea Xubuntu (ni su logo al arrancar ni su escritorio) y salga directamente Kira:
+
+    cd kira_god/kira_portatil
+    bash solo_kira.sh          (con el teclado: «bash solo» + Tab)
+    sudo reboot
+
+- Al arrancar sale el orbe de Kira (en vez del logo de Xubuntu) y después Kira, en su propia sesión.
+- Para ir al escritorio de Xubuntu: menú K ▸ «Ir a Xubuntu» (o Alt+F4).
+- Si Kira se cierra por un fallo, se vuelve a abrir sola; si falla 3 veces seguidas, abre Xubuntu.
+- Para dejarlo como antes: `bash solo_kira.sh --deshacer`.

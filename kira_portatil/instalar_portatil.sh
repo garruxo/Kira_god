@@ -459,6 +459,8 @@ Exec=/usr/local/bin/kiraos
 X-GNOME-Autostart-enabled=true
 Terminal=false
 AUTO
+    # v3.05: solo Kira al encender (su pantalla de arranque y su sesión, sin el escritorio de Xubuntu)
+    KIRA_USUARIO="$USER" bash "$AQUI/solo_kira.sh" || echo "  (aviso: no pude dejar solo Kira al encender; prueba: bash kira_portatil/solo_kira.sh)"
     echo "  Al encender el portátil aparecerá Kira (el orbe). No hay que escribir nada."
   fi
 
