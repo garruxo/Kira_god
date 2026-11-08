@@ -29,7 +29,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 DATOS_NUCLEO = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_portatil/kira_datos"))
 
 # «busca …» que NO es buscar en internet: son órdenes de Kira (v2.92, revisando la v2.91)
-_TRANSITORIA = re.compile(r"^\s*(?:En cola\b|Pensando…|Pensando\.\.\.|Sigo con|Leyendo\b|Siguiendo el enlace|"
+_TRANSITORIA = re.compile(r"^[\s·•\-*]*(?:En cola\b|Pensando…|Pensando\.\.\.|Sigo con|Leyendo\b|Siguiendo el enlace|"
                          r"Estudiando «|Empiezo\b|Un momento)", re.I)
 
 _NO_ES_WEB = re.compile(
@@ -157,7 +157,7 @@ class EscritorioMixin:
                            wifi=getattr(self, "wifi_mod", None))
                 t["pedir_clave"] = ctx.get("pedir_clave")
                 self._recordar_codigo(texto, t["lineas"])
-                if t["respuesta"].strip():             # v3.06: ya contestó: fuera los avisos de espera
+                if t["respuesta"].strip() or any(not _TRANSITORIA.match(str(x)) for x in t["lineas"]):  # ya contestó
                     t["lineas"][:] = [x for x in t["lineas"] if not _TRANSITORIA.match(str(x))]
         except Exception as e:                                     # noqa: BLE001 - la pantalla nunca se queda colgada
             t["respuesta"] = f"[x] Algo falló: {e}"

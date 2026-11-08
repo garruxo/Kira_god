@@ -290,7 +290,7 @@ class KiraGodCore:
         principio («convierte 10 euros a dólares» -> «convierte euros»)."""
         if not getattr(self, "comandos_modulos", None):
             return None
-        plano = " ".join(re.sub(r"[^\w\s]", " ", self._plano(command)).split())
+        plano = " ".join(re.sub(r"[^\w\s]|_", " ", self._plano(command)).split())   # v3.13: «disco_fisico» = «disco fisico»
         plano = re.sub(r"^(?:oye\s+|hola\s+)?kira\s+", "", plano)
         plano = re.sub(r"^(?:por favor\s+|puedes\s+|podrias\s+)", "", plano)
         originales = str(command or "").split()
@@ -298,7 +298,7 @@ class KiraGodCore:
                                                                              "puedes", "podrias"):
             originales.pop(0)                       # lo que va DESPUÉS se pasa tal cual (con tildes y mayúsculas)
         for prefijo in sorted(self.comandos_modulos, key=len, reverse=True):
-            pp = " ".join(re.sub(r"[^\w\s]", " ", self._plano(prefijo)).split())
+            pp = " ".join(re.sub(r"[^\w\s]|_", " ", self._plano(prefijo)).split())
             if pp and (plano == pp or plano.startswith(pp + " ")):
                 resto = " ".join(originales[len(pp.split()):])
                 return prefijo, resto.lstrip(":,. ")
@@ -328,6 +328,41 @@ class KiraGodCore:
             prefijo, resto = m
             nombre, fn = self.comandos_modulos[prefijo]
             return self._ejecutar_modulo(nombre, fn, resto)
+        return None
+
+    def _por_nombre_de_mejora(self, command):
+        """v3.13: «disco_fisico» / «usa disco físico»: el NOMBRE de una mejora instalada (no su orden). Si tiene una
+        sola orden, la hace; si tiene varias, dice cuáles; si no cargó, dice por qué y cómo deshacerla."""
+        plano = " ".join(re.sub(r"[^\w\s]|_", " ", self._plano(command)).split())
+        plano = re.sub(r"^(?:oye\s+|hola\s+)?kira\s+", "", plano)
+        plano = re.sub(r"^(?:usa|ejecuta|abre|haz|lanza|prueba|la mejora|el modulo|mejora|modulo)\s+", "", plano).strip()
+        if not plano:
+            return None
+        carpeta = os.path.join(self.dir, "modulos")
+        try:
+            nombres = [f[:-3] for f in os.listdir(carpeta) if f.endswith(".py")]
+        except OSError:
+            return None
+        for nombre in nombres:
+            if " ".join(re.sub(r"[^\w\s]|_", " ", self._plano(nombre)).split()) != plano:
+                continue
+            err = getattr(self, "errores_modulos", {}).get(nombre)
+            if err:
+                return (f"[x] La mejora «{nombre}» está instalada pero NO ha podido cargar: {err[:200]}. "
+                        "No hace nada así. En el Cuaderno ▸ Mejoras ▸ «Instalar o deshacer mis mejoras» puedes "
+                        "«Volver atrás» o «Quitar»; o pídeme que la repiense.")
+            ordenes = sorted(p for p, v in self.comandos_modulos.items() if isinstance(v, tuple) and v[0] == nombre)
+            juegos = sorted(j for j, c in getattr(self, "juegos_modulos", {}).items()
+                            if getattr(c, "__module__", "").endswith(nombre))
+            if len(ordenes) == 1:
+                return self._ejecutar_modulo(nombre, self.comandos_modulos[ordenes[0]][1], "")
+            if ordenes:
+                return (f"«{nombre}» es una mejora mía con varias órdenes: "
+                        + ", ".join(f"«{o} …»" for o in ordenes) + ". Dime una de ellas.")
+            if juegos:
+                return f"«{nombre}» es un juego: dime «juega a {juegos[0]}»."
+            return (f"La mejora «{nombre}» está instalada pero no trae ninguna orden que yo pueda usar "
+                    "(su registrar() no devolvió ninguna). Pídeme que la repiense o quítala.")
         return None
 
     def _ejecutar_modulo(self, nombre, fn, texto):
@@ -3888,6 +3923,9 @@ class KiraGodCore:
             if r is not None:
                 return r
             r = self._orden_fuera(command)                # abrir otra app, ajustes, web, marcar…
+            if r is not None:
+                return r
+            r = self._por_nombre_de_mejora(command)       # v3.13: dijiste el NOMBRE de una mejora instalada
             if r is not None:
                 return r
             logger.info(f"Orden general procesada: {command}")
