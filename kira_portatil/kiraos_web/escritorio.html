@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KiraOS</title>
 <style>
-:root{--fondo:#05070f;--panel:rgba(14,20,36,.86);--borde:rgba(130,170,230,.16);--texto:#e7ecf5;--tenue:#8b98b3;
+:root{--fondo:#05070f;--panel:rgba(12,17,31,.97);--borde:rgba(130,170,230,.16);--texto:#e7ecf5;--tenue:#8b98b3;
   --cian:#22d3ee;--rosa:#f472d0;--barra:56px}
 *{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
   -webkit-user-select:none;user-select:none}
@@ -99,6 +99,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .caja svg{width:20px;height:20px;stroke:#7fe8ff;fill:none;stroke-width:1.9;stroke-linecap:round}
 .caja .b{border-radius:20px}
 .pestanas{display:flex;gap:4px;margin:14px 6px 0;border-bottom:1px solid var(--borde)}
+.pestapp{margin:0 0 14px;flex-wrap:wrap;position:sticky;top:-20px;background:var(--panel);z-index:2;padding-top:4px}
 .pest{padding:8px 14px;font-size:13.5px;color:var(--tenue);border-bottom:2px solid transparent;margin-bottom:-1px}
 .pest.on{color:#9ff1ff;border-bottom-color:var(--cian)}
 .via{color:var(--tenue);font-size:12.5px;margin:10px 6px 8px}
@@ -308,7 +309,7 @@ var FAKE = {
   app:function(n){ var T={
       red:{titulo:"Mi red",texto:"Miro tu red de casa SOLO para defenderla (nunca fuera de ella). Pulsa «Buscar aparatos».",
         botones:[{texto:"Buscar aparatos",accion:"hacer:inventario"},{texto:"Avisos de la guardiana",accion:"hacer:alertas"},{texto:"Mapa de ataques",accion:"app:mapa"}]},
-      cuaderno:{titulo:"Cuaderno",texto:"Soluciones guardadas: 14.\n\n• ¿Cómo funciona un trie? → por prefijos: cada letra es un nodo… (alta)\n• ¿Para qué sirve una caché LRU? → guarda lo último usado y tira lo más viejo (alta)\n• ¿Y si ordeno con un montículo? → probado en mi editor seguro: funciona (media)",
+      cuaderno:{titulo:"Cuaderno",texto:"LO QUE ESTOY PENSANDO (1)",pestanas:[{id:"pensamiento",titulo:"Pensamiento (1)",texto:"LO QUE ESTOY PENSANDO (1)\n\n~ [duda] ¿por qué la memoria caché funciona así por dentro?"},{id:"conocimiento",titulo:"Conocimiento (1)",texto:"SOLUCIONES GUARDADAS (1)\n\n✔ cifrado"},{id:"mejoras",titulo:"Mejoras (1)",texto:"KIRAOS (el portátil):\n  SE PUEDE mejorar"},{id:"tareas",titulo:"Tareas",texto:"ACTIVAS (0):\n  nada ahora mismo\n\nEN ESPERA (0):\n\nTERMINADAS (0):"}],
         botones:[{texto:"Piensa una ahora",accion:"decir:piensa una"},{texto:"Ponte a pensar",accion:"decir:piensa"},{texto:"Deja de pensar",accion:"decir:deja de pensar"}]},
       maquina:{titulo:"Máquina virtual",texto:"Mi máquina está ENCENDIDA con internet solo por mi puerta (no ve tu casa) · Linux ligero, 1024 MB · con KVM (rápida) · 1 foto(s): nueva.\n\nEs un Linux ligero y aislado, sin tus archivos. Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu casa, y mis experimentos corren con un usuario sin permisos.",
         botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Últimas visitas",accion:"hacer:visitas"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
@@ -422,11 +423,22 @@ function abrir(id, consulta, tipo){
 function volver(){ $("ventana").classList.remove("on"); actual=null; $("abiertas").innerHTML=""; $("vcuerpo").innerHTML=""; }
 $("volver").onclick=volver; $("cerrar").onclick=volver;
 
+var pestApp={};
 function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
-  c.innerHTML='<div class="texto">'+esc(d.texto||"")+'</div><div class="botones">'+(d.botones||[]).map(function(b,i){
+  var pes=d.pestanas||null, texto=d.texto||"";
+  if(pes&&pes.length){                                  // v3.08: ventanas con PESTAÑAS (el cuaderno)
+    var sel=pestApp[id]; if(!pes.some(function(p){return p.id===sel;})) sel=pes[0].id;
+    pestApp[id]=sel;
+    pes.forEach(function(p){ if(p.id===sel) texto=p.texto||""; });
+  }
+  c.innerHTML=(pes&&pes.length?'<div class="pestanas pestapp">'+pes.map(function(p){
+      return '<button class="pest'+(p.id===pestApp[id]?" on":"")+'" data-pest="'+esc(p.id)+'">'+esc(p.titulo)+'</button>'; }).join("")+'</div>':'')+
+    '<div class="texto">'+esc(texto)+'</div><div class="botones">'+(d.botones||[]).map(function(b,i){
     return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'"'+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+
     '</div><div class="resultado" id="resultado"></div>';
+  [].forEach.call(c.querySelectorAll("[data-pest]"), function(b){ b.onclick=function(){
+    pestApp[id]=b.dataset.pest; pintaApp(id, d); c.scrollTop=0; }; });
   [].forEach.call(c.querySelectorAll("[data-acc]"), function(b){ b.onclick=function(){
     if(b.dataset.dos && !b.dataset.armado){            // DOS toques: el primero solo avisa
       b.dataset.armado="1"; b.dataset.antes=b.textContent; b.textContent="¿Seguro? Pulsa otra vez"; b.classList.add("aviso");

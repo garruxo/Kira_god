@@ -419,14 +419,21 @@ class Trabajos:
             try:
                 r = self._hacer(t["orden"], paso) or {}
                 t.update(respuesta=str(r.get("texto") or ""), codigo=r.get("codigo"), nombre=r.get("nombre"),
-                         estado="hecho", fraccion=1.0)
+                         estado="hecho", fraccion=1.0, fin=time.time())
             except Exception as e:                 # noqa: BLE001
                 cancel = type(e).__name__ == "Cancelada"
                 t.update(estado="cancelado" if cancel else "error",
-                         respuesta="Parado." if cancel else f"[x] {e}")
+                         respuesta="Parado." if cancel else f"[x] {e}", fin=time.time())
             with self._lock:
                 if self.actual == tid:
                     self.actual = None
+
+    def hechas(self, n=15):
+        """v3.08: las últimas terminadas (para la pestaña «Tareas» del cuaderno), la más reciente primero."""
+        with self._lock:
+            ac = [t for t in self.tareas.values() if t["estado"] in ("hecho", "error", "cancelado")]
+        ac.sort(key=lambda t: -(t.get("fin") or t.get("inicio") or 0))
+        return [{"orden": t["orden"], "estado": t["estado"], "fin": t.get("fin")} for t in ac[:n]]
 
     def ver(self, tid):
         t = self.tareas.get(tid)
@@ -526,7 +533,7 @@ class Nucleo:
         return {"ocupada": self.trabajos.ocupado(),
                 "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
                 "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
-                "cola": self.trabajos.lista(), "actividad": actividad(self.core)}
+                "cola": self.trabajos.lista(), "hechas": self.trabajos.hechas(), "actividad": actividad(self.core)}
 
     def hola(self):
         rec = getattr(self.core, "recuerdos", None)

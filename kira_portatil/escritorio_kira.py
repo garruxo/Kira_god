@@ -475,14 +475,41 @@ class EscritorioMixin:
                 "botones": botones}
 
     def _app_cuaderno(self):
+        """v3.08: el cuaderno ORDENADO en pestañas: Pensamiento, Conocimiento, Mejoras (portátil/móvil; se puede o se
+        debe) y Tareas (activas, en espera, terminadas)."""
+        import json as _json
         import pensador_kira as pn
+        import cuaderno_clases_kira as cc
         est = pn.cargar(os.path.join(DATOS_NUCLEO, "pensamientos.json"))
-        texto = pn.texto_cuaderno(est)
+
+        def leer(nombre, defecto):
+            try:
+                with open(os.path.join(DATOS_NUCLEO, nombre), encoding="utf-8") as f:
+                    return _json.load(f)
+            except (OSError, ValueError):
+                return defecto
+        sistema, trabajo = {"permisos": leer("permisos_pendientes.json", {})}, {}
         try:
-            texto = pn.texto_soluciones(est) + "\n\n" + texto
+            import sincronia_kira as sc
+            sistema["para_movil"] = sc.mejoras_para_movil(DATOS_NUCLEO)
         except Exception:
             pass
-        return {"titulo": "Cuaderno", "texto": texto,
+        n = self._nucleo()
+        if n is not None:
+            try:
+                trabajo = n.estado() or {}
+            except Exception:
+                trabajo = {}
+            try:
+                m = n.mejoras()
+                sistema["kiraos_pendiente"] = m.get("pendiente")
+                sistema["kiraos_instaladas"] = m.get("instaladas") or []
+            except Exception:
+                pass
+        encargos = leer("preguntas_mias.json", [])
+        pest = cc.pestanas(est, sistema, trabajo, encargos if isinstance(encargos, list) else [],
+                           leer("foco.json", {}))
+        return {"titulo": "Cuaderno", "texto": pest[0]["texto"], "pestanas": pest,
                 "botones": [{"texto": "Piensa una ahora", "accion": "decir:piensa una"},
                             {"texto": "Ponte a pensar", "accion": "decir:piensa"},
                             {"texto": "Deja de pensar", "accion": "decir:deja de pensar"}]}
