@@ -189,6 +189,108 @@ def mejora_para_kiraos(core, pedido, paso):
     return {"texto": "No la instalo: " + str(r.get("texto", "no pasó el laboratorio")).strip(), "ok": False}
 
 
+def _pensamientos(core):
+    import pensador_kira as pn
+    ruta = core._ruta_pensar()
+    return pn, ruta, pn.cargar(ruta)
+
+
+def conocimiento_a_mejora(core, ident, paso):
+    """v3.12: «Pasar a mejorar» un conocimiento: si tiene código lo PRUEBA en la máquina virtual; luego escribe la
+    mejora y la pasa por el laboratorio. Si pasa, queda en Mejoras esperando tus dos toques; si no, VUELVE a
+    Pensamiento con el motivo."""
+    import cuaderno_clases_kira as cc
+    pn, ruta, est = _pensamientos(core)
+    tipo, x = cc.buscar(est, ident)
+    if tipo is None:
+        return {"texto": "Ese conocimiento ya no está en el cuaderno.", "ok": False}
+    if tipo == "sol":
+        tema, sol = x
+        codigo, resp = sol.get("codigo") or "", sol.get("respuesta") or ""
+    else:
+        tema, codigo, resp = cc.tema_de(x), (x.get("experimento") or {}).get("codigo") or "", x.get("respuesta") or ""
+
+    def volver(motivo):
+        pn2, ruta2, est2 = _pensamientos(core)
+        cc.volver_a_pensamiento(est2, ident, motivo)
+        pn2.guardar(est2, ruta2)
+        return {"texto": f"[x] «{tema}» no pasó las pruebas ({motivo}). Ha vuelto a Pensamiento para seguir "
+                         "dándole vueltas.", "ok": False}
+    if codigo.strip():
+        paso(0.15, f"Pruebo «{tema}» en mi máquina virtual…")
+        try:
+            ok_p, motivo, _dato = core._probar_experimento(codigo)
+        except Exception as e:                        # noqa: BLE001
+            ok_p, motivo = False, str(e)
+        if not ok_p:
+            return volver(str(motivo or "falló al probarlo")[:160])
+    paso(0.4, "Funciona. Escribo la mejora y la paso por mi laboratorio…")
+    r = mejora_para_kiraos(core, f"una función sobre {tema}, siguiendo esto que ya sé: {str(resp)[:400]}", paso)
+    if not r.get("ok"):
+        return volver(str(r.get("texto", "no pasó el laboratorio")).replace("No la instalo: ", "")[:160])
+    return r
+
+
+def marcar_nota(core, ident, **cambios):
+    import cuaderno_clases_kira as cc
+    pn, ruta, est = _pensamientos(core)
+    tipo, x = cc.buscar(est, ident)
+    if tipo == "nota":
+        x.update(cambios)
+        pn.guardar(est, ruta)
+    return x if tipo == "nota" else None
+
+
+def implementar_nota(core, ident, paso):
+    """v3.12: «Implementar» una mejora del cuaderno: la escribe y la pasa por el laboratorio; queda esperando tus dos
+    toques (nunca se instala sola). Apunta en la nota cómo fue."""
+    import cuaderno_clases_kira as cc
+    _pn, _ruta, est = _pensamientos(core)
+    tipo, x = cc.buscar(est, ident)
+    if tipo != "nota":
+        return {"texto": "Esa mejora ya no está en el cuaderno.", "ok": False}
+    pedido = ("una función sobre " + cc.tema_de(x) + ". Idea: "
+              + __import__("re").sub(r"\s+", " ", str(x.get("respuesta", "")))[:400])
+    r = mejora_para_kiraos(core, pedido, paso)
+    marcar_nota(core, ident, en_marcha="", intento=("lista: espera tus dos toques" if r.get("ok") else
+                                                    "no pasó el laboratorio: " + str(r.get("texto", ""))[:120]))
+    return r
+
+
+def cuaderno_accion(nucleo, accion, ident):
+    """v3.12: los botones de Pensamiento / Conocimiento / Mejoras. viable | implementar | repensar | amejora."""
+    import re
+    import cuaderno_clases_kira as cc
+    core = nucleo.core
+    pn, ruta, est = _pensamientos(core)
+    tipo, x = cc.buscar(est, ident)
+    if tipo is None:
+        return {"ok": False, "texto": "Ese apunte ya no está (puede que lo haya resuelto o movido)."}
+    if accion == "viable" and tipo == "nota":
+        x.update(viable=True, a_pensamiento=False)
+        pn.guardar(est, ruta)
+        return {"ok": True, "texto": f"Pasado a Mejoras ({cc.tipo_mejora(x)}): desde ahí puedes pedirme que lo "
+                                     "implemente o que lo repiense."}
+    if accion == "implementar" and tipo == "nota":
+        x["en_marcha"] = "implementar"
+        pn.guardar(est, ruta)
+        tid = nucleo.trabajos.empezar(f"implementa la mejora del cuaderno: {ident} {cc.tema_de(x)}")
+        return {"ok": True, "id": tid, "texto": "En cola: la escribo, la pruebo en mi laboratorio y, si pasa, te la "
+                "dejo en «Instalar o deshacer mis mejoras» para tus dos toques. Lo verás en Tareas."}
+    if accion == "repensar" and tipo == "nota":
+        x["en_marcha"] = "repensar"
+        pn.guardar(est, ruta)
+        tid = nucleo.trabajos.empezar(f"repiensa a fondo: {ident} {cc.tema_de(x)}")
+        return {"ok": True, "id": tid, "texto": "En cola: vuelvo a pensarlo, buscar y experimentar con ello. Lo "
+                                                "verás en Tareas."}
+    if accion == "amejora":
+        tema = x[0] if tipo == "sol" else cc.tema_de(x)
+        tid = nucleo.trabajos.empezar(f"pasa a mejora el conocimiento: {ident} {tema}")
+        return {"ok": True, "id": tid, "texto": "En cola: lo pruebo en mi máquina virtual y, si funciona, lo paso por "
+                "el laboratorio. Si pasa, irá a Mejoras (tus dos toques); si no, vuelve a Pensamiento."}
+    return {"ok": False, "texto": "No conozco ese botón."}
+
+
 def mejoras_estado(core):
     """Para la ventana «Mejoras»: la pendiente (con su código) y las instaladas."""
     pan = panel_de(core)
@@ -274,6 +376,21 @@ def ejecutar(core, orden, paso):
     m_m = re.match(_MEJORA_MOVIL, o_limpia, flags=re.I)
     if m_m:
         return mejora_para_movil(core, m_m.group("p").strip(), paso)
+    m_rp = re.match(r"^repiensa a fondo\s*:\s*(?:(?P<i>n[0-9a-f]{10})\s+)?(?P<t>.+)$", o_limpia, flags=re.I)  # v3.12
+    if m_rp:
+        paso(0.0, f"Vuelvo a pensar y experimentar «{m_rp.group('t')}»…")
+        try:
+            r = core.ciclo_una(semilla=m_rp.group("t").strip())
+        finally:
+            if m_rp.group("i"):
+                marcar_nota(core, m_rp.group("i"), en_marcha="")
+        return {"texto": (r or "No he sacado nada nuevo esta vez.") if isinstance(r, str) or r is None else str(r)}
+    m_im = re.match(r"^implementa la mejora del cuaderno\s*:\s*(?P<i>n[0-9a-f]{10})", o_limpia, flags=re.I)
+    if m_im:
+        return implementar_nota(core, m_im.group("i"), paso)
+    m_cm = re.match(r"^pasa a mejora el conocimiento\s*:\s*(?P<i>[ns][0-9a-f]{10})\s*(?P<t>.*)$", o_limpia, flags=re.I)
+    if m_cm:
+        return conocimiento_a_mejora(core, m_cm.group("i"), paso)
     p_ti = pedido_mejora_kiraos(o_limpia)          # v3.07: una mejora para MÍ (KiraOS): laboratorio + tus dos toques
     if p_ti:
         return mejora_para_kiraos(core, p_ti, paso)
@@ -864,6 +981,14 @@ def crear_servidor(host, puerto, token, nucleo):
                                                         str(d.get("nombre") or ""), d.get("confirmado") is True))
                 except Exception as e:                 # noqa: BLE001
                     return self._json(500, {"ok": False, "texto": f"[x] {e}"})
+            if u.path == "/cuaderno/accion":            # v3.12: botones del cuaderno (solo en el portátil)
+                if not es_local(self.client_address[0]):
+                    return self._json(403, {"error": "Eso solo desde el propio portátil."})
+                d = self._cuerpo_json()
+                try:
+                    return self._json(200, cuaderno_accion(nucleo, str(d.get("accion") or ""), str(d.get("id") or "")))
+                except Exception as e:                 # noqa: BLE001
+                    return self._json(500, {"ok": False, "texto": f"[x] {e}"})
             if u.path == "/tarea/accion":               # v3.10: Parar / Borrar / Empezar (solo en el portátil)
                 if not es_local(self.client_address[0]):
                     return self._json(403, {"error": "Eso solo desde el propio portátil."})
@@ -939,6 +1064,9 @@ class ClienteNucleo:
 
     def tarea_accion(self, tid, accion):
         return self._pedir("/tarea/accion", {"id": tid, "accion": accion}, timeout=10)
+
+    def cuaderno_accion(self, accion, ident):
+        return self._pedir("/cuaderno/accion", {"accion": accion, "id": ident}, timeout=15)
 
     def mejora(self, accion, nombre="", confirmado=False):
         return self._pedir("/mejora", {"accion": accion, "nombre": nombre, "confirmado": confirmado is True},

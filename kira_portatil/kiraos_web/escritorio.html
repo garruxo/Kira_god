@@ -449,15 +449,15 @@ $("volver").onclick=volver; $("cerrar").onclick=volver;
 var pestApp={};
 function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
-  var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[], filas=null;
+  var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[], filas=null, secs=null;
   if(pes&&pes.length){                                  // v3.08: ventanas con PESTAÑAS (el cuaderno)
     var sel=pestApp[id]; if(!pes.some(function(p){return p.id===sel;})) sel=pes[0].id;
     pestApp[id]=sel;
-    pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; if(p.filas) filas=p.filas; } });
+    pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; if(p.filas){ filas=p.filas; secs=p.secciones||null; } } });
   }
   c.innerHTML=(pes&&pes.length?'<div class="pestanas pestapp">'+pes.map(function(p){
       return '<button class="pest'+(p.id===pestApp[id]?" on":"")+'" data-pest="'+esc(p.id)+'">'+esc(p.titulo)+'</button>'; }).join("")+'</div>':'')+
-    (filas ? htmlFilas(filas) : '<div class="texto">'+esc(texto)+'</div>')+'<div class="botones">'+botones.map(function(b,i){
+    (filas ? htmlFilas(filas, secs) : '<div class="texto">'+esc(texto)+'</div>')+'<div class="botones">'+botones.map(function(b,i){
     return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'"'+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+
     '</div><div class="resultado" id="resultado"></div>';
   [].forEach.call(c.querySelectorAll("[data-pest]"), function(b){ b.onclick=function(){
@@ -473,9 +473,9 @@ function pintaApp(id, d){
 // v3.10: la pestaña Tareas: ACTIVAS / EN ESPERA / TERMINADAS, cada una con Parar · Borrar · Empezar
 var SECCIONES=[["activas","Activas"],["espera","En espera"],["terminadas","Terminadas"]];
 function claseEtiqueta(e){ e=String(e||"");
-  return /^Implementado/.test(e)?"ok":/^Mejorado/.test(e)?"mej":/^Falló/.test(e)?"mal":/^Preparado/.test(e)?"perm":/^(Parada|Quitada)/.test(e)?"gris":"hecho"; }
-function htmlFilas(filas){
-  return SECCIONES.map(function(s){
+  return /^(Implementado|Con código|Comprobado)/.test(e)?"ok":/^Seguridad/.test(e)?"mal":/^App/.test(e)?"perm":/^Mejorado/.test(e)?"mej":/^Falló/.test(e)?"mal":/^Preparado/.test(e)?"perm":/^(Parada|Quitada)/.test(e)?"gris":"hecho"; }
+function htmlFilas(filas, secs){
+  return (secs||SECCIONES).map(function(s){
     var l=filas.filter(function(f){ return f.seccion===s[0]; });
     return '<div class="secc"><h4>'+esc(s[1])+' ('+l.length+')</h4>'+(l.length?l.map(function(f){
       return '<div class="fila">'+

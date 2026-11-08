@@ -70,7 +70,9 @@ def resuelta(nota):
 
 def clase(nota):
     """'mejora', 'conocimiento' o 'pensamiento'."""
-    if es_de_sistema(nota):
+    if nota.get("a_pensamiento") and not nota.get("viable"):   # v3.12: no pasó las pruebas → vuelve a pensar
+        return "pensamiento"
+    if nota.get("viable") or es_de_sistema(nota):          # v3.12: «Viable para mejorar» la pasa a Mejoras
         return "mejora"
     return "conocimiento" if resuelta(nota) else "pensamiento"
 
@@ -236,10 +238,14 @@ def pestanas(estado, sistema=None, trabajo=None, encargos=None, foco=None):
     n_p = sum(1 for x in notas if clase(x) == "pensamiento")
     n_c = sum(1 for x in notas if clase(x) == "conocimiento") + len(estado.get("soluciones") or {})
     n_m = sum(1 for x in notas if clase(x) == "mejora")
-    return [{"id": "pensamiento", "titulo": f"Pensamiento ({n_p})", "texto": pestana_pensamiento(estado)},
-            {"id": "conocimiento", "titulo": f"Conocimiento ({n_c})", "texto": pestana_conocimiento(estado)},
-            {"id": "mejoras", "titulo": f"Mejoras ({n_m})", "texto": pestana_mejoras(estado, sistema)},
-            {"id": "tareas", "titulo": "Tareas", "texto": pestana_tareas(trabajo, encargos, foco)}]
+    return [{"id": "pensamiento", "titulo": f"Pensamiento ({n_p})", "texto": pestana_pensamiento(estado),
+             "filas": filas_pensamiento(estado), "secciones": SECCIONES["pensamiento"]},
+            {"id": "conocimiento", "titulo": f"Conocimiento ({n_c})", "texto": pestana_conocimiento(estado),
+             "filas": filas_conocimiento(estado), "secciones": SECCIONES["conocimiento"]},
+            {"id": "mejoras", "titulo": f"Mejoras ({n_m})", "texto": pestana_mejoras(estado, sistema),
+             "filas": filas_mejoras(estado, sistema), "secciones": SECCIONES["mejoras"]},
+            {"id": "tareas", "titulo": "Tareas", "texto": pestana_tareas(trabajo, encargos, foco),
+             "secciones": SECCIONES["tareas"]}]
 
 
 # ---------- v3.10: cómo acabó cada tarea (para «Terminadas») ----------
@@ -365,3 +371,141 @@ def filas_tareas(trabajo=None, encargos=None, foco=None, ahora=None):
         fila("terminadas", f"Tema resuelto: «{foco['tema']}»", "Resuelto — la solución está en Conocimiento",
              [b("Parar", "", False), b("Borrar", "", False), b("Empezar", "decir:retoma el tema")])
     return filas
+
+
+
+# ---------- v3.12: cada apunte con sus BOTONES (pensamiento → mejoras → implementar; conocimiento → mejorar) ----------
+import hashlib as _hashlib
+
+_SEGURIDAD = re.compile(r"\b(?:segur\w*|ataque\w*|clave\w*|contrasena\w*|cifr\w*|vulnerab\w*|defens\w*|malware|"
+                        r"phishing|cortafuegos|firewall|anomali\w*|intrus\w*|hash)\b")
+_APP = re.compile(r"\b(?:app|apps|aplicacion\w*|juego\w*|web|pagina|programa|herramienta|calculadora|interfaz)\b")
+
+
+def id_nota(nota):
+    return "n" + _hashlib.sha1(str(nota.get("pregunta", "")).encode("utf-8")).hexdigest()[:10]
+
+
+def id_sol(tema):
+    return "s" + _hashlib.sha1(str(tema).encode("utf-8")).hexdigest()[:10]
+
+
+def buscar(estado, ident):
+    """('nota', nota) | ('sol', (tema, sol)) | (None, None) por su id."""
+    ident = str(ident or "")
+    if ident.startswith("n"):
+        for nt in estado.get("notas", []):
+            if id_nota(nt) == ident:
+                return "nota", nt
+    if ident.startswith("s"):
+        for tema, sol in (estado.get("soluciones") or {}).items():
+            if id_sol(tema) == ident:
+                return "sol", (tema, sol)
+    return None, None
+
+
+def tipo_mejora(nota):
+    """'Seguridad' | 'App por hacer' | 'Sistema' (para saber de qué es cada mejora)."""
+    t = _plano(str(nota.get("pregunta", "")) + " " + str(nota.get("respuesta", "")))
+    if _SEGURIDAD.search(t):
+        return "Seguridad"
+    if _APP.search(t) and not es_de_sistema(nota):
+        return "App por hacer"
+    return "Sistema"
+
+
+def tema_de(nota):
+    s = str(nota.get("semilla") or "").strip()
+    if s:
+        return re.sub(r"\s*\((?:mas a fondo|más a fondo|mejorar)\)\s*$", "", s)
+    return _corta(nota.get("pregunta", ""), 80)
+
+
+def _b(texto, accion, dos=False):
+    d = {"texto": texto, "accion": accion}
+    if dos:
+        d["dos"] = True
+    return d
+
+
+def filas_pensamiento(estado, n=40):
+    out = []
+    for nt in reversed([x for x in estado.get("notas", []) if clase(x) == "pensamiento"][-n:]):
+        etq = {"ciclo": "Ciclo de mejora", "experimento": "Experimento", "reflexión": "Reflexión"}.get(
+            nt.get("tipo"), "Duda" if nt.get("duda") else "Idea")
+        exp = nt.get("experimento") or {}
+        extra = (" · prueba: " + ("OK" if exp.get("ok") else "falló")) if exp else ""
+        out.append({"seccion": "pensando", "texto": nt.get("pregunta", ""), "etiqueta": etq,
+                    "detalle": _corta(nt.get("respuesta", ""), 220) + extra,
+                    "botones": [_b("Viable para mejorar", f"hacer:nota:viable:{id_nota(nt)}")]})
+    return out
+
+
+def filas_conocimiento(estado, n=40):
+    out = []
+    sols = sorted((estado.get("soluciones") or {}).items(), key=lambda kv: -float(kv[1].get("cuando", 0) or 0))
+    for tema, s in sols[:n]:
+        cod = bool((s.get("codigo") or "").strip())
+        out.append({"seccion": "soluciones", "texto": tema, "etiqueta": "Con código" if cod else "Solución",
+                    "detalle": _corta(s.get("respuesta") or s.get("resumen") or "", 220)
+                    + (f" · mejorada {s.get('veces')} veces" if (s.get("veces") or 1) > 1 else ""),
+                    "botones": [_b("Pasar a mejorar", f"hacer:sol:amejora:{id_sol(tema)}")]})
+    for nt in reversed([x for x in estado.get("notas", []) if clase(x) == "conocimiento"][-n:]):
+        out.append({"seccion": "comprobado", "texto": nt.get("pregunta", ""), "etiqueta": "Comprobado",
+                    "detalle": _corta(nt.get("respuesta", ""), 220),
+                    "botones": [_b("Pasar a mejorar", f"hacer:nota:amejora:{id_nota(nt)}")]})
+    return out
+
+
+def filas_mejoras(estado, sistema=None):
+    sistema = sistema or {}
+    out = []
+    pend = sistema.get("kiraos_pendiente")
+    if pend:
+        out.append({"seccion": "permiso", "texto": f"KiraOS: «{pend.get('nombre')}»", "etiqueta": "Espera tus dos toques",
+                    "detalle": "probada en mi laboratorio", "botones": [_b("Abrir para instalar", "app:mejoras")]})
+    for m in (sistema.get("para_movil") or [])[:10]:
+        out.append({"seccion": "permiso", "texto": f"Kira app: «{m.get('nombre', '?')}»", "etiqueta": "Para el móvil",
+                    "detalle": "se la doy al sincronizar; allí la instalas con dos toques", "botones": []})
+    for nom, d in list((sistema.get("permisos") or {}).items())[:10]:
+        out.append({"seccion": "permiso", "texto": f"Instalar «{nom}»", "etiqueta": "Necesito permiso",
+                    "detalle": _corta(d.get("motivo") or "lo necesito para seguir", 160), "botones": []})
+    sec = {"portatil": "kiraos", "movil": "movil", "los dos": "dos"}
+    for nt in reversed([x for x in estado.get("notas", []) if clase(x) == "mejora"]):
+        urg = "SE DEBE" if urgencia(nt) == "debe" else "SE PUEDE"
+        marcha = {"implementar": " · la estoy implementando", "repensar": " · la estoy repensando"}.get(
+            nt.get("en_marcha"), "") or (f" · último intento: {nt['intento']}" if nt.get("intento") else "")
+        out.append({"seccion": sec[donde(nt)], "texto": nt.get("pregunta", ""),
+                    "etiqueta": f"{tipo_mejora(nt)} · {urg}",
+                    "detalle": _corta(nt.get("respuesta", ""), 220) + marcha,
+                    "botones": [_b("Implementar", f"hacer:nota:implementar:{id_nota(nt)}", dos=True),
+                                _b("Repensar y experimentar", f"hacer:nota:repensar:{id_nota(nt)}")]})
+    return out
+
+
+SECCIONES = {
+    "pensamiento": [["pensando", "Lo que estoy pensando"]],
+    "conocimiento": [["soluciones", "Soluciones guardadas"], ["comprobado", "Lo que sé con seguridad"]],
+    "mejoras": [["permiso", "Esperan tu permiso"], ["kiraos", "KiraOS (el portátil)"], ["movil", "Kira app (el móvil)"],
+                ["dos", "Los dos"]],
+    "tareas": [["activas", "Activas"], ["espera", "En espera"], ["terminadas", "Terminadas"]],
+}
+
+
+def volver_a_pensamiento(estado, ident, motivo):
+    """Lo que no pasó las pruebas vuelve a PENSAMIENTO (como duda), con el motivo. Devuelve el tema o None."""
+    tipo, x = buscar(estado, ident)
+    if tipo == "nota":
+        x.update(seguridad="media", duda=True, viable=False, en_marcha="", a_pensamiento=True,
+                 respuesta=str(x.get("respuesta", "")) + f"\n(no pasó las pruebas: {motivo})")
+        return tema_de(x)
+    if tipo == "sol":
+        tema, sol = x
+        estado.get("soluciones", {}).pop(tema, None)
+        estado.setdefault("notas", []).append({
+            "semilla": sol.get("semilla") or tema, "pregunta": f"¿cómo hago que «{tema}» funcione de verdad?",
+            "respuesta": _corta(sol.get("respuesta") or "", 300) + f"\n(no pasó las pruebas: {motivo})",
+            "seguridad": "media", "duda": True, "fuente": "vuelve de conocimiento", "tipo": "idea",
+            "cuando": time.time(), "experimento": {"ok": False, "resultado": motivo}})
+        return tema
+    return None

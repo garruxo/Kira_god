@@ -470,6 +470,16 @@ class EscritorioMixin:
             except Exception as e:                    # noqa: BLE001
                 return {"texto": texto_error_nucleo(e)}
             return {"texto": r.get("texto", "Hecho."), "refrescar": True}
+        if len(partes) == 3 and partes[0] in ("nota", "sol") and partes[1] in ("viable", "implementar", "repensar",
+                                                                               "amejora"):
+            n = self._nucleo()
+            if n is None or not hasattr(n, "cuaderno_accion"):
+                return {"texto": "No encuentro mi núcleo.", "refrescar": False}
+            try:
+                r = n.cuaderno_accion(partes[1], partes[2])
+            except Exception as e:                    # noqa: BLE001
+                return {"texto": texto_error_nucleo(e)}
+            return {"texto": r.get("texto", "Hecho."), "refrescar": True}
         if len(partes) == 3 and partes[0] == "encargo" and partes[1] in ("borrar", "empezar"):
             import investigar_kira as iv
             try:
