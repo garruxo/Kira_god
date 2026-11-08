@@ -240,3 +240,128 @@ def pestanas(estado, sistema=None, trabajo=None, encargos=None, foco=None):
             {"id": "conocimiento", "titulo": f"Conocimiento ({n_c})", "texto": pestana_conocimiento(estado)},
             {"id": "mejoras", "titulo": f"Mejoras ({n_m})", "texto": pestana_mejoras(estado, sistema)},
             {"id": "tareas", "titulo": "Tareas", "texto": pestana_tareas(trabajo, encargos, foco)}]
+
+
+# ---------- v3.10: cómo acabó cada tarea (para «Terminadas») ----------
+_FALLO = re.compile(r"^(?:\[x\]|no he podido|no pude|no me (?:ha )?salid|no la instalo|no lo instalo|no reconozco|"
+                    r"no encuentro|no tengo|no se pudo|no puedo|algo fallo|error)|(?:no pasa (?:mi|el) laboratorio|"
+                    r"no he cambiado nada)")
+_IMPLEMENTADO = re.compile(r"\b(?:me he puesto|instalad[ao]|aplicad[ao]|implementad[ao]|ya esta instalada|"
+                           r"actualizad[ao]|lista la app|app .{0,40}lista|guardad[ao] en (?:tu|mi) baul)")
+_MEJORADO = re.compile(r"\b(?:mejorad[ao]|version nueva|mejor version|optimizad[ao]|mas rapid[ao])\b")
+_ESPERA_PERMISO = re.compile(r"(?:no la he instalado|espera tu permiso|esperando tu permiso|dos (?:toques|veces))")
+_NADA = re.compile(r"^(?:ya tengo todas|ya estoy al dia|no hay (?:nada|mejoras))")
+
+
+def _primera_linea(t):
+    for ln in str(t or "").splitlines():
+        ln = re.sub(r"^\s*(?:\[(?:ok|x|i)\]\s*)", "", ln.strip(), flags=re.I).strip(" ·-")
+        if ln:
+            return _corta(ln, 170)
+    return ""
+
+
+def resultado_tarea(estado, respuesta=""):
+    """(etiqueta, por qué) de una tarea acabada: Implementado / Mejorado / Hecho / Preparado (espera tu permiso) /
+    Nada que hacer / Falló (no hizo nada) / Parada / Quitada."""
+    motivo = _primera_linea(respuesta)
+    p = _plano(respuesta).strip()
+    if estado == "quitado":
+        return "Quitada", "La quitaste tú antes de empezar: no se hizo nada."
+    if estado == "cancelado":
+        return "Parada", "La paraste tú a medias: lo que iba haciendo no se ha aplicado."
+    if estado == "error":
+        return "Falló", "No hizo nada: " + (motivo or "se cayó a medias.")
+    if _FALLO.search(p):
+        return "Falló", "No hizo nada: " + (motivo or "no le salió.")
+    if _ESPERA_PERMISO.search(p):
+        return "Preparado (espera tu permiso)", motivo
+    if _NADA.search(p):
+        return "Nada que hacer", motivo
+    if _IMPLEMENTADO.search(p):
+        return "Implementado", motivo
+    if _MEJORADO.search(p):
+        return "Mejorado", motivo
+    return "Hecho", motivo or "Terminada."
+
+
+def filas_tareas(trabajo=None, encargos=None, foco=None, ahora=None):
+    """La pestaña «Tareas» con BOTONES por fila: [{'seccion','texto','detalle','botones':[…]}].
+    Cada fila de las tres listas lleva Parar / Borrar / Empezar (desactivado lo que no tiene sentido)."""
+    trabajo = trabajo or {}
+    ahora = ahora or time.time()
+    act = trabajo.get("actividad") or {}
+    filas = []
+
+    def b(texto, accion, activo=True, dos=False):
+        d = {"texto": texto, "accion": accion}
+        if not activo:
+            d["off"] = True
+        if dos:
+            d["dos"] = True
+        return d
+
+    def fila(sec, texto, detalle="", botones=None, etiqueta=""):
+        filas.append({"seccion": sec, "texto": texto, "detalle": detalle, "botones": botones or [],
+                      "etiqueta": etiqueta})
+
+    # ACTIVAS
+    if trabajo.get("pausada"):
+        fila("activas", "En pausa: no empiezo nada nuevo", "pulsa «Empezar» para que siga con la cola",
+             [b("Parar", "", False), b("Borrar", "", False), b("Empezar", "hacer:kira:seguir")])
+    for t in trabajo.get("cola") or []:
+        if t.get("estado") == "en curso":
+            tid = t.get("id", "")
+            fila("activas", t.get("orden", ""), "Haciéndola ahora",
+                 [b("Parar", f"hacer:tarea:parar:{tid}"), b("Borrar", f"hacer:tarea:borrar:{tid}", dos=True),
+                  b("Empezar", "", False)])
+    if act.get("estudiando"):
+        fila("activas", "Estudiando", "por su cuenta o porque se lo mandaste",
+             [b("Parar", "hacer:kira:parar"), b("Borrar", "", False), b("Empezar", "", False)])
+    if act.get("pensando"):
+        fila("activas", "Pensando en segundo plano", "cuando llevas 5 min sin pedirle nada",
+             [b("Parar", "decir:deja de pensar"), b("Borrar", "", False), b("Empezar", "", False)])
+    foco = foco or {}
+    if foco.get("tema") and foco.get("activo") and not foco.get("resuelto"):
+        fila("activas", f"Centrada en «{foco['tema']}» hasta resolverlo", "",
+             [b("Parar", "decir:déjalo para otro día"), b("Borrar", "decir:deja el tema", dos=True),
+              b("Empezar", "", False)])
+    # EN ESPERA
+    for t in trabajo.get("cola") or []:
+        if t.get("estado") == "en curso":
+            continue
+        tid = t.get("id", "")
+        ret = bool(t.get("retenida"))
+        fila("espera", t.get("orden", ""), "Parada: no empezará hasta que pulses «Empezar»" if ret else "En cola",
+             [b("Parar", f"hacer:tarea:parar:{tid}", not ret), b("Borrar", f"hacer:tarea:borrar:{tid}", dos=True),
+              b("Empezar", f"hacer:tarea:empezar:{tid}")])
+    if foco.get("tema") and not foco.get("activo") and not foco.get("resuelto"):
+        fila("espera", f"Aparcado para otro día: «{foco['tema']}»", "",
+             [b("Parar", "", False), b("Borrar", "decir:deja el tema", dos=True), b("Empezar", "decir:retoma el tema")])
+    for i, e in enumerate(encargos or []):
+        if e.get("hecha"):
+            continue
+        fila("espera", "Encargo: " + _corta(e.get("texto"), 110),
+             "lo repasa de vez en cuando" if e.get("recurrente") else "lo investigará cuando piense",
+             [b("Parar", "", False), b("Borrar", f"hacer:encargo:borrar:{i}", dos=True),
+              b("Empezar", f"hacer:encargo:empezar:{i}")])
+    # TERMINADAS
+    for t in trabajo.get("hechas") or []:
+        tid = t.get("id", "")
+        etq = t.get("resultado") or resultado_tarea(t.get("estado"), t.get("respuesta", ""))[0]
+        por = t.get("por_que") or resultado_tarea(t.get("estado"), t.get("respuesta", ""))[1]
+        cuando = f" · {_hace(ahora - t['fin'])}" if t.get("fin") else ""
+        fila("terminadas", t.get("orden", ""), f"{etq}{cuando} — {por}",
+             [b("Parar", "", False), b("Borrar", f"hacer:tarea:borrar:{tid}"),
+              b("Empezar", f"hacer:tarea:empezar:{tid}")], etiqueta=etq)
+    for i, e in enumerate(encargos or []):
+        if e.get("hecha"):
+            fila("terminadas", "Encargo investigado: " + _corta(e.get("texto"), 110),
+                 ("Investigado" + (f" · {_hace(ahora - e['ultima'])}" if e.get("ultima") else "")
+                  + " — lo tienes en su baúl / Conocimiento"),
+                 [b("Parar", "", False), b("Borrar", f"hacer:encargo:borrar:{i}"),
+                  b("Empezar", f"hacer:encargo:empezar:{i}")])
+    if foco.get("tema") and foco.get("resuelto"):
+        fila("terminadas", f"Tema resuelto: «{foco['tema']}»", "Resuelto — la solución está en Conocimiento",
+             [b("Parar", "", False), b("Borrar", "", False), b("Empezar", "decir:retoma el tema")])
+    return filas

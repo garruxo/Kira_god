@@ -402,6 +402,8 @@ class EscritorioMixin:
                                            "quitada: te contesto solo por escrito.")}
         if nombre == "mejoras":                       # v3.07: sus propias mejoras (solo aquí, en el portátil)
             return self._mejoras_hacer(accion)
+        if nombre == "cuaderno":                      # v3.10: Parar / Borrar / Empezar de la pestaña Tareas
+            return self._tareas_hacer(accion)
         if nombre == "movil" and accion == "codigo":
             return {"texto": codigo_movil()}
         if nombre == "maquina" and accion == "visitas":
@@ -449,6 +451,38 @@ class EscritorioMixin:
                       "y «Quitar» la saca (también con copia). Mis mejoras añaden órdenes y funciones; no cambian "
                       "mis pantallas.")
         return {"titulo": "Mejoras", "texto": "\n\n".join(partes), "botones": botones}
+
+    def _tareas_hacer(self, accion):
+        partes = str(accion or "").split(":")
+        self._trab_cache = None
+        if partes[:2] == ["kira", "parar"]:
+            r = self.parar()
+            return {"texto": r.get("texto", ""), "refrescar": True}
+        if partes[:2] == ["kira", "seguir"]:
+            self.pausar_trabajo(False)
+            return {"texto": "Sigo con la cola.", "refrescar": True}
+        if len(partes) == 3 and partes[0] == "tarea" and partes[1] in ("parar", "borrar", "empezar"):
+            n = self._nucleo()
+            if n is None or not hasattr(n, "tarea_accion"):
+                return {"texto": "No encuentro mi núcleo.", "refrescar": False}
+            try:
+                r = n.tarea_accion(partes[2], partes[1])
+            except Exception as e:                    # noqa: BLE001
+                return {"texto": f"[x] No he podido: {e}"}
+            return {"texto": r.get("texto", "Hecho."), "refrescar": True}
+        if len(partes) == 3 and partes[0] == "encargo" and partes[1] in ("borrar", "empezar"):
+            import investigar_kira as iv
+            try:
+                i = int(partes[2])
+            except ValueError:
+                return {"texto": "No conozco ese botón."}
+            if partes[1] == "borrar":
+                t = iv.quitar(DATOS_NUCLEO, i)
+                return {"texto": f"Encargo borrado: «{t}»." if t else "Ese encargo ya no está.", "refrescar": True}
+            t = iv.adelantar(DATOS_NUCLEO, i)
+            return {"texto": (f"«{t}» pasa el primero: lo investigo en cuanto me ponga a pensar (cuando lleves 5 min "
+                              "sin pedirme nada)." if t else "Ese encargo ya no está."), "refrescar": True}
+        return {"texto": "No conozco ese botón."}
 
     def _mejoras_hacer(self, accion):
         n = self._nucleo()
@@ -511,6 +545,10 @@ class EscritorioMixin:
         pest = cc.pestanas(est, sistema, trabajo, encargos if isinstance(encargos, list) else [],
                            leer("foco.json", {}))
         for p in pest:                                # v3.09: desde la pestaña Mejoras se instalan (ya no hay icono)
+            if p["id"] == "tareas":                   # v3.10: cada tarea con Parar / Borrar / Empezar
+                p["filas"] = cc.filas_tareas(trabajo, encargos if isinstance(encargos, list) else [],
+                                             leer("foco.json", {}))
+                p["botones"] = []
             if p["id"] == "mejoras":
                 hay = bool(sistema.get("kiraos_pendiente"))
                 p["botones"] = [{"texto": "Instalar o deshacer mis mejoras" + (" (1 esperando)" if hay else ""),

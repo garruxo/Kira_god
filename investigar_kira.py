@@ -132,6 +132,28 @@ def marcar_hecha(dir_, texto):
     _guardar(dir_, lista)
 
 
+def quitar(dir_, i):
+    """v3.10: borra el encargo número i (botón «Borrar» del cuaderno). Devuelve su texto o None."""
+    lista = _leer(dir_)
+    if not 0 <= int(i) < len(lista):
+        return None
+    e = lista.pop(int(i))
+    _guardar(dir_, lista)
+    return e.get("texto")
+
+
+def adelantar(dir_, i):
+    """v3.10: botón «Empezar»: el encargo i pasa el PRIMERO (y, si ya estaba hecho, se vuelve a investigar)."""
+    lista = _leer(dir_)
+    if not 0 <= int(i) < len(lista):
+        return None
+    e = lista.pop(int(i))
+    e["hecha"] = False
+    lista.insert(0, e)
+    _guardar(dir_, lista)
+    return e.get("texto")
+
+
 def listar(dir_):
     return _leer(dir_)
 

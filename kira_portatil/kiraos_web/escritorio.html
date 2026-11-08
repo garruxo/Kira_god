@@ -103,6 +103,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .caja svg{width:20px;height:20px;stroke:#7fe8ff;fill:none;stroke-width:1.9;stroke-linecap:round}
 .caja .b{border-radius:20px}
 .pestanas{display:flex;gap:4px;margin:14px 6px 0;border-bottom:1px solid var(--borde)}
+.secc{margin:0 0 18px}
+.secc h4{margin:0 0 8px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#9ff1ff}
+.fila{display:flex;gap:12px;align-items:center;padding:10px 12px;margin:0 0 6px;border-radius:12px;background:rgba(130,170,230,.06);box-shadow:inset 0 0 0 1px var(--borde)}
+.ftxt{flex:1;min-width:0}.ftit{font-size:14.5px;color:#e9f1fb;overflow-wrap:anywhere}
+.fdet{font-size:12.5px;color:var(--tenue);margin-top:3px;overflow-wrap:anywhere}
+.fbot{display:flex;gap:6px;flex:0 0 auto}
+.b.mini{padding:6px 11px;font-size:12.5px}.b.mini.off{opacity:.3;cursor:default}
+.vacia{font-size:13px;color:var(--tenue);padding:4px 2px}
+.etq{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:8px;font-size:11.5px;font-weight:600}
+.etq.ok{background:rgba(52,211,153,.18);color:#6ee7b7}.etq.mej{background:rgba(34,211,238,.16);color:#9ff1ff}
+.etq.mal{background:rgba(248,113,113,.18);color:#fca5a5}.etq.perm{background:rgba(244,114,208,.18);color:#f9a8d4}
+.etq.gris{background:rgba(148,163,184,.16);color:#cbd5e1}.etq.hecho{background:rgba(130,170,230,.14);color:#c7d7f0}
 .pestapp{margin:0 0 14px;flex-wrap:wrap;position:sticky;top:-20px;background:var(--panel);z-index:2;padding-top:4px}
 .pest{padding:8px 14px;font-size:13.5px;color:var(--tenue);border-bottom:2px solid transparent;margin-bottom:-1px}
 .pest.on{color:#9ff1ff;border-bottom-color:var(--cian)}
@@ -313,7 +325,7 @@ var FAKE = {
   app:function(n){ var T={
       red:{titulo:"Mi red",texto:"Miro tu red de casa SOLO para defenderla (nunca fuera de ella). Pulsa «Buscar aparatos».",
         botones:[{texto:"Buscar aparatos",accion:"hacer:inventario"},{texto:"Avisos de la guardiana",accion:"hacer:alertas"},{texto:"Mapa de ataques",accion:"app:mapa"}]},
-      cuaderno:{titulo:"Cuaderno",texto:"LO QUE ESTOY PENSANDO (1)",pestanas:[{id:"pensamiento",titulo:"Pensamiento (1)",texto:"LO QUE ESTOY PENSANDO (1)\n\n~ [duda] ¿por qué la memoria caché funciona así por dentro?"},{id:"conocimiento",titulo:"Conocimiento (1)",texto:"SOLUCIONES GUARDADAS (1)\n\n✔ cifrado"},{id:"mejoras",titulo:"Mejoras (1)",texto:"KIRAOS (el portátil):\n  SE PUEDE mejorar",botones:[{texto:"Instalar o deshacer mis mejoras (1 esperando)",accion:"app:mejoras"}]},{id:"tareas",titulo:"Tareas",texto:"ACTIVAS (0):\n  nada ahora mismo\n\nEN ESPERA (0):\n\nTERMINADAS (0):"}],
+      cuaderno:{titulo:"Cuaderno",texto:"LO QUE ESTOY PENSANDO (1)",pestanas:[{id:"pensamiento",titulo:"Pensamiento (1)",texto:"LO QUE ESTOY PENSANDO (1)\n\n~ [duda] ¿por qué la memoria caché funciona así por dentro?"},{id:"conocimiento",titulo:"Conocimiento (1)",texto:"SOLUCIONES GUARDADAS (1)\n\n✔ cifrado"},{id:"mejoras",titulo:"Mejoras (1)",texto:"KIRAOS (el portátil):\n  SE PUEDE mejorar",botones:[{texto:"Instalar o deshacer mis mejoras (1 esperando)",accion:"app:mejoras"}]},{id:"tareas",titulo:"Tareas",texto:"",botones:[],filas:[{seccion:"espera",texto:"kira implementa las mejoras",detalle:"En cola",botones:[{texto:"Parar",accion:"hacer:tarea:parar:a1"},{texto:"Borrar",accion:"hacer:tarea:borrar:a1",dos:true},{texto:"Empezar",accion:"hacer:tarea:empezar:a1"}]},{seccion:"terminadas",texto:"mejorar asyncio",etiqueta:"Mejorado",detalle:"Mejorado · hace 4 min — versión más rápida",botones:[{texto:"Parar",accion:"",off:true},{texto:"Borrar",accion:"hacer:tarea:borrar:a2"},{texto:"Empezar",accion:"hacer:tarea:empezar:a2"}]}]}],
         botones:[{texto:"Piensa una ahora",accion:"decir:piensa una"},{texto:"Ponte a pensar",accion:"decir:piensa"},{texto:"Deja de pensar",accion:"decir:deja de pensar"}]},
       maquina:{titulo:"Máquina virtual",texto:"Mi máquina está ENCENDIDA con internet solo por mi puerta (no ve tu casa) · Linux ligero, 1024 MB · con KVM (rápida) · 1 foto(s): nueva.\n\nEs un Linux ligero y aislado, sin tus archivos. Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu casa, y mis experimentos corren con un usuario sin permisos.",
         botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Últimas visitas",accion:"hacer:visitas"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
@@ -437,15 +449,15 @@ $("volver").onclick=volver; $("cerrar").onclick=volver;
 var pestApp={};
 function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
-  var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[];
+  var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[], filas=null;
   if(pes&&pes.length){                                  // v3.08: ventanas con PESTAÑAS (el cuaderno)
     var sel=pestApp[id]; if(!pes.some(function(p){return p.id===sel;})) sel=pes[0].id;
     pestApp[id]=sel;
-    pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; } });
+    pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; if(p.filas) filas=p.filas; } });
   }
   c.innerHTML=(pes&&pes.length?'<div class="pestanas pestapp">'+pes.map(function(p){
       return '<button class="pest'+(p.id===pestApp[id]?" on":"")+'" data-pest="'+esc(p.id)+'">'+esc(p.titulo)+'</button>'; }).join("")+'</div>':'')+
-    '<div class="texto">'+esc(texto)+'</div><div class="botones">'+botones.map(function(b,i){
+    (filas ? htmlFilas(filas) : '<div class="texto">'+esc(texto)+'</div>')+'<div class="botones">'+botones.map(function(b,i){
     return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'"'+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+
     '</div><div class="resultado" id="resultado"></div>';
   [].forEach.call(c.querySelectorAll("[data-pest]"), function(b){ b.onclick=function(){
@@ -457,6 +469,23 @@ function pintaApp(id, d){
       return;
     }
     delete b.dataset.armado; accion(id, b.dataset.acc); }; });
+}
+// v3.10: la pestaña Tareas: ACTIVAS / EN ESPERA / TERMINADAS, cada una con Parar · Borrar · Empezar
+var SECCIONES=[["activas","Activas"],["espera","En espera"],["terminadas","Terminadas"]];
+function claseEtiqueta(e){ e=String(e||"");
+  return /^Implementado/.test(e)?"ok":/^Mejorado/.test(e)?"mej":/^Falló/.test(e)?"mal":/^Preparado/.test(e)?"perm":/^(Parada|Quitada)/.test(e)?"gris":"hecho"; }
+function htmlFilas(filas){
+  return SECCIONES.map(function(s){
+    var l=filas.filter(function(f){ return f.seccion===s[0]; });
+    return '<div class="secc"><h4>'+esc(s[1])+' ('+l.length+')</h4>'+(l.length?l.map(function(f){
+      return '<div class="fila">'+
+        '<div class="ftxt"><div class="ftit">'+esc(f.texto)+'</div>'+
+        (f.etiqueta?'<span class="etq '+claseEtiqueta(f.etiqueta)+'">'+esc(f.etiqueta)+'</span>':'')+
+        '<div class="fdet">'+esc(f.etiqueta?String(f.detalle||"").replace(f.etiqueta,"").replace(/^ · /,"").replace(/^ — /,""):f.detalle)+'</div></div>'+
+        '<div class="fbot">'+(f.botones||[]).map(function(b){
+          return '<button class="b mini'+(b.off?' off':'')+'"'+(b.off?' disabled':' data-acc="'+esc(b.accion)+'"')+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+'</div></div>';
+    }).join(""):'<div class="vacia">Nada aquí.</div>')+'</div>';
+  }).join("");
 }
 function accion(id, acc){
   var dos=acc.indexOf(":"), tipo=acc.slice(0,dos), arg=acc.slice(dos+1);

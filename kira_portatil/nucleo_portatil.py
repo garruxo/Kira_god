@@ -394,16 +394,17 @@ class Trabajos:
         return tid
 
     def _olvidar_viejas(self):
-        acabadas = [k for k, v in self.tareas.items() if v["estado"] in ("hecho", "error", "cancelado")]
+        acabadas = [k for k, v in self.tareas.items() if v["estado"] in ("hecho", "error", "cancelado", "quitado")]
         for viejo in sorted(acabadas, key=lambda k: self.tareas[k]["inicio"])[:-self._guardar]:
             self.tareas.pop(viejo, None)
 
     def _bucle(self):
         while True:
             with self._lock:
-                while not self.cola or self.pausada:
+                while self.pausada or not any(not self.tareas.get(c, {}).get("retenida") for c in self.cola):
                     self._hay.wait(timeout=10)
-                tid = self.cola.pop(0)
+                tid = next(c for c in self.cola if not self.tareas.get(c, {}).get("retenida"))   # v3.10: las paradas no
+                self.cola.remove(tid)
                 t = self.tareas[tid]
                 t["estado"] = "en curso"
                 self.actual = tid
@@ -420,20 +421,75 @@ class Trabajos:
                 r = self._hacer(t["orden"], paso) or {}
                 t.update(respuesta=str(r.get("texto") or ""), codigo=r.get("codigo"), nombre=r.get("nombre"),
                          estado="hecho", fraccion=1.0, fin=time.time())
+                if r.get("ok") is False and not str(t["respuesta"]).lstrip().startswith("[x]"):
+                    t["respuesta"] = "[x] " + t["respuesta"]
             except Exception as e:                 # noqa: BLE001
                 cancel = type(e).__name__ == "Cancelada"
                 t.update(estado="cancelado" if cancel else "error",
                          respuesta="Parado." if cancel else f"[x] {e}", fin=time.time())
+            self._cerrar(t)
             with self._lock:
                 if self.actual == tid:
                     self.actual = None
+                if t.get("borrar_al_acabar"):
+                    self.tareas.pop(tid, None)
+
+    @staticmethod
+    def _cerrar(t):
+        """v3.10: apunta CÓMO acabó (implementado / mejorado / falló… y por qué)."""
+        try:
+            import cuaderno_clases_kira as cc
+            t["resultado"], t["por_que"] = cc.resultado_tarea(t["estado"], t.get("respuesta", ""))
+        except Exception:
+            t["resultado"], t["por_que"] = t["estado"], str(t.get("respuesta", ""))[:160]
 
     def hechas(self, n=15):
         """v3.08: las últimas terminadas (para la pestaña «Tareas» del cuaderno), la más reciente primero."""
         with self._lock:
-            ac = [t for t in self.tareas.values() if t["estado"] in ("hecho", "error", "cancelado")]
+            ac = [t for t in self.tareas.values() if t["estado"] in ("hecho", "error", "cancelado", "quitado")]
         ac.sort(key=lambda t: -(t.get("fin") or t.get("inicio") or 0))
-        return [{"orden": t["orden"], "estado": t["estado"], "fin": t.get("fin")} for t in ac[:n]]
+        return [{"id": t["id"], "orden": t["orden"], "estado": t["estado"], "fin": t.get("fin"),
+                 "resultado": t.get("resultado", ""), "por_que": t.get("por_que", "")} for t in ac[:n]]
+
+    # ---------- v3.10: botones Parar / Borrar / Empezar de cada tarea ----------
+    def quitar(self, tid):
+        """Borrar: si espera, sale de la cola y va a «Terminadas» como quitada (no se hace); si ya acabó, se borra el
+        apunte. Devuelve 'quitada' | 'borrada' | 'en curso' | None."""
+        with self._lock:
+            t = self.tareas.get(tid)
+            if t is None:
+                return None
+            if tid in self.cola:
+                self.cola.remove(tid)
+                t.update(estado="quitado", fin=time.time(), retenida=False)
+                self._cerrar(t)
+                return "quitada"
+            if t["estado"] == "en curso":
+                t["borrar_al_acabar"] = True
+                return "en curso"
+            self.tareas.pop(tid, None)
+            return "borrada"
+
+    def retener(self, tid, si=True):
+        """Parar una que ESPERA: se queda en la lista pero no empieza hasta «Empezar»."""
+        with self._lock:
+            t = self.tareas.get(tid)
+            if t is None or tid not in self.cola:
+                return False
+            t["retenida"] = bool(si)
+            self._hay.notify_all()
+            return True
+
+    def adelantar(self, tid):
+        """Empezar una que espera: la primera de la cola (y deja de estar parada)."""
+        with self._lock:
+            if tid not in self.cola:
+                return False
+            self.cola.remove(tid)
+            self.cola.insert(0, tid)
+            self.tareas[tid]["retenida"] = False
+            self._hay.notify_all()
+            return True
 
     def ver(self, tid):
         t = self.tareas.get(tid)
@@ -448,8 +504,11 @@ class Trabajos:
             a = self.tareas.get(self.actual) if self.actual else None
             if a and a["estado"] == "en curso":
                 out.append({"orden": a["orden"], "estado": "en curso"})
+            if a and a["estado"] == "en curso":
+                out[-1]["id"] = a["id"]
             for c in self.cola:
-                out.append({"orden": self.tareas.get(c, {}).get("orden", ""), "estado": "en cola"})
+                out.append({"id": c, "orden": self.tareas.get(c, {}).get("orden", ""), "estado": "en cola",
+                            "retenida": bool(self.tareas.get(c, {}).get("retenida"))})
             return out
 
 
@@ -525,6 +584,48 @@ class Nucleo:
 
     def seguir(self):
         return self.pausar(False)
+
+    def tarea_accion(self, tid, accion):
+        """v3.10: los botones de cada tarea. parar | borrar | empezar."""
+        tb = self.trabajos
+        t = tb.tareas.get(tid)
+        if t is None:
+            return {"ok": False, "texto": "Esa tarea ya no está."}
+        curso = t["estado"] == "en curso"
+        if accion == "parar":
+            if curso:
+                try:
+                    self.core.cancelar()
+                except Exception:
+                    pass
+                return {"ok": True, "texto": "La paro. Saldrá en «Terminadas» como parada."}
+            if tb.retener(tid, True):
+                return {"ok": True, "texto": "Parada: se queda esperando hasta que pulses «Empezar»."}
+            return {"ok": False, "texto": "Esa ya terminó."}
+        if accion == "borrar":
+            r = tb.quitar(tid)
+            if r == "en curso":
+                try:
+                    self.core.cancelar()
+                except Exception:
+                    pass
+                return {"ok": True, "texto": "La paro y la borro de la lista."}
+            if r == "quitada":
+                return {"ok": True, "texto": "Quitada: no se hará. Está en «Terminadas» con el motivo."}
+            return {"ok": True, "texto": "Borrada de la lista."}
+        if accion == "empezar":
+            if curso:
+                return {"ok": False, "texto": "Ya la estoy haciendo."}
+            if tid in tb.cola:
+                tb.adelantar(tid)
+                if tb.pausada:
+                    self.seguir()
+                return {"ok": True, "texto": "Es la siguiente: la empiezo en cuanto acabe lo de ahora."}
+            nuevo = tb.empezar(t["orden"])
+            if tb.pausada:
+                self.seguir()
+            return {"ok": True, "texto": "La vuelvo a hacer: está en la cola.", "id": nuevo}
+        return {"ok": False, "texto": "No conozco ese botón."}
 
     def estado(self):
         """Estado ligero para la barra del escritorio (sin leer versión/recuerdos/equipo): ¿ocupada?, ¿cuántas en
@@ -740,6 +841,11 @@ def crear_servidor(host, puerto, token, nucleo):
                                                         str(d.get("nombre") or ""), d.get("confirmado") is True))
                 except Exception as e:                 # noqa: BLE001
                     return self._json(500, {"ok": False, "texto": f"[x] {e}"})
+            if u.path == "/tarea/accion":               # v3.10: Parar / Borrar / Empezar (solo en el portátil)
+                if not es_local(self.client_address[0]):
+                    return self._json(403, {"error": "Eso solo desde el propio portátil."})
+                d = self._cuerpo_json()
+                return self._json(200, nucleo.tarea_accion(str(d.get("id") or ""), str(d.get("accion") or "")))
             if u.path == "/pausar":
                 d = self._cuerpo_json()
                 return self._json(200, nucleo.pausar(bool(d.get("si", True))))
@@ -807,6 +913,9 @@ class ClienteNucleo:
 
     def mejoras(self):
         return self._pedir("/mejoras", timeout=10)
+
+    def tarea_accion(self, tid, accion):
+        return self._pedir("/tarea/accion", {"id": tid, "accion": accion}, timeout=10)
 
     def mejora(self, accion, nombre="", confirmado=False):
         return self._pedir("/mejora", {"accion": accion, "nombre": nombre, "confirmado": confirmado is True},
