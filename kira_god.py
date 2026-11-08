@@ -2224,7 +2224,10 @@ class KiraGodCore:
         import actualizar_kira as ak_
         partes = []
         if ak_.hay_repo():
-            partes.append(ak_.actualizar(poner=(que == "poner"))["texto"])
+            r_ak = ak_.actualizar(poner=(que == "poner"))
+            partes.append(r_ak["texto"])
+            if que == "poner" and r_ak.get("ok") and r_ak.get("nuevas") and getattr(self, "es_kiraos", False):
+                self.pedir_reinicio = True        # v3.11: el núcleo se reinicia solo para usar el código nuevo
         else:
             partes.append(f"Soy la app del móvil (versión {ak_.version_de()}): mis mejoras de código llegan como "
                           "APK nuevo, que descargas e instalas tú.")

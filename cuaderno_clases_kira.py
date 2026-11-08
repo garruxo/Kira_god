@@ -282,7 +282,7 @@ def resultado_tarea(estado, respuesta=""):
         return "Implementado", motivo
     if _MEJORADO.search(p):
         return "Mejorado", motivo
-    return "Hecho", motivo or "Terminada."
+    return "Hecho", motivo or "Terminó sin contar nada más (no dejó respuesta)."
 
 
 def filas_tareas(trabajo=None, encargos=None, foco=None, ahora=None):

@@ -196,6 +196,33 @@ ok(esc.app_hacer("cuaderno", "tarea:borrar:e1")["refrescar"] and esc.nucleo_cli.
 ok("primero" in esc.app_hacer("cuaderno", "encargo:empezar:0")["texto"], "encargo: Empezar")
 ok(esc.app_hacer("cuaderno", "rm:-rf")["texto"] == "No conozco ese botón.", "botones raros no")
 
+# ---------- v3.11: tras ponerse las mejoras, el núcleo se reinicia solo; un 404 se explica ----------
+import urllib.error as ue
+ok("Reinicia el portátil" in ek.texto_error_nucleo(ue.HTTPError("u", 404, "Not Found", {}, None)),
+   "un 404 (núcleo viejo) se explica: reinicia el portátil")
+ok("propio portátil" in ek.texto_error_nucleo(ue.HTTPError("u", 403, "x", {}, None)), "un 403 se explica")
+salidas = []
+viejo_env = os.environ.pop("INVOCATION_ID", None)
+ok(npk.reiniciar_proceso_luego() is False, "lanzado a mano (sin systemd): no se cierra")
+ok(npk.reiniciar_proceso_luego(0.05, salir=lambda: salidas.append(1)) and (time.sleep(0.3) or salidas == [1]),
+   "con systemd: se cierra para volver con el código nuevo")
+llamado = []
+viejo_r = npk.reiniciar_proceso_luego
+npk.reiniciar_proceso_luego = lambda *a, **k: (llamado.append(1), True)[1]
+try:
+    nn = npk.Nucleo.__new__(npk.Nucleo)
+    nn.core = types.SimpleNamespace(dir=T, pedir_reinicio=True, registrar_actividad=lambda: None,
+                                    nueva_tarea=lambda: None, es_estudia_general=lambda o: None,
+                                    procesar_orden=lambda o: "[OK] Me he puesto 2 mejora(s)")
+    r = nn._hacer("implementa las mejoras", lambda f, t: None)
+    ok(llamado == [1] and "se reinicia solo" in r["texto"] and nn.core.pedir_reinicio is False,
+       "«implementa las mejoras» con novedades: el núcleo se reinicia solo y lo dice")
+finally:
+    npk.reiniciar_proceso_luego = viejo_r
+    if viejo_env is not None:
+        os.environ["INVOCATION_ID"] = viejo_env
+ok("no dejó respuesta" in cc.resultado_tarea("hecho", "")[1], "sin respuesta: lo dice claro")
+
 node = shutil.which("node")
 html = os.path.join(RAIZ, "kira_portatil", "kiraos_web", "escritorio.html")
 if node:

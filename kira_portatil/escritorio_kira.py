@@ -468,7 +468,7 @@ class EscritorioMixin:
             try:
                 r = n.tarea_accion(partes[2], partes[1])
             except Exception as e:                    # noqa: BLE001
-                return {"texto": f"[x] No he podido: {e}"}
+                return {"texto": texto_error_nucleo(e)}
             return {"texto": r.get("texto", "Hecho."), "refrescar": True}
         if len(partes) == 3 and partes[0] == "encargo" and partes[1] in ("borrar", "empezar"):
             import investigar_kira as iv
@@ -495,7 +495,7 @@ class EscritorioMixin:
         try:
             r = n.mejora(que, nombre, confirmado=que in ("aplicar", "quitar"))
         except Exception as e:                        # noqa: BLE001
-            return {"texto": f"[x] No he podido: {e}"}
+            return {"texto": texto_error_nucleo(e)}
         return {"texto": str(r.get("texto", "Hecho.")), "refrescar": True}
 
     def _app_red(self):
@@ -689,6 +689,16 @@ _PROGRAMA = re.compile(r"\b(?:programa|c[oó]digo|app|aplicaci[oó]n|apk|juego|e
                        r"funci[oó]n|calculadora|mej[oó]rate|mejora|escr[ií]be(?:me)?\s+un)", re.I)
 _ESTUDIA = re.compile(r"\b(?:estudia|aprende|investiga|lee|leer|resume|busca|pregúntate|averigua|curso|v[ií]deo|pdf)",
                       re.I)
+
+
+def texto_error_nucleo(e):
+    """v3.11: un 404 = mi núcleo aún lleva el código de antes (le falta ese botón): se arregla reiniciando."""
+    if getattr(e, "code", None) == 404:
+        return ("Mi núcleo todavía va con la versión anterior y no conoce este botón. Reinicia el portátil "
+                "(menú K ▸ Reiniciar) y ya funcionará.")
+    if getattr(e, "code", None) == 403:
+        return "Por seguridad, eso solo se hace desde el propio portátil."
+    return f"[x] No he podido: {e}"
 
 
 def texto_eta(seg):

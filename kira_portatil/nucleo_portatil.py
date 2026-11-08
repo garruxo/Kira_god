@@ -449,7 +449,8 @@ class Trabajos:
             ac = [t for t in self.tareas.values() if t["estado"] in ("hecho", "error", "cancelado", "quitado")]
         ac.sort(key=lambda t: -(t.get("fin") or t.get("inicio") or 0))
         return [{"id": t["id"], "orden": t["orden"], "estado": t["estado"], "fin": t.get("fin"),
-                 "resultado": t.get("resultado", ""), "por_que": t.get("por_que", "")} for t in ac[:n]]
+                 "resultado": t.get("resultado", ""), "por_que": t.get("por_que", ""),
+                 "respuesta": str(t.get("respuesta") or "")[:400]} for t in ac[:n]]
 
     # ---------- v3.10: botones Parar / Borrar / Empezar de cada tarea ----------
     def quitar(self, tid):
@@ -522,8 +523,18 @@ class Nucleo:
         self.con_maquina = con_maquina
         self.core = self._crear()
         self._enganchar()
-        self.trabajos = Trabajos(lambda orden, paso: ejecutar(self.core, orden, paso))
+        self.trabajos = Trabajos(self._hacer)
         self._lock_sinc = threading.Lock()
+
+    def _hacer(self, orden, paso):
+        r = ejecutar(self.core, orden, paso)
+        if getattr(self.core, "pedir_reinicio", False):     # v3.11: tras ponerse las mejoras, se reinicia solo
+            self.core.pedir_reinicio = False
+            if reiniciar_proceso_luego():
+                r = dict(r or {})
+                r["texto"] = (str(r.get("texto") or "") + "\nMi núcleo se reinicia solo en unos segundos para usar "
+                              "el código nuevo (las tareas que esperaban se pierden; vuelve a pedírmelas).")
+        return r
 
     @staticmethod
     def _crear_real():
@@ -669,6 +680,18 @@ class Nucleo:
         import sincronia_kira as sc
         with self._lock_sinc:
             return sc.aplicar_en_kiraos(self.datos, self.core.recuerdos, paquete)
+
+
+def reiniciar_proceso_luego(segundos=15, salir=None):
+    """v3.11: tras «implementa las mejoras», el núcleo se cierra para que systemd (Restart=always) lo abra con el
+    código nuevo. Solo si lo lleva systemd (si lo lanzaste tú a mano, no: se apagaría). Devuelve si lo hará."""
+    if not os.environ.get("INVOCATION_ID") and salir is None:
+        return False
+    salir = salir or (lambda: os._exit(0))
+    t = threading.Timer(segundos, salir)
+    t.daemon = True
+    t.start()
+    return True
 
 
 def es_local(ip):
