@@ -16,7 +16,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* ---------- fondo ---------- */
 #fondo{position:fixed;inset:0;background:radial-gradient(1100px 700px at 72% 38%,#0d1730 0%,#070b17 52%,#04050b 100%)}
 #fondo .orbe{position:absolute;right:9vw;top:13vh;width:min(38vmin,330px);height:min(38vmin,330px);border-radius:50%;
-  opacity:.5;background:radial-gradient(circle at 50% 42%,#14223d 0%,#0a1020 70%);
+  opacity:.82;background:radial-gradient(circle at 50% 42%,#14223d 0%,#0a1020 70%);
   box-shadow:0 0 0 2px rgba(34,211,238,.28),0 0 60px rgba(34,211,238,.16),0 0 90px rgba(244,114,208,.12);
   animation:late 6s ease-in-out infinite;display:grid;place-items:center}
 #fondo .orbe b{font-size:min(5vmin,40px);font-weight:800;letter-spacing:3px;background:linear-gradient(100deg,#2ee6ff,#f472d0);
@@ -24,6 +24,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #fondo .anillo{position:absolute;inset:-14px;border-radius:50%;border:2px solid transparent;
   border-top-color:rgba(34,211,238,.55);border-right-color:rgba(244,114,208,.35);animation:gira 14s linear infinite}
 @keyframes gira{to{transform:rotate(360deg)}}
+#fondo .orbe .centro{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:0 12%}
+#fondo .orbe .modo{font-size:min(3.4vmin,26px);font-weight:600;color:#e9f6ff;letter-spacing:.5px}
+#fondo .orbe .eta{font-size:min(2.2vmin,16px);color:#9ff1ff;min-height:1.2em}
+#fondo .orbe.ocupada .modo{color:#fff;text-shadow:0 0 14px rgba(46,230,255,.6)}
 @keyframes late{0%,100%{transform:scale(1)}50%{transform:scale(1.012)}}
 #saludo{position:fixed;right:9vw;top:calc(13vh + min(38vmin,330px) + 30px);width:min(38vmin,330px);text-align:center}
 #saludo .hora{font-size:46px;font-weight:300;letter-spacing:1px}
@@ -210,7 +214,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 </style>
 </head>
 <body>
-<div id="fondo"><div class="orbe"><div class="anillo"></div><b>KIRA</b></div></div>
+<div id="fondo"><div class="orbe"><div class="anillo"></div><div class="centro"><b>KIRA</b><span class="modo" id="orbeModo">Sin tareas</span><span class="eta" id="orbeEta"></span></div></div></div>
 <div id="saludo"><div class="hora" id="hora">--:--</div><div class="dia" id="dia"></div>
   <div class="hola" id="hola">Hola</div>
   <div class="pista">Háblame cuando quieras desde la barra de abajo: escribe o pulsa el micrófono. Te contesto con mi voz.</div></div>
@@ -281,9 +285,9 @@ var ICONOS = [
   {id:"red",titulo:"Mi red",sub:"aparatos de casa"},{id:"mapa",titulo:"Mapa de ataques",sub:"de dónde vienen"},
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
-  {id:"mejoras",titulo:"Mejoras",sub:"mejorarme a mí misma"},
   {id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; } return id; }
+var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; } return OCULTAS[id]||id; }
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 var $ = function(id){ return document.getElementById(id); };
 
@@ -300,7 +304,7 @@ var FAKE = {
       return Promise.resolve({estado:n>=c.r.length?"hecho":"hablando",respuesta:c.r.slice(0,n),lineas:[],pedir_clave:null}); },
   escuchar:function(){ return new Promise(function(r){ setTimeout(function(){ r({ok:true,texto:"qué tal estás"}); },1500); }); },
   voz_activa_poner:function(v){ return Promise.resolve(v); }, callar:function(){ return Promise.resolve(true); },
-  trabajo:function(){ return Promise.resolve(FAKE._trab||{nucleo:true,ocupada:false,en_cola:0,pausada:false,que:"pensando",cola:[]}); },
+  trabajo:function(){ return Promise.resolve(FAKE._trab||{nucleo:true,ocupada:false,en_cola:0,pausada:false,que:"pensando",cola:[],modo:"Pensando",eta:""}); },
   parar:function(){ FAKE._trab={nucleo:true,ocupada:false,en_cola:0,pausada:false,que:""}; return Promise.resolve({ok:true,texto:"He parado."}); },
   pausar_trabajo:function(si){ FAKE._trab={nucleo:true,ocupada:false,en_cola:2,pausada:!!si,que:si?"":"pensando"}; return Promise.resolve({ok:true,pausada:!!si}); },
   wifi_datos:function(){ return Promise.resolve({ok:true,estado:"Conectada a «MiCasa», señal 72 %, con internet.",redes:DEMO_REDES}); },
@@ -309,7 +313,7 @@ var FAKE = {
   app:function(n){ var T={
       red:{titulo:"Mi red",texto:"Miro tu red de casa SOLO para defenderla (nunca fuera de ella). Pulsa «Buscar aparatos».",
         botones:[{texto:"Buscar aparatos",accion:"hacer:inventario"},{texto:"Avisos de la guardiana",accion:"hacer:alertas"},{texto:"Mapa de ataques",accion:"app:mapa"}]},
-      cuaderno:{titulo:"Cuaderno",texto:"LO QUE ESTOY PENSANDO (1)",pestanas:[{id:"pensamiento",titulo:"Pensamiento (1)",texto:"LO QUE ESTOY PENSANDO (1)\n\n~ [duda] ¿por qué la memoria caché funciona así por dentro?"},{id:"conocimiento",titulo:"Conocimiento (1)",texto:"SOLUCIONES GUARDADAS (1)\n\n✔ cifrado"},{id:"mejoras",titulo:"Mejoras (1)",texto:"KIRAOS (el portátil):\n  SE PUEDE mejorar"},{id:"tareas",titulo:"Tareas",texto:"ACTIVAS (0):\n  nada ahora mismo\n\nEN ESPERA (0):\n\nTERMINADAS (0):"}],
+      cuaderno:{titulo:"Cuaderno",texto:"LO QUE ESTOY PENSANDO (1)",pestanas:[{id:"pensamiento",titulo:"Pensamiento (1)",texto:"LO QUE ESTOY PENSANDO (1)\n\n~ [duda] ¿por qué la memoria caché funciona así por dentro?"},{id:"conocimiento",titulo:"Conocimiento (1)",texto:"SOLUCIONES GUARDADAS (1)\n\n✔ cifrado"},{id:"mejoras",titulo:"Mejoras (1)",texto:"KIRAOS (el portátil):\n  SE PUEDE mejorar",botones:[{texto:"Instalar o deshacer mis mejoras (1 esperando)",accion:"app:mejoras"}]},{id:"tareas",titulo:"Tareas",texto:"ACTIVAS (0):\n  nada ahora mismo\n\nEN ESPERA (0):\n\nTERMINADAS (0):"}],
         botones:[{texto:"Piensa una ahora",accion:"decir:piensa una"},{texto:"Ponte a pensar",accion:"decir:piensa"},{texto:"Deja de pensar",accion:"decir:deja de pensar"}]},
       maquina:{titulo:"Máquina virtual",texto:"Mi máquina está ENCENDIDA con internet solo por mi puerta (no ve tu casa) · Linux ligero, 1024 MB · con KVM (rápida) · 1 foto(s): nueva.\n\nEs un Linux ligero y aislado, sin tus archivos. Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu casa, y mis experimentos corren con un usuario sin permisos.",
         botones:[{texto:"Enciéndela",accion:"decir:enciende tu máquina"},{texto:"Enséñamela",accion:"decir:enséñame tu máquina"},{texto:"Últimas visitas",accion:"hacer:visitas"},{texto:"Que la estudie",accion:"decir:estudia tu máquina"},{texto:"Apágala",accion:"decir:apaga tu máquina"}]},
@@ -396,6 +400,13 @@ function pintaTrabajo(d){
   $("trabCuantas").textContent = d.en_cola>0 ? ("· "+d.en_cola+" en espera") : "";
   $("trabParar").style.display = d.ocupada ? "" : "none";
   $("trabPausar").textContent = d.pausada ? "Seguir" : "Pausar";
+  pintaOrbe(d);
+}
+function pintaOrbe(d){                          // v3.09: el orbe dice qué hace Kira y cuánto le queda
+  d=d||{}; var o=document.querySelector("#fondo .orbe"); if(!o) return;
+  $("orbeModo").textContent = d.modo || (d.ocupada ? "Trabajando" : (d.pausada ? "En pausa" : (d.que ? "Pensando" : "Sin tareas")));
+  $("orbeEta").textContent = d.eta || "";
+  o.classList.toggle("ocupada", !!d.ocupada);
 }
 function refrescaTrabajo(){ llama("trabajo").then(pintaTrabajo).catch(function(){}); }
 
@@ -426,15 +437,15 @@ $("volver").onclick=volver; $("cerrar").onclick=volver;
 var pestApp={};
 function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
-  var pes=d.pestanas||null, texto=d.texto||"";
+  var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[];
   if(pes&&pes.length){                                  // v3.08: ventanas con PESTAÑAS (el cuaderno)
     var sel=pestApp[id]; if(!pes.some(function(p){return p.id===sel;})) sel=pes[0].id;
     pestApp[id]=sel;
-    pes.forEach(function(p){ if(p.id===sel) texto=p.texto||""; });
+    pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; } });
   }
   c.innerHTML=(pes&&pes.length?'<div class="pestanas pestapp">'+pes.map(function(p){
       return '<button class="pest'+(p.id===pestApp[id]?" on":"")+'" data-pest="'+esc(p.id)+'">'+esc(p.titulo)+'</button>'; }).join("")+'</div>':'')+
-    '<div class="texto">'+esc(texto)+'</div><div class="botones">'+(d.botones||[]).map(function(b,i){
+    '<div class="texto">'+esc(texto)+'</div><div class="botones">'+botones.map(function(b,i){
     return '<button class="b'+(i===0?" prin":"")+'" data-acc="'+esc(b.accion)+'"'+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+
     '</div><div class="resultado" id="resultado"></div>';
   [].forEach.call(c.querySelectorAll("[data-pest]"), function(b){ b.onclick=function(){

@@ -48,7 +48,6 @@ ICONOS = [
     {"id": "cuaderno", "titulo": "Cuaderno", "sub": "lo que piensa"},
     {"id": "programando", "titulo": "Programando", "sub": "verla escribir código"},
     {"id": "movil", "titulo": "Móvil", "sub": "sincronía con Kira app"},
-    {"id": "mejoras", "titulo": "Mejoras", "sub": "mejorarme a mí misma"},
     {"id": "ajustes", "titulo": "Ajustes", "sub": "cerebro, voz, nacimiento"},
 ]
 
@@ -226,7 +225,8 @@ class EscritorioMixin:
             return cache[1]
         n = self._nucleo()
         if n is None or not hasattr(n, "estado"):
-            d = {"nucleo": False, "ocupada": False, "en_cola": 0, "pausada": False, "haciendo": "", "que": "", "cola": []}
+            d = {"nucleo": False, "ocupada": False, "en_cola": 0, "pausada": False, "haciendo": "", "que": "", "cola": [],
+                 "modo": "Sin tareas", "eta": ""}
         else:
             e = n.estado() or {}
             act = e.get("actividad") or {}
@@ -243,6 +243,7 @@ class EscritorioMixin:
             d = {"nucleo": True, "ocupada": bool(e.get("ocupada")), "en_cola": int(e.get("en_cola") or 0),
                  "pausada": bool(e.get("pausada")), "haciendo": e.get("haciendo", ""), "que": que,
                  "cola": e.get("cola", [])}
+            d.update(estado_orbe(e, ahora))
         self._trab_cache = (ahora, d)
         return d
 
@@ -509,6 +510,11 @@ class EscritorioMixin:
         encargos = leer("preguntas_mias.json", [])
         pest = cc.pestanas(est, sistema, trabajo, encargos if isinstance(encargos, list) else [],
                            leer("foco.json", {}))
+        for p in pest:                                # v3.09: desde la pestaña Mejoras se instalan (ya no hay icono)
+            if p["id"] == "mejoras":
+                hay = bool(sistema.get("kiraos_pendiente"))
+                p["botones"] = [{"texto": "Instalar o deshacer mis mejoras" + (" (1 esperando)" if hay else ""),
+                                 "accion": "app:mejoras"}]
         return {"titulo": "Cuaderno", "texto": pest[0]["texto"], "pestanas": pest,
                 "botones": [{"texto": "Piensa una ahora", "accion": "decir:piensa una"},
                             {"texto": "Ponte a pensar", "accion": "decir:piensa"},
@@ -638,6 +644,53 @@ class EscritorioMixin:
         # un momento de espera para que la pantalla reciba la respuesta antes de que se cierre la ventana
         threading.Timer(0.6, cerrar).start()
         return {"ok": True, "texto": "Te dejo en Xubuntu. Para volver, busca «Kira» en su menú (o reinicia)."}
+
+
+# ---------- v3.09: lo que enseña el ORBE (qué hace Kira y cuánto le queda) ----------
+_PROGRAMA = re.compile(r"\b(?:programa|c[oó]digo|app|aplicaci[oó]n|apk|juego|experimenta|implementa|algoritmo|script|"
+                       r"funci[oó]n|calculadora|mej[oó]rate|mejora|escr[ií]be(?:me)?\s+un)", re.I)
+_ESTUDIA = re.compile(r"\b(?:estudia|aprende|investiga|lee|leer|resume|busca|pregúntate|averigua|curso|v[ií]deo|pdf)",
+                      re.I)
+
+
+def texto_eta(seg):
+    """«menos de 1 min» / «unos 5 min» / «1 h 20 min»."""
+    seg = int(max(0, seg))
+    if seg < 60:
+        return "menos de 1 min"
+    m = int(round(seg / 60.0))
+    if m < 60:
+        return f"unos {m} min"
+    return f"{m // 60} h {m % 60:02d} min"
+
+
+def estado_orbe(e, ahora=None):
+    """{'modo': Estudiando|Pensando|Programando|Trabajando|En pausa|Sin tareas, 'eta': texto o ''} desde el estado del
+    núcleo. El tiempo se ESTIMA con lo que lleva y la fracción hecha (sin fracción aún: «calculando…»)."""
+    ahora = time.time() if ahora is None else ahora
+    act = e.get("actividad") or {}
+    modo, eta = "Sin tareas", ""
+    if e.get("ocupada"):
+        orden = str(e.get("haciendo") or "")
+        modo = ("Estudiando" if _ESTUDIA.search(orden) else "Programando" if _PROGRAMA.search(orden)
+                else "Trabajando")
+        fr, ini = float(e.get("fraccion") or 0), e.get("inicio")
+        if ini and 0.05 <= fr < 1:
+            eta = "termina en " + texto_eta((ahora - float(ini)) * (1 - fr) / fr)
+        elif fr >= 1:
+            eta = "terminando…"
+        else:
+            eta = "calculando el tiempo…"
+    elif e.get("pausada"):
+        modo = "En pausa"
+    elif act.get("estudiando"):
+        modo = "Estudiando"
+    elif act.get("pensando") or act.get("foco"):
+        modo = "Pensando"
+    n = int(e.get("en_cola") or 0)
+    if n:
+        eta = (eta + " · " if eta else "") + f"{n} en espera"
+    return {"modo": modo, "eta": eta}
 
 
 def codigo_movil(correr=None):

@@ -157,7 +157,7 @@ ok(r["refrescar"] and esc.nucleo_cli.hechas[-1] == ("aplicar", "", True), "Insta
 esc.app_hacer("mejoras", "revertir:saludar")
 ok(esc.nucleo_cli.hechas[-1] == ("revertir", "saludar", False), "Volver atrás «saludar»")
 ok(esc.app_hacer("mejoras", "formatear")["texto"] == "No conozco ese botón.", "botones raros no")
-ok("mejoras" in [i["id"] for i in ek.ICONOS], "icono «Mejoras» en el escritorio")
+ok("mejoras" not in [i["id"] for i in ek.ICONOS], "v3.09: sin icono «Mejoras» en el escritorio (va en el Cuaderno)")
 
 # ---------- Chromium: dos toques de verdad ----------
 node = shutil.which("node")
@@ -168,7 +168,9 @@ const { chromium } = require('playwright');
 let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({viewport:{width:1366,height:768}});
   const errs=[]; pg.on('pageerror', e => errs.push(String(e)));
   await pg.goto('file://' + process.argv[2]); await pg.waitForTimeout(600);
-  await pg.click('.icono[data-app="mejoras"]'); await pg.waitForTimeout(400);
+  await pg.click('.icono[data-app="cuaderno"]'); await pg.waitForTimeout(400);
+  await pg.click('[data-pest="mejoras"]'); await pg.waitForTimeout(150);
+  await pg.click('[data-acc="app:mejoras"]'); await pg.waitForTimeout(400);
   const texto = await pg.textContent('#vcuerpo .texto');
   await pg.click('[data-acc="hacer:aplicar"]'); await pg.waitForTimeout(150);
   const tras1 = await pg.textContent('[data-acc="hacer:aplicar"]');

@@ -530,8 +530,12 @@ class Nucleo:
         """Estado ligero para la barra del escritorio (sin leer versión/recuerdos/equipo): ¿ocupada?, ¿cuántas en
         espera?, ¿pausada?, y qué está haciendo por su cuenta (pensar/estudiar/foco)."""
         t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
-        return {"ocupada": self.trabajos.ocupado(),
-                "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
+        ocup = self.trabajos.ocupado()
+        return {"ocupada": ocup,
+                "haciendo": (t or {}).get("orden", "") if ocup else "",
+                "fraccion": float((t or {}).get("fraccion") or 0) if ocup else 0.0,      # v3.09: para el «termina en…»
+                "inicio": (t or {}).get("inicio") if ocup else None,
+                "avance": ((t or {}).get("avance") or [""])[-1] if ocup else "",
                 "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
                 "cola": self.trabajos.lista(), "hechas": self.trabajos.hechas(), "actividad": actividad(self.core)}
 

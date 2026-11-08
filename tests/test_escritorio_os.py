@@ -112,10 +112,10 @@ api.wifi_mod = WifiFalso()
 api.nucleo_cli = None
 ok(api.entrar() is True and api.entrado, "entrar sigue funcionando (y prepara el escritorio)")
 b = api.barra()
-ok(b["wifi"]["ssid"] == "MiCasa" and b["voz"] is True and len(b["iconos"]) == 11, "la barra: WiFi, voz e iconos")
+ok(b["wifi"]["ssid"] == "MiCasa" and b["voz"] is True and len(b["iconos"]) == 10, "la barra: WiFi, voz e iconos")
 ids = [i["id"] for i in ek.ICONOS]
-ok(ids == ["hablar", "buscador", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "movil", "mejoras", "ajustes"],
-   "los 11 iconos del escritorio (v2.91: con el Buscador)")
+ok(ids == ["hablar", "buscador", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "movil", "ajustes"],
+   "los 10 iconos del escritorio (v2.91: con el Buscador)")
 
 
 # ---------- v2.91: el BUSCADOR tipo Google (lo busca y lo lee desde su máquina) ----------
@@ -318,7 +318,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
     if out.startswith("{"):
         d = json.loads(out)
         ok(not d["errs"], "Chromium: sin errores " + str(d["errs"]))
-        ok(d["iconos"] == 11, "Chromium: 11 iconos en el escritorio")
+        ok(d["iconos"] == 10, "Chromium: 10 iconos en el escritorio")
         ok("voz" in d["aviso"] and "ver texto" in d["aviso"], "Chromium: contesta por voz, con «ver texto»")
         ok(len(d["texto"]) == 2 and "hola" in d["texto"][0], "Chromium: el botón «Texto» enseña la conversación")
         ok(all(d["vuelve"]), "Chromium: TODAS las ventanas tienen «‹ Escritorio» y vuelven a la pantalla principal")
