@@ -2146,6 +2146,40 @@ class KiraGodCore:
                 pass
         return texto
 
+    def _orden_mejoras(self, que):
+        """v3.06: «implementa las mejoras» / «actualízate» (poner) y «¿hay mejoras?» (mirar). En KiraOS se pone las
+        mejoras de su código de GitHub (solo cuando TÚ lo pides). Además cuenta lo pendiente de otro tipo: mejoras
+        que te preparó KiraOS (en el móvil: dos toques), mejoras preparadas para el móvil y soluciones con código."""
+        import actualizar_kira as ak_
+        partes = []
+        if ak_.hay_repo():
+            partes.append(ak_.actualizar(poner=(que == "poner"))["texto"])
+        else:
+            partes.append(f"Soy la app del móvil (versión {ak_.version_de()}): mis mejoras de código llegan como "
+                          "APK nuevo, que descargas e instalas tú.")
+        try:
+            import sincronia_kira as sc_
+            rec = sc_.mejoras_recibidas(self.dir)
+            if rec:
+                partes.append(f"Tienes {len(rec)} mejora(s) que me ha preparado KiraOS ("
+                              + ", ".join(m.get("nombre", "?") for m in rec[:5]) + "): instálalas en el panel con "
+                              "dos toques (es tu permiso).")
+            pm = sc_.mejoras_para_movil(self.dir)
+            if pm and getattr(self, "es_kiraos", False):
+                partes.append(f"Tengo {len(pm)} mejora(s) preparadas para el móvil: se las doy al sincronizar.")
+        except Exception:
+            pass
+        try:
+            import pensador_kira as pn_
+            sols = [s for s in pn_.cargar(self._ruta_pensar()).get("soluciones", {}).values()
+                    if (s.get("codigo") or "").strip()]
+            if sols:
+                partes.append(f"En mi cuaderno hay {len(sols)} solución(es) con código; para meter una en mí, "
+                              "«usa la solución X en Kira» (pasa por el laboratorio).")
+        except Exception:
+            pass
+        return "\n\n".join(partes)
+
     def kiraos_fuera(self):
         """v3.02: ¿veo a KiraOS FUERA de casa (por Tailscale)? (para pasarle las órdenes tranquilas)."""
         c = self._casa()
@@ -3552,6 +3586,13 @@ class KiraGodCore:
             _q = None
         if _q:                                         # v3.02: «estudia solo lo que yo te mande» / «piensa libre»
             return self._orden_solo_mio(_q)
+        try:
+            import actualizar_kira as _ak
+            _qa = _ak.es_orden(command)
+        except ImportError:
+            _qa = None
+        if _qa:                                        # v3.06: «implementa las mejoras» / «actualízate» / «¿hay mejoras?»
+            return self._orden_mejoras(_qa)
         # La clave de API nunca pasa por el búfer ni por el log
         if cmd_lower.startswith("config clave:"):
             clave = command.split(":", 1)[1].strip()

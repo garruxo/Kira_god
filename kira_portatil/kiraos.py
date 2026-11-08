@@ -20,6 +20,7 @@ La lógica (el puente `Api`) se prueba sin ventana (tests/test_kiraos.py). El PI
 """
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -200,6 +201,40 @@ class Api(EscritorioMixin):
 # =====================================================================================
 #  ABRIR LA PANTALLA DE ARRANQUE
 # =====================================================================================
+def tam_pantalla(correr=None):
+    """v3.06: el tamaño de la pantalla (ancho, alto). En la sesión propia de Kira (sin el escritorio de Xubuntu) la
+    ventana no ocupaba toda la pantalla: ahora se abre del tamaño exacto de la pantalla, en la esquina (0,0)."""
+    import subprocess
+    correr = correr or (lambda a: subprocess.run(a, capture_output=True, text=True, timeout=5).stdout)
+    try:
+        m = re.search(r"current\s+(\d+)\s*x\s*(\d+)", correr(["xrandr", "--current"]) or "")
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    except Exception:
+        pass
+    try:
+        m = re.search(r"dimensions:\s+(\d+)x(\d+)", correr(["xdpyinfo"]) or "")
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    except Exception:
+        pass
+    return None
+
+
+def opciones_ventana(pantalla, tam=None, sesion_propia=None):
+    """Cómo abrir la ventana de KiraOS. A pantalla completa y, si sé el tamaño de la pantalla, de ese tamaño exacto
+    y en la esquina (así ocupa TODO aunque el gestor de ventanas no haga caso a la «pantalla completa»)."""
+    if sesion_propia is None:
+        sesion_propia = bool(os.environ.get("KIRA_SESION_PROPIA"))
+    o = {"fullscreen": pantalla, "background_color": "#04050a", "min_size": (900, 640)}
+    if pantalla and tam:
+        o.update(width=tam[0], height=tam[1], x=0, y=0)
+        o["min_size"] = (min(900, tam[0]), min(640, tam[1]))
+    if pantalla and sesion_propia:
+        o["frameless"] = True                   # sin barra de título: solo Kira
+    return o
+
+
 def arrancar(api, pantalla=True):
     """Abre la pantalla de inicio + PIN. Devuelve True si el dueño entró (acertó el PIN). Bloquea hasta que se cierra.
     Usa el motor de Ubuntu (pywebview); si no está, cae en una reserva por PIN (Tkinter o consola)."""
@@ -207,10 +242,23 @@ def arrancar(api, pantalla=True):
         import webview
     except Exception:
         return _reserva(api, pantalla)
-    win = webview.create_window("KiraOS", ARRANQUE, js_api=api, fullscreen=pantalla,
-                                background_color="#04050a", min_size=(900, 640))
+    tam = tam_pantalla() if pantalla else None
+    win = webview.create_window("KiraOS", ARRANQUE, js_api=api, **opciones_ventana(pantalla, tam))
     api._ventana = win
     api.web = True                              # el escritorio vive en esta misma ventana
+
+    def al_mostrarse():                         # por si el gestor de ventanas tardó: otra vez a todo el tamaño
+        if not (pantalla and tam):
+            return
+        try:
+            win.move(0, 0)
+            win.resize(tam[0], tam[1])
+        except Exception:
+            pass
+    try:
+        win.events.shown += al_mostrarse
+    except Exception:
+        pass
     webview.start()
     return api.entrado
 

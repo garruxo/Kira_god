@@ -134,4 +134,20 @@ ok(res["ok"] and os.path.exists(os.path.join(CASA, ".kira_ir_a_xubuntu")),
    "«Ir a Xubuntu» deja la marca para que la sesión abra el escritorio")
 ok("solo_kira.sh" in open(os.path.join(POR, "instalar_portatil.sh"), encoding="utf-8").read(),
    "el instalador lo deja así en las instalaciones nuevas")
+# ---------- v3.06: la ventana ocupa TODA la pantalla en la sesión de Kira ----------
+import kiraos  # noqa: E402
+ok(kiraos.tam_pantalla(lambda a: "Screen 0: minimum 8 x 8, current 1366 x 768, maximum 32767 x 32767\n"
+                       if a[0] == "xrandr" else "") == (1366, 768), "lee el tamaño de la pantalla (xrandr)")
+ok(kiraos.tam_pantalla(lambda a: "" if a[0] == "xrandr" else "  dimensions:    1280x800 pixels (338x211 mm)") ==
+   (1280, 800), "o con xdpyinfo")
+ok(kiraos.tam_pantalla(lambda a: "") is None, "si no lo sabe, None (no inventa)")
+o = kiraos.opciones_ventana(True, (1366, 768), sesion_propia=True)
+ok(o["fullscreen"] and (o["width"], o["height"], o["x"], o["y"]) == (1366, 768, 0, 0) and o["frameless"],
+   "en la sesión de Kira: pantalla completa, del tamaño exacto, en la esquina y sin barra de título")
+o = kiraos.opciones_ventana(True, None, sesion_propia=False)
+ok(o["fullscreen"] and "width" not in o and "frameless" not in o, "sin tamaño ni sesión propia: como antes")
+ok("_NET_SUPPORTING_WM_CHECK" in open(ses, encoding="utf-8").read(),
+   "la sesión espera al gestor de ventanas antes de abrir Kira")
+ok("win.events.shown += al_mostrarse" in open(os.path.join(POR, "kiraos.py"), encoding="utf-8").read(),
+   "y al mostrarse, la vuelve a poner a todo el tamaño")
 print("\nTODO BIEN", n)

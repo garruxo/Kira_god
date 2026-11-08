@@ -29,9 +29,12 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 DATOS_NUCLEO = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_portatil/kira_datos"))
 
 # «busca …» que NO es buscar en internet: son órdenes de Kira (v2.92, revisando la v2.91)
+_TRANSITORIA = re.compile(r"^\s*(?:En cola\b|Pensando…|Pensando\.\.\.|Sigo con|Leyendo\b|Siguiendo el enlace|"
+                         r"Estudiando «|Empiezo\b|Un momento)", re.I)
+
 _NO_ES_WEB = re.compile(
     r"\b(?:wi-?fi|aparatos?|dispositivos?|puertos?|pdfs?|recuerdos?|ba[uú]l|notas|cuaderno|soluciones|"
-    r"m[aá]quina|emparejar|c[oó]digo\s+de\s+emparejar|en\s+(?:mi|tu|la)\s+red|mis\s+documentos|tus\s+documentos|"
+    r"m[aá]quina|emparejar|actualizaci[oó]n(?:es)?|mejoras|novedades|c[oó]digo\s+de\s+emparejar|en\s+(?:mi|tu|la)\s+red|mis\s+documentos|tus\s+documentos|"
     r"tus\s+recetas|tu\s+receta|recetas?\s+de\s+(?:ingenier|grafo|programaci|ciberseg|dise[nñ]|cadena|compresi|"
     r"compilador|sistemas|redes\s+neuronales))", re.I)
 
@@ -154,6 +157,8 @@ class EscritorioMixin:
                            wifi=getattr(self, "wifi_mod", None))
                 t["pedir_clave"] = ctx.get("pedir_clave")
                 self._recordar_codigo(texto, t["lineas"])
+                if t["respuesta"].strip():             # v3.06: ya contestó: fuera los avisos de espera
+                    t["lineas"][:] = [x for x in t["lineas"] if not _TRANSITORIA.match(str(x))]
         except Exception as e:                                     # noqa: BLE001 - la pantalla nunca se queda colgada
             t["respuesta"] = f"[x] Algo falló: {e}"
         t["estado"] = "hecho"

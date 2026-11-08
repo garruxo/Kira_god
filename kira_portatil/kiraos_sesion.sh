@@ -16,6 +16,15 @@ if [ -z "${KIRA_KIRAOS:-}" ]; then
   command -v xfsettingsd >/dev/null 2>&1 && xfsettingsd --daemon >/dev/null 2>&1
   # quien coloca las ventanas (para la pantalla completa y la ventanita de la clave de la WiFi)
   command -v xfwm4 >/dev/null 2>&1 && xfwm4 --compositor=off --daemon >/dev/null 2>&1
+  # v3.06: esperar a que el gestor de ventanas esté listo (si Kira se abre antes, no ocupa toda la pantalla)
+  for _ in $(seq 1 20); do
+    if command -v xprop >/dev/null 2>&1; then
+      xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id" && break
+    else
+      sleep 1; break
+    fi
+    sleep 0.25
+  done
 fi
 rm -f "$MARCA"
 

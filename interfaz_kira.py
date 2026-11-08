@@ -571,6 +571,10 @@ def construir_interfaz(core, consola=None, modo=None):
         if dfj_.es_orden(orden):                        # «entrena tus defensas», «juega al laberinto de defensa»
             defensa_por_voz(orden)
             return
+        import actualizar_kira as ak_
+        if ak_.es_orden(orden):                         # v3.06: «implementa las mejoras» / «actualízate»
+            hablar_con_kira(orden)
+            return
         import mando_kira as mdk_                      # v2.84: el MÓVIL COMO MANDO de la Kira del portátil
         ctl_mando = mdk_.orden_control(orden)
         if ctl_mando:
@@ -1007,6 +1011,10 @@ def construir_interfaz(core, consola=None, modo=None):
         ctl_mando = mdk_.orden_control(orden)
         if ctl_mando:
             mando_control(ctl_mando)
+            return
+        import actualizar_kira as ak2_
+        if ak2_.es_orden(orden):                        # v3.06: «implementa las mejoras» / «actualízate»
+            hablar_con_kira(orden)
             return
         if re.match(r"^(?:sincron[ií]zate|sincroniza(?:te)?(?:\s+con\s+kiraos)?|sincron[ií]a)$",
                     esk._norm(orden)):
