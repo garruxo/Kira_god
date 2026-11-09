@@ -2316,8 +2316,8 @@ class KiraGodCore:
             pan_ = getattr(self, "_panel", None)          # v3.07: una mejora para MÍ esperando tus dos toques
             pend_ = getattr(pan_, "pendiente", None) if pan_ is not None else None
             if pend_ is not None and getattr(self, "es_kiraos", False):
-                partes.append(f"Tengo una mejora para mí esperando tu permiso («{pend_.nombre}»): ábrela en el "
-                              "icono «Mejoras» del escritorio e instálala con dos toques.")
+                partes.append(f"Tengo una mejora para mí esperando tu permiso («{pend_.nombre}»): ábrela en "
+                              "Cuaderno ▸ Mejoras ▸ «Instalar o deshacer mis mejoras» e instálala con dos toques.")
             pm = sc_.mejoras_para_movil(self.dir)
             if pm and getattr(self, "es_kiraos", False):
                 partes.append(f"Tengo {len(pm)} mejora(s) preparadas para el móvil: se las doy al sincronizar.")
@@ -2333,6 +2333,62 @@ class KiraGodCore:
         except Exception:
             pass
         return "\n\n".join(partes)
+
+    def _panel_mejoras(self):
+        """El panel de mejoras (laboratorio + pendiente + dos toques). En el móvil lo monta la pantalla; si no está
+        (KiraOS, pruebas), se crea igual que en KiraOS."""
+        pan = getattr(self, "_panel", None)
+        if pan is None:
+            import panel_kira
+            pan = panel_kira.PanelControl(self)
+            self._panel = pan
+        return pan
+
+    def _donde_instalar(self):
+        if getattr(self, "es_kiraos", False):
+            return "Cuaderno ▸ Mejoras ▸ «Instalar o deshacer mis mejoras» ▸ «Instalar» (dos toques)"
+        return "el panel ▸ la mejora que espera ▸ «Instalar» (dos toques)"
+
+    def _orden_implementar(self, q, command):
+        """v3.20: mete en Kira una RECETA probada o una SOLUCIÓN de su cuaderno, sin que el cerebro la reescriba: se
+        prueba en el laboratorio y queda esperando tus dos toques (nunca se instala sola)."""
+        import implementar_kira as ik
+        import saber_mejoras_kira as sm_
+        tipo, nombre = q
+        codigo, ident, que = "", "", ""
+        if tipo == "solucion":
+            import pensador_kira as pn_
+            sols = pn_.cargar(self._ruta_pensar()).get("soluciones", {})
+            tema, sol = ik.buscar_solucion(sols, nombre)
+            if tema is None:
+                r = sm_.receta(nombre)
+                if r is None:
+                    lista = ", ".join(f"«{t}»" for t in list(sols)[:8]) or "ninguna todavía"
+                    return f"No encuentro la solución «{nombre}» en mi cuaderno. Las que tengo: {lista}."
+                tipo = "receta"
+            else:
+                codigo = (sol.get("codigo") or "").strip()
+                ident, que = tema, f"la solución «{tema}»"
+                if not codigo:
+                    r = sm_.receta(nombre)
+                    if r is None:
+                        return (f"La solución «{tema}» no tiene código todavía (es una respuesta, no un programa). Dime "
+                                f"«repiensa a fondo {tema}» o «mejórate: …» con lo que quieres que haga.")
+                    tipo, codigo = "receta", ""
+        if tipo == "receta":
+            r = sm_.receta(nombre)
+            if r is None:
+                parecidas = ", ".join(f"«{x['titulo']}»" for _p, x in sm_.buscar(nombre, 3)) or "—"
+                return f"No tengo una receta «{nombre}». Las más parecidas: {parecidas}. Dime «recetas» para verlas todas."
+            codigo, ident, que = r["codigo"], r["id"], f"la receta probada «{r['titulo']}»"
+        try:
+            res = self._panel_mejoras().probar_codigo(codigo.strip() + "\n", ident, command)
+        except Exception as e:                        # noqa: BLE001
+            return f"[x] No he podido prepararla: {e}"
+        if res.get("aprobable"):
+            return (f"He preparado {que} y ha pasado mi laboratorio. NO la he instalado: ve a {self._donde_instalar()}. "
+                    "Si luego no te gusta, «Volver atrás».")
+        return f"No la instalo: {que} no pasó el laboratorio. " + str(res.get("texto", "")).strip()[:600]
 
     def kiraos_fuera(self):
         """v3.02: ¿veo a KiraOS FUERA de casa (por Tailscale)? (para pasarle las órdenes tranquilas)."""
@@ -2689,9 +2745,8 @@ class KiraGodCore:
             return "No encuentro esa solución guardada."
         destino = str(destino or "").lower()
         if destino.startswith("kira") or "integra" in destino or "funci" in destino:
-            return ("Para meterla en mí como función nueva: ve a la Sala Hacker ▸ Biblioteca ▸ Soluciones, copia el "
-                    f"código de «{tema}» y dime «implementa este código» (lo pruebo en mi laboratorio y lo instalas con "
-                    "tus dos toques). No meto nada en mí sola.")
+            return (f"Para meterla en mí como función nueva, dime «usa la solución {tema} en Kira»: la pruebo en mi "
+                    "laboratorio y la instalas tú con dos toques. No meto nada en mí sola.")
         if destino.startswith("web"):
             return (f"Para una web con esto: dime «diséñame una web de {tema}» y la monto con lo aprendido; el código "
                     "de la solución lo tienes en la Biblioteca ▸ Soluciones para apoyarte.")
@@ -3747,6 +3802,13 @@ class KiraGodCore:
             _qa = None
         if _qa:                                        # v3.06: «implementa las mejoras» / «actualízate» / «¿hay mejoras?»
             return self._orden_mejoras(_qa)
+        try:
+            import implementar_kira as _ik
+            _qi = _ik.orden(command)
+        except ImportError:
+            _qi = None
+        if _qi:                                        # v3.20: «implementa la receta X» / «usa la solución X en Kira»
+            return self._orden_implementar(_qi, command)
         # La clave de API nunca pasa por el búfer ni por el log
         if cmd_lower.startswith("config clave:"):
             clave = command.split(":", 1)[1].strip()
