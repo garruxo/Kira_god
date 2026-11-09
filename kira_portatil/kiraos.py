@@ -185,6 +185,11 @@ class Api(EscritorioMixin):
 
     def programando_datos(self):
         """Lo que enseña la pantalla «Kira programando»: el programa y su explicación."""
+        if hasattr(self, "programando_vivo"):                 # v3.14: también lo que escribe AHORA en su núcleo
+            try:
+                return self.programando_vivo() or {}
+            except Exception:
+                pass
         return getattr(self, "programa", None) or {}
 
     def voz(self, texto):

@@ -27,6 +27,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #fondo .orbe .centro{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:0 12%}
 #fondo .orbe .modo{font-size:min(3.4vmin,26px);font-weight:600;color:#e9f6ff;letter-spacing:.5px}
 #fondo .orbe .eta{font-size:min(2.2vmin,16px);color:#9ff1ff;min-height:1.2em}
+#fondo .orbe{cursor:pointer;z-index:2}
+#fondo .orbe:hover{opacity:.95;box-shadow:0 0 0 2px rgba(34,211,238,.5),0 0 70px rgba(34,211,238,.25),0 0 100px rgba(244,114,208,.18)}
 #fondo .orbe.ocupada .modo{color:#fff;text-shadow:0 0 14px rgba(46,230,255,.6)}
 @keyframes late{0%,100%{transform:scale(1)}50%{transform:scale(1.012)}}
 #saludo{position:fixed;right:9vw;top:calc(13vh + min(38vmin,330px) + 30px);width:min(38vmin,330px);text-align:center}
@@ -226,7 +228,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 </style>
 </head>
 <body>
-<div id="fondo"><div class="orbe"><div class="anillo"></div><div class="centro"><b>KIRA</b><span class="modo" id="orbeModo">Sin tareas</span><span class="eta" id="orbeEta"></span></div></div></div>
+<div id="fondo"><div class="orbe" id="orbe" title="Pulsa para ver lo que estoy haciendo"><div class="anillo"></div><div class="centro"><b>KIRA</b><span class="modo" id="orbeModo">Sin tareas</span><span class="eta" id="orbeEta"></span></div></div></div>
 <div id="saludo"><div class="hora" id="hora">--:--</div><div class="dia" id="dia"></div>
   <div class="hola" id="hola">Hola</div>
   <div class="pista">Háblame cuando quieras desde la barra de abajo: escribe o pulsa el micrófono. Te contesto con mi voz.</div></div>
@@ -420,12 +422,22 @@ function pintaOrbe(d){                          // v3.09: el orbe dice qué hace
   $("orbeEta").textContent = d.eta || "";
   o.classList.toggle("ocupada", !!d.ocupada);
 }
-function refrescaTrabajo(){ llama("trabajo").then(pintaTrabajo).catch(function(){}); }
+function refrescaTrabajo(){ llama("trabajo").then(function(d){ ultTrab=d||{}; pintaTrabajo(d); }).catch(function(){}); }
+// v3.14: pulsar el ORBE lleva a lo que está haciendo (programando → Programando; en su máquina → Máquina; …)
+var ultTrab={};
+function irOrbe(){
+  llama("trabajo").then(function(d){ ultTrab=d||ultTrab; return ultTrab; }, function(){ return ultTrab; }).then(function(d){
+    var ir=(d&&d.ir)||{app:"cuaderno",pestana:"tareas"};
+    if(ir.pestana) pestApp[ir.app]=ir.pestana;
+    abrir(ir.app);
+  });
+}
+$("orbe").onclick=irOrbe;
 
 // ---------- ventanas (con «‹ Escritorio» para volver a la pantalla principal) ----------
-var actual=null;
+var actual=null, relojApp=null;
 function abrir(id, consulta, tipo){
-  cierraMenus();
+  cierraMenus(); if(relojApp){ clearTimeout(relojApp); relojApp=null; }
   actual=id; $("vtitulo").textContent=nombreDe(id);
   var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Un momento…</div>';
   $("ventana").classList.add("on");
@@ -443,7 +455,7 @@ function abrir(id, consulta, tipo){
   llama("app", id).then(function(d){ pintaApp(id, d); })
     .catch(function(){ c.innerHTML='<div class="texto">No he podido abrir esta ventana.</div>'; });
 }
-function volver(){ $("ventana").classList.remove("on"); actual=null; $("abiertas").innerHTML=""; $("vcuerpo").innerHTML=""; }
+function volver(){ if(relojApp){ clearTimeout(relojApp); relojApp=null; } $("ventana").classList.remove("on"); actual=null; $("abiertas").innerHTML=""; $("vcuerpo").innerHTML=""; }
 $("volver").onclick=volver; $("cerrar").onclick=volver;
 
 var pestApp={};
@@ -469,6 +481,22 @@ function pintaApp(id, d){
       return;
     }
     delete b.dataset.armado; accion(id, b.dataset.acc); }; });
+  // v3.14: ventanas EN VIVO (la máquina): se vuelven a pedir solas mientras sigan abiertas
+  if(relojApp){ clearTimeout(relojApp); relojApp=null; }
+  if(d.refrescar_cada){
+    var cada=Math.max(1, +d.refrescar_cada)*1000;
+    var toca=function(){
+      relojApp=null;
+      if(actual!==id) return;
+      var res=$("resultado");
+      if(c.querySelector("[data-armado]") || (res && res.classList.contains("on") && Date.now()-(+res.dataset.desde||0)<8000)){
+        relojApp=setTimeout(toca, cada); return; }          // no le quito un «¿Seguro?» ni un resultado recién salido
+      var abajo=c.scrollTop+c.clientHeight>=c.scrollHeight-30, sc=c.scrollTop;
+      llama("app", id).then(function(a){ if(actual!==id) return; pintaApp(id, a); c.scrollTop=abajo?c.scrollHeight:sc; })
+        .catch(function(){ if(actual===id) relojApp=setTimeout(toca, cada); });
+    };
+    relojApp=setTimeout(toca, cada);
+  }
 }
 // v3.10: la pestaña Tareas: ACTIVAS / EN ESPERA / TERMINADAS, cada una con Parar · Borrar · Empezar
 var SECCIONES=[["activas","Activas"],["espera","En espera"],["terminadas","Terminadas"]];
@@ -491,7 +519,7 @@ function accion(id, acc){
   var dos=acc.indexOf(":"), tipo=acc.slice(0,dos), arg=acc.slice(dos+1);
   if(tipo==="decir"){ enviar(arg); return; }
   if(tipo==="app"){ abrir(arg); return; }
-  var r=$("resultado"); if(r){ r.className="resultado on"; r.textContent="Un momento…"; }
+  var r=$("resultado"); if(r){ r.className="resultado on"; r.textContent="Un momento…"; r.dataset.desde=Date.now(); }
   llama("app_hacer", id, arg).then(function(d){
       if(d&&d.refrescar&&actual===id){ return llama("app", id).then(function(a){ pintaApp(id, a); var r2=$("resultado"); if(r2){ r2.className="resultado on"; r2.textContent=d.texto||"Hecho."; } }); }
       if(r) r.textContent=(d&&d.texto)||"Hecho."; refrescaBarra(); })

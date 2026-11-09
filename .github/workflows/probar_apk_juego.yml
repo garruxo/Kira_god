@@ -45,6 +45,15 @@ jobs:
           j = jk.JUEGOS[0]
           jid, arch = apk.proyecto(j["codigo"], j["titulo"], 1)
           todo = apk.repo_base(); todo.update(arch)
+          # v3.14: también una APP DE UN PROGRAMA normal (con input), como «hazme una app android que…»
+          prog = ("print('Calculadora de propinas')\n"
+                  "cuenta = float(input('¿Cuánto es la cuenta? ') or 0)\n"
+                  "pct = float(input('¿Qué propina (%)? ') or 10)\n"
+                  "print('Propina:', round(cuenta * pct / 100, 2))\n"
+                  "print('Total:', round(cuenta * (1 + pct / 100), 2))\n")
+          pid, parch = apk.proyecto_programa(prog, "Calculadora de propinas", 1)
+          todo.update(parch)
+          open("id_programa.txt", "w").write(pid)
           apk.escribir("prueba_repo", todo)
           print(jid, len(todo), "archivos")
           PY
@@ -53,7 +62,9 @@ jobs:
           cd prueba_repo
           bash compilar_juego.sh firma
           bash compilar_juego.sh compilar juegos/rompeladrillos
+          bash compilar_juego.sh compilar juegos/$(cat ../id_programa.txt)
           ls -la salida
+          test "$(ls salida/*.apk | wc -l)" -ge 2
       - name: Guardar lo descargado y compilado
         if: always()
         uses: actions/cache/save@v4

@@ -45,6 +45,11 @@ def _guardar(dir_, lista):
 def ocultar_claves(texto):
     """v2.88: una orden que traía una clave («…con la clave X») se apunta SIN la clave."""
     import re
+    texto = str(texto or "")
+    # v3.14: «config github: …» / «config clave: …» y las claves con forma conocida (GitHub, Anthropic…) tampoco
+    texto = re.sub(r"(\bconfig\s+(?:github|clave|api|token)\s*:\s*)\S+", r"\1••••", texto, flags=re.I)
+    texto = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|sk-ant-[A-Za-z0-9_\-]{8,}|"
+                   r"sk-[A-Za-z0-9]{20,})", "••••", texto)
     return re.sub(r"(\b(?:clave|contrase(?:ñ|n)a|password|pass)\b\s*(?:es|:|=)?\s*)\S+", r"\1••••", texto, flags=re.I)
 
 

@@ -683,7 +683,7 @@ class KiraGodCore:
         self.comprobar_cancelado()
         if clave == cerebro_ia_kira.LOCAL:                      # modelo local (cerebro propio, o en casa)
             return self.cerebro_ia.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens,
-                                              al_trozo=al_trozo, parar=self.cancelado)
+                                              al_trozo=self._con_pizarra(al_trozo, True), parar=self.cancelado)
         ruta_modelo = os.path.join(self.dir, "modelo.txt")
         modelo = MODELO_POR_DEFECTO
         if os.path.exists(ruta_modelo):
@@ -691,6 +691,7 @@ class KiraGodCore:
                 modelo = f.read().strip() or MODELO_POR_DEFECTO
         if al_trozo is None and max_tokens > 600:              # lo largo, a trozos: así «cancela» lo corta a mitad
             al_trozo = lambda _t: None
+        al_trozo = self._con_pizarra(al_trozo)
         cuerpo = json.dumps({
             "model": modelo, "max_tokens": int(max_tokens), "system": system,
             "messages": mensajes or [{"role": "user", "content": usuario}],
@@ -721,6 +722,23 @@ class KiraGodCore:
                 return fb
             raise RuntimeError(f"No se pudo contactar con la API: {e}")
         return "".join(b.get("text", "") for b in datos.get("content", []) if b.get("type") == "text")
+
+    def _con_pizarra(self, al_trozo, siempre=False):
+        """v3.14: lo que el cerebro va escribiendo queda también en la PIZARRA (self.pizarra), para que KiraOS lo
+        enseñe EN VIVO en «Programando» mientras escribe. Solo es texto en la RAM; no cambia lo que se hace."""
+        if al_trozo is None and not siempre:
+            return None
+        self.pizarra = {"texto": "", "inicio": time.time(), "cuando": time.time()}
+
+        def trozo(t):
+            try:
+                self.pizarra = {"texto": str(t or "")[-20000:], "inicio": self.pizarra.get("inicio"),
+                                "cuando": time.time()}
+            except Exception:
+                pass
+            if al_trozo is not None:
+                return al_trozo(t)
+        return trozo
 
     def _fallback_local(self, system, usuario, max_tokens, mensajes, al_trozo):
         """Plan B: si el cerebro de Claude (API) falla y Kira tiene su cerebro PROPIO listo (o el de casa), responde

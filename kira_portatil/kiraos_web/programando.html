@@ -53,8 +53,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#060d09;color:#cfeed
     </div>
   </div>
   <div class="pie">
-    <div class="ap">Aplicar</div><div class="rc">Rechazar</div>
-    <div class="aviso">Al terminar, Kira lo prueba en su laboratorio.<br>Para instalar hacen falta tus dos toques.</div>
+    <div class="aviso" style="margin-left:0;text-align:left">Al terminar, Kira lo prueba en su laboratorio. Si es una mejora para ella, la
+      instalas tú en Cuaderno ▸ Mejoras (dos toques). Aquí solo se mira: nada se instala desde esta ventana.</div>
   </div>
 </div>
 <script>
@@ -88,7 +88,7 @@ function espera(ms){return new Promise(function(r){setTimeout(r,ms);});}
 var DATOS=null;
 async function reproducir(d){
   DATOS=d;
-  document.getElementById("pide").innerHTML = "Le pediste: <b>"+(d.pedido||"…")+"</b>";
+  document.getElementById("pide").innerHTML = "Le pediste: <b>"+esc(String(d.pedido||"…"))+"</b>";
   if(d.archivo) document.getElementById("archivo").textContent=d.archivo;
   var code=document.getElementById("code"), exp=document.getElementById("exp");
   code.innerHTML=""; exp.innerHTML="";
@@ -109,7 +109,7 @@ async function reproducir(d){
     // muestra la explicación de esa línea (si tiene)
     if(L.nota){
       var n=document.createElement("div"); n.className="nota";
-      n.innerHTML='<div class="l">Línea '+L.n+'</div><div class="t">'+L.nota+'</div>';
+      n.innerHTML='<div class="l">Línea '+L.n+'</div><div class="t">'+esc(String(L.nota))+'</div>';
       exp.appendChild(n); exp.scrollTop=exp.scrollHeight;
       await espera(30); n.classList.add("on");
     }
@@ -151,12 +151,77 @@ function puente(metodo){
     rej();
   });
 }
+// v3.14: EN VIVO. Mientras Kira escribe en su núcleo, se pide lo escrito cada 2,5 s y se teclea lo nuevo.
+var escrito="", notasVistas=0, animando=false, reproduciendo=false, ultimoListo="";
+function pintaEstado(d){
+  var e=document.getElementById("estado");
+  if(d.estado==="en_vivo") e.innerHTML='<span class="p"></span>Escribiendo en vivo…';
+  else if(d.estado==="esperando") e.innerHTML='<span class="p" style="background:#e0c23a;box-shadow:0 0 8px #e0c23a"></span>Pensando el código…';
+  else e.innerHTML='<span class="p" style="background:#2ee6a0"></span>Listo ✓';
+  window.KIRA_PROG={estado:d.estado||"", escrito:escrito};
+}
+function pintaCodigo(txt, cursor){
+  var code=document.getElementById("code"), ls=txt.split("\n"), h="";
+  for(var i=0;i<ls.length;i++){
+    h+='<span class="row"><span class="ln">'+(i+1)+'</span>'+pinta(ls[i])+(cursor&&i===ls.length-1?'<span class="cur"></span>':'')+'</span>';
+  }
+  code.innerHTML=h; code.scrollTop=code.scrollHeight;
+}
+function pintaNotas(lineas){
+  var exp=document.getElementById("exp"), con=(lineas||[]).filter(function(L){ return L.nota; });
+  if(con.length<notasVistas){ exp.innerHTML=""; notasVistas=0; }
+  for(var i=notasVistas;i<con.length;i++){
+    var n=document.createElement("div"); n.className="nota on";
+    n.innerHTML='<div class="l">Línea '+con[i].n+'</div><div class="t">'+esc(String(con[i].nota))+'</div>';
+    exp.appendChild(n);
+  }
+  notasVistas=con.length; exp.scrollTop=exp.scrollHeight;
+}
+async function vivo(d){
+  document.getElementById("pide").innerHTML = "Le pediste: <b>"+esc(String(d.pedido||"…"))+"</b>"+
+      (d.avance?' <span style="color:#6f9079">· '+esc(String(d.avance))+'</span>':'');
+  if(d.archivo) document.getElementById("archivo").textContent=d.archivo;
+  var meta=String(d.codigo||"");
+  pintaEstado(d);
+  if(d.estado==="esperando" && !meta){ if(!escrito) document.getElementById("code").innerHTML='<span class="row"><span class="ln">1</span><span class="cur"></span></span>'; return; }
+  if(meta.indexOf(escrito)!==0){ escrito=""; notasVistas=0; document.getElementById("exp").innerHTML=""; }
+  if(animando) return; animando=true;
+  while(escrito.length<meta.length){                  // teclea lo nuevo; si va muy por detrás, más deprisa
+    var paso=Math.max(1, Math.ceil((meta.length-escrito.length)/120));
+    escrito=meta.slice(0, escrito.length+paso);
+    pintaCodigo(escrito, true); window.KIRA_PROG.escrito=escrito;
+    await espera(14);
+  }
+  pintaCodigo(escrito, d.estado==="en_vivo");
+  pintaNotas(d.lineas);
+  document.getElementById("resumen").textContent=d.estado==="en_vivo"?"":(d.resumen||"");
+  window.KIRA_PROG={estado:d.estado||"", escrito:escrito};
+  animando=false;
+}
+function codDe(d){ return String(d.codigo||(d.lineas||[]).map(function(L){return L.codigo||"";}).join("\n")); }
+function pide(){
+  puente("programando_datos").then(function(d){
+    d=d||{}; if(reproduciendo) return;
+    if(d.estado==="en_vivo"||d.estado==="esperando"){ vivo(d); }
+    else if(d.lineas && d.lineas.length){
+      var cod=codDe(d);
+      if(escrito && cod.indexOf(escrito)===0){ if(cod!==ultimoListo||cod!==escrito){ ultimoListo=cod; d.codigo=cod; vivo(d); } }        // acaba de terminar lo que veías
+      else if(cod!==ultimoListo && !reproduciendo){ ultimoListo=cod; reproduciendo=true;
+        reproducir(d).then(function(){ reproduciendo=false; escrito=cod; notasVistas=(d.lineas||[]).filter(function(L){return L.nota;}).length; window.KIRA_PROG={estado:"listo",escrito:cod}; }); }
+    }
+  }).catch(function(){}).then(function(){ setTimeout(pide, 2500); });
+}
 var arrancado=false;
 function arranca(){
   if(arrancado) return; arrancado=true;
   var dentro = (window.pywebview && window.pywebview.api) || (window.parent && window.parent !== window);
-  if(dentro){ puente("programando_datos").then(function(d){ reproducir(d && d.lineas ? d : FAKE); })
-                                       .catch(function(){ reproducir(FAKE); }); }
+  if(dentro){ puente("programando_datos").then(function(d){
+      d=d||{};
+      if(d.estado==="en_vivo"||d.estado==="esperando"){ vivo(d); setTimeout(pide, 2500); }
+      else if(d.lineas){ ultimoListo=codDe(d); reproduciendo=true;
+        reproducir(d).then(function(){ reproduciendo=false; escrito=ultimoListo; notasVistas=(d.lineas||[]).filter(function(L){return L.nota;}).length; window.KIRA_PROG={estado:"listo",escrito:ultimoListo}; }); setTimeout(pide, 2500); }
+      else reproducir(FAKE);
+    }).catch(function(){ reproducir(FAKE); }); }
   else { reproducir(FAKE); }
 }
 if(window.pywebview && window.pywebview.api){ arranca(); }

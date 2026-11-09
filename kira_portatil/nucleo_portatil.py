@@ -565,7 +565,7 @@ class Trabajos:
         with self._lock:
             ac = [t for t in self.tareas.values() if t["estado"] in ("hecho", "error", "cancelado", "quitado")]
         ac.sort(key=lambda t: -(t.get("fin") or t.get("inicio") or 0))
-        return [{"id": t["id"], "orden": t["orden"], "estado": t["estado"], "fin": t.get("fin"),
+        return [{"id": t["id"], "orden": _sin_claves(t["orden"]), "estado": t["estado"], "fin": t.get("fin"),
                  "resultado": t.get("resultado", ""), "por_que": t.get("por_que", ""),
                  "respuesta": str(t.get("respuesta") or "")[:400]} for t in ac[:n]]
 
@@ -613,7 +613,9 @@ class Trabajos:
         t = self.tareas.get(tid)
         if not t:
             return None
-        return {k: t[k] for k in ("id", "orden", "estado", "fraccion", "avance", "respuesta", "codigo", "nombre")}
+        d = {k: t[k] for k in ("id", "orden", "estado", "fraccion", "avance", "respuesta", "codigo", "nombre")}
+        d["orden"] = _sin_claves(d["orden"])
+        return d
 
     def lista(self):
         """Lo que hay ahora mismo (la de curso primero, luego las que esperan), para enseñarlo."""
@@ -621,11 +623,11 @@ class Trabajos:
             out = []
             a = self.tareas.get(self.actual) if self.actual else None
             if a and a["estado"] == "en curso":
-                out.append({"orden": a["orden"], "estado": "en curso"})
+                out.append({"orden": _sin_claves(a["orden"]), "estado": "en curso"})
             if a and a["estado"] == "en curso":
                 out[-1]["id"] = a["id"]
             for c in self.cola:
-                out.append({"id": c, "orden": self.tareas.get(c, {}).get("orden", ""), "estado": "en cola",
+                out.append({"id": c, "orden": _sin_claves(self.tareas.get(c, {}).get("orden", "")), "estado": "en cola",
                             "retenida": bool(self.tareas.get(c, {}).get("retenida"))})
             return out
 
@@ -761,12 +763,26 @@ class Nucleo:
         t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
         ocup = self.trabajos.ocupado()
         return {"ocupada": ocup,
-                "haciendo": (t or {}).get("orden", "") if ocup else "",
+                "haciendo": _sin_claves((t or {}).get("orden", "")) if ocup else "",
+                "pizarra": pizarra_de(self.core) if ocup else None,          # v3.14: lo que escribe, EN VIVO
+                "ultimo_codigo": self._ultimo_codigo(),
                 "fraccion": float((t or {}).get("fraccion") or 0) if ocup else 0.0,      # v3.09: para el «termina en…»
                 "inicio": (t or {}).get("inicio") if ocup else None,
                 "avance": ((t or {}).get("avance") or [""])[-1] if ocup else "",
                 "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
                 "cola": self.trabajos.lista(), "hechas": self.trabajos.hechas(), "actividad": actividad(self.core)}
+
+    def _ultimo_codigo(self):
+        """v3.14: el último código que escribió (de la última tarea con código, o el que recuerda el núcleo)."""
+        with self.trabajos._lock:
+            con = [t for t in self.trabajos.tareas.values() if t.get("codigo")]
+        con.sort(key=lambda t: -(t.get("fin") or t.get("inicio") or 0))
+        if con:
+            t = con[0]
+            return {"orden": _sin_claves(t["orden"]), "codigo": str(t["codigo"])[-20000:], "nombre": t.get("nombre"),
+                    "cuando": t.get("fin") or t.get("inicio")}
+        c = getattr(self.core, "ultimo_codigo", None)
+        return {"orden": "", "codigo": str(c)[-20000:], "nombre": None, "cuando": None} if c else None
 
     def hola(self):
         rec = getattr(self.core, "recuerdos", None)
@@ -787,7 +803,7 @@ class Nucleo:
             pass
         t = self.trabajos.tareas.get(self.trabajos.actual) if self.trabajos.actual else None
         return {"kira_nucleo": 1, "version": ver, "recuerdos": n, "llamar": llamar,
-                "ocupada": self.trabajos.ocupado(), "haciendo": (t or {}).get("orden", "") if self.trabajos.ocupado() else "",
+                "ocupada": self.trabajos.ocupado(), "haciendo": _sin_claves((t or {}).get("orden", "")) if self.trabajos.ocupado() else "",
                 "en_cola": self.trabajos.en_cola(), "pausada": self.trabajos.pausada,
                 "actividad": actividad(self.core), "equipo": equipo_corto(), "sincronia": sincronia_corta(self.datos),
                 "fuera_ip": _ip_fuera()}
@@ -814,6 +830,23 @@ def reiniciar_proceso_luego(segundos=15, salir=None):
 def es_local(ip):
     """¿La petición viene de este mismo portátil (la ventana o la consola de Kira)?"""
     return str(ip or "") in ("127.0.0.1", "::1", "localhost") or str(ip or "").startswith("127.")
+
+
+def _sin_claves(texto):
+    """v3.14: una orden como «config github: ghp_…» nunca se enseña con la clave (barra, cuaderno, móvil)."""
+    try:
+        import ordenes_kira
+        return ordenes_kira.ocultar_claves(texto)
+    except Exception:
+        return str(texto or "")
+
+
+def pizarra_de(core):
+    """v3.14: lo que el cerebro está escribiendo AHORA (el texto hasta ahora), si es reciente."""
+    p = getattr(core, "pizarra", None) or {}
+    if not p.get("texto") or time.time() - float(p.get("cuando") or 0) > 900:
+        return None
+    return {"texto": _sin_claves(str(p["texto"])[-12000:]), "inicio": p.get("inicio"), "cuando": p.get("cuando")}
 
 
 def actividad(core):

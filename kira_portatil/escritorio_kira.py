@@ -179,12 +179,43 @@ class EscritorioMixin:
                     import explicacion_codigo_kira as ex
                     r = ex.explicar(m.group("c"))
                     self.programa = {"pedido": pedido, "archivo": (m.group("n") or "programa") + ".py",
-                                     "lineas": r["lineas"], "resumen": r["resumen"]}
+                                     "lineas": r["lineas"], "resumen": r["resumen"], "estado": "listo",
+                                     "codigo": m.group("c"), "cuando": time.time()}
                 except Exception:
                     pass
 
     def hay_programa(self):
-        return bool(getattr(self, "programa", None))
+        """v3.14: también cuando el núcleo está escribiendo código ahora mismo (o ya escribió alguno)."""
+        if getattr(self, "programa", None):
+            return True
+        try:
+            return bool(self.programando_vivo())
+        except Exception:
+            return False
+
+    def programando_vivo(self):
+        """v3.14: lo que enseña «Programando»: si Kira está escribiendo código AHORA (en su núcleo), ese código según
+        lo escribe (`en_vivo`); si no, el último que escribió; si no, el de esta charla. {} si no hay nada."""
+        n = self._nucleo()
+        e = {}
+        if n is not None and hasattr(n, "estado"):
+            try:
+                e = n.estado() or {}
+            except Exception:
+                e = {}
+        piz = (e.get("pizarra") or {}) if e.get("ocupada") else {}
+        cod = codigo_de_pizarra(piz.get("texto", "")) if piz else ""
+        haciendo = str(e.get("haciendo") or "")
+        if cod.strip():
+            return _explicado(cod, haciendo, "en_vivo", e.get("avance") or "")
+        if e.get("ocupada") and _PROGRAMA.search(haciendo):
+            return {"pedido": haciendo, "archivo": "…", "lineas": [], "resumen": "", "estado": "esperando",
+                    "avance": e.get("avance") or "", "codigo": ""}
+        propio = getattr(self, "programa", None)
+        ult = e.get("ultimo_codigo") or {}
+        if ult.get("codigo") and (not propio or float(ult.get("cuando") or 0) >= float(propio.get("cuando") or 0)):
+            return _explicado(ult["codigo"], ult.get("orden") or "", "listo", "", ult.get("nombre"))
+        return propio or {}
 
     def tarea_hablar(self, cid):
         t = getattr(self, "_charlas", {}).get(str(cid))
@@ -244,6 +275,7 @@ class EscritorioMixin:
                  "pausada": bool(e.get("pausada")), "haciendo": e.get("haciendo", ""), "que": que,
                  "cola": e.get("cola", [])}
             d.update(estado_orbe(e, ahora))
+            d["ir"] = destino_orbe(dict(d, actividad=act))
         self._trab_cache = (ahora, d)
         return d
 
@@ -569,15 +601,38 @@ class EscritorioMixin:
                             {"texto": "Deja de pensar", "accion": "decir:deja de pensar"}]}
 
     def _app_maquina(self):
+        """v3.14: la ventana de la máquina EN VIVO: qué hace ahora Kira, lo último que ha ejecutado dentro (comandos y
+        lo que salió, de maquina.log) y las páginas que ha visitado (puerta.log). Se refresca sola cada 3 s."""
         import maquina_kira as mq
         try:
-            texto = mq.Maquina().estado()
+            m = mq.Maquina()
+            texto = m.estado()
         except Exception as e:                        # noqa: BLE001
-            texto = f"[x] {e}"
-        return {"titulo": "Máquina virtual", "texto": texto + "\n\nEs un Linux ligero y aislado, sin tus archivos. "
-                "Desde aquí investigo, busco y experimento: sale a internet SOLO por mi puerta, que nunca deja ir a tu "
-                "casa (ni a este portátil ni a tu router), y mis experimentos corren con un usuario sin permisos. Si "
-                "algo va raro, vuelve sola a su foto limpia.",
+            m, texto = None, f"[x] {e}"
+        ahora = ""
+        n = self._nucleo()
+        if n is not None and hasattr(n, "estado"):
+            try:
+                e = n.estado() or {}
+                if e.get("ocupada"):
+                    ahora = "AHORA: " + str(e.get("haciendo") or "una tarea") + \
+                            (("\n  · " + str(e.get("avance"))) if e.get("avance") else "")
+            except Exception:
+                pass
+        vivo = registro_maquina(getattr(m, "base", mq.BASE)) if m is not None else []
+        visitas = m.visitas(8) if m is not None else []
+        partes = [texto]
+        if ahora:
+            partes.append(ahora)
+        partes.append("LO QUE HAGO DENTRO (en vivo):\n" + ("\n".join(vivo) if vivo else
+                      "  (todavía nada: cuando ejecute, estudie o pruebe algo dentro, lo verás aquí)"))
+        if visitas:
+            partes.append("PÁGINAS QUE HE VISITADO DESDE DENTRO:\n" + "\n".join("  " + v for v in visitas))
+        partes.append("Es un Linux ligero y aislado, sin tus archivos. Desde aquí investigo, busco y experimento: sale "
+                      "a internet SOLO por mi puerta, que nunca deja ir a tu casa (ni a este portátil ni a tu router), y "
+                      "mis experimentos corren con un usuario sin permisos. Si algo va raro, vuelve sola a su foto "
+                      "limpia. «Enséñamela» abre su pantalla de verdad.")
+        return {"titulo": "Máquina virtual", "texto": "\n\n".join(partes), "refrescar_cada": 3,
                 "botones": [{"texto": "Enciéndela", "accion": "decir:enciende tu máquina"},
                             {"texto": "Enséñamela", "accion": "decir:enséñame tu máquina"},
                             {"texto": "Últimas visitas", "accion": "hacer:visitas"},
@@ -720,6 +775,75 @@ def texto_eta(seg):
     if m < 60:
         return f"unos {m} min"
     return f"{m // 60} h {m % 60:02d} min"
+
+
+def codigo_de_pizarra(texto):
+    """v3.14 (puro): de lo que el cerebro lleva escrito saca el CÓDIGO (el último bloque ```python, aunque aún no
+    esté cerrado). Si no hay bloque pero el texto ya es código (empieza por def/import/class…), lo devuelve. Si es
+    charla normal, ''."""
+    t = str(texto or "")
+    trozos = re.split(r"```[ \t]*(?:python|py|python3)?[ \t]*\n?", t, flags=re.I)
+    if len(trozos) >= 2:
+        # trozos impares = dentro de un bloque; me quedo con el último que tenga algo
+        dentro = [trozos[i] for i in range(1, len(trozos), 2) if trozos[i].strip()]
+        return dentro[-1].rstrip() if dentro else ""
+    if re.match(r"\s*(?:#|def |class |import |from \S+ import |async def |@)", t):
+        return t.rstrip()
+    return ""
+
+
+def _explicado(codigo, pedido, estado, avance="", nombre=None):
+    try:
+        import explicacion_codigo_kira as ex
+        r = ex.explicar(codigo)
+        lineas, resumen = r.get("lineas", []), r.get("resumen", "")
+    except Exception:
+        lineas = [{"n": i + 1, "codigo": l, "nota": ""} for i, l in enumerate(str(codigo).splitlines())]
+        resumen = ""
+    return {"pedido": pedido, "archivo": (nombre or "programa") + ".py", "lineas": lineas, "resumen": resumen,
+            "estado": estado, "avance": avance, "codigo": codigo}
+
+
+def registro_maquina(base, n=40, tope=200000):
+    """v3.14: las últimas `n` líneas de maquina.log (lo que Kira ejecuta dentro y lo que sale), sin leer el archivo
+    entero y sin líneas larguísimas. Sin claves (por si acaso)."""
+    try:
+        with open(os.path.join(base, "maquina.log"), "rb") as f:
+            f.seek(0, 2)
+            tam = f.tell()
+            f.seek(max(0, tam - tope))
+            datos = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    lineas = [l.rstrip() for l in datos.splitlines() if l.strip()]
+    if tam > tope and lineas:
+        lineas = lineas[1:]                       # la primera puede venir cortada
+    out = []
+    for l in lineas[-n:]:
+        l = l if len(l) <= 220 else l[:217] + "…"
+        try:
+            import ordenes_kira
+            l = ordenes_kira.ocultar_claves(l)
+        except Exception:
+            pass
+        out.append("  " + l)
+    return out
+
+
+def destino_orbe(d):
+    """v3.14 (puro): al PULSAR el orbe, a qué ventana ir según lo que hace Kira: programando → «programando»;
+    trabajando con su máquina (estudiar/buscar/experimentar dentro) → «maquina»; pensando → cuaderno ▸ Pensamiento;
+    lo demás (estudiar sin máquina, en espera, sin tareas) → cuaderno ▸ Tareas."""
+    d = d or {}
+    act = d.get("actividad") or {}
+    modo = d.get("modo") or ""
+    if modo == "Programando":
+        return {"app": "programando"}
+    if act.get("maquina") and (modo in ("Estudiando", "Trabajando") or re.search(r"m[aá]quina", str(d.get("haciendo")), re.I)):
+        return {"app": "maquina"}
+    if modo == "Pensando":
+        return {"app": "cuaderno", "pestana": "pensamiento"}
+    return {"app": "cuaderno", "pestana": "tareas"}
 
 
 def estado_orbe(e, ahora=None):

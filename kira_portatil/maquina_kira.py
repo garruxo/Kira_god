@@ -263,6 +263,26 @@ def leer_respuesta_web(salida):
     return None
 
 
+def nota_visita(d):
+    """v3.14 (puro): una línea para el registro de lo que trajo una visita: «  ← 200 · 34 KB · «Título»» o el error."""
+    if not isinstance(d, dict):
+        return "  ← (sin respuesta)"
+    if d.get("error"):
+        return "  ← no pude: " + str(d.get("error"))[:160]
+    cuerpo = d.get("cuerpo") or b""
+    kb = max(1, len(cuerpo) // 1024) if cuerpo else 0
+    titulo = ""
+    try:
+        m = re.search(rb"<title[^>]*>(.*?)</title>", cuerpo[:200000], re.I | re.S)
+        if m:
+            import html as _html
+            titulo = _html.unescape(m.group(1).decode("utf-8", "replace"))
+            titulo = re.sub(r"\s+", " ", titulo).strip()[:120]
+    except Exception:
+        titulo = ""
+    return f"  ← {d.get('status', '?')} · {kb} KB" + (f" · «{titulo}»" if titulo else "")
+
+
 def guion_ajustes(ahora):
     """Lo que se deja listo dentro en cada arranque: la hora bien (para los certificados https), el usuario «prueba»
     (sin permisos) y que todo salga por la puerta."""
@@ -725,6 +745,8 @@ class Maquina:
         c, s = self._run(orden_ssh(self.base) + ["bash", "-s"],
                          entrada=guion_web(url, datos, cabeceras, metodo, timeout, maximo), timeout=int(timeout) + 40)
         d = leer_respuesta_web(s)
+        if d is not None:
+            self._log(nota_visita(d))                          # v3.14: que se vea QUÉ trajo (título y tamaño)
         if d is None:
             raise MaquinaError("Mi máquina no contestó a la visita" + (f" ({s.strip()[-160:]})" if s.strip() else "")
                                + ".")
