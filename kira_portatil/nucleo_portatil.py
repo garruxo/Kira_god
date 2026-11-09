@@ -183,10 +183,45 @@ def mejora_para_kiraos(core, pedido, paso):
         pend = panel_de(core).pendiente
         nombre = getattr(pend, "nombre", "") or r.get("nombre", "")
         return {"texto": f"Mejora «{nombre}» escrita y aprobada por mi laboratorio. NO la he instalado: ábrela en "
-                         "mi escritorio, icono «Mejoras», mira el código y pulsa «Instalar» DOS veces (solo se puede "
-                         "desde este portátil). Si luego no te gusta, «Volver atrás».",
+                         "Cuaderno ▸ Mejoras ▸ «Instalar o deshacer mis mejoras», mira el código y pulsa «Instalar» DOS "
+                         "veces (solo se puede desde este portátil). Si luego no te gusta, «Volver atrás».",
                 "codigo": getattr(pend, "codigo", None), "nombre": nombre, "ok": True}
     return {"texto": "No la instalo: " + str(r.get("texto", "no pasó el laboratorio")).strip(), "ok": False}
+
+
+def orden_ventana(core, o, paso):
+    """v3.19: crear / cambiar / quitar una ventana, sección o botón. Crear y cambiar = una MEJORA (laboratorio + tus
+    dos toques en Cuaderno ▸ Mejoras); al cambiar, el cerebro recibe el código de ahora y la versión nueva SUSTITUYE
+    a la vieja (con copia: «Volver atrás»)."""
+    import ventanas_kira as vk
+    if o[0] == "crear":
+        return mejora_para_kiraos(core, o[1], paso)
+    ventanas = core.ventanas_lista() if callable(getattr(core, "ventanas_lista", None)) else []
+    v = vk.buscar(ventanas, o[1])
+    if v is None:
+        nombres = ", ".join(f"«{x['titulo']}»" for x in ventanas) or "ninguna todavía"
+        return {"texto": f"No encuentro la ventana «{o[1]}». Las que me he añadido: {nombres}.", "ok": False}
+    if o[0] == "quitar":
+        return {"texto": f"La ventana «{v['titulo']}» es parte de mi mejora «{v['modulo']}». Para quitarla: Cuaderno ▸ "
+                         "Mejoras ▸ «Instalar o deshacer mis mejoras» ▸ «Quitar» (dos toques). Si esa mejora hace más "
+                         f"cosas, mejor dime «cambia la ventana {v['id']}: quítala y deja lo demás».", "ok": True}
+    try:
+        codigo = open(os.path.join(core.dir, "modulos", v["modulo"] + ".py"), encoding="utf-8").read()
+    except OSError:
+        return {"texto": f"No encuentro el código de la mejora «{v['modulo']}».", "ok": False}
+    paso(0.1, f"Cambio la ventana «{v['titulo']}» y la pruebo en mi laboratorio…")
+    try:
+        r = panel_de(core).enviar_orden(f"Cambia la ventana «{v['id']}» de mi mejora «{v['modulo']}»: {o[2]}",
+                                        nombre=v["modulo"], extra=vk.pedido_cambio(v, codigo, o[2]))
+    except Exception as e:                            # noqa: BLE001
+        return {"texto": f"[x] No he podido preparar el cambio: {e}", "ok": False}
+    if r.get("aprobable"):
+        pend = panel_de(core).pendiente
+        return {"texto": f"Cambio de «{v['titulo']}» escrito y aprobado por mi laboratorio. NO lo he puesto: Cuaderno ▸ "
+                         "Mejoras ▸ «Instalar o deshacer mis mejoras» ▸ «Instalar» (dos toques). La versión de antes "
+                         "queda guardada: «Volver atrás» si no te gusta.",
+                "codigo": getattr(pend, "codigo", None), "nombre": v["modulo"], "ok": True}
+    return {"texto": "No lo cambio: " + str(r.get("texto", "no pasó el laboratorio")).strip(), "ok": False}
 
 
 def _pensamientos(core):
@@ -345,6 +380,10 @@ def ejecutar(core, orden, paso):
     import maquina_kira as mq
     import wifi_kira as wk
     import sentidos_portatil as sp
+    import ventanas_kira as vk_                    # v3.19: «crea/cambia/quita la ventana/el botón/la sección…» (antes que
+    o_v = vk_.orden(o.rstrip(" .!¡?¿"))            # la WiFi: «crea una sección en la wifi…» es esto, no la WiFi)
+    if o_v is not None:
+        return orden_ventana(core, o_v, paso)
     if wk.orden_wifi(o) is not None:              # v2.88: la WiFi del portátil (la clave, solo en el portátil)
         paso(0.2, "Miro la WiFi del portátil…")
         return {"texto": wk.responder(o)}
@@ -1004,6 +1043,13 @@ def crear_servidor(host, puerto, token, nucleo):
                 return self._json(200, nucleo.hola())
             if u.path == "/estado":
                 return self._json(200, nucleo.estado())
+            if u.path == "/ventanas":                   # v3.19: las ventanas que se ha añadido (solo este portátil)
+                if not es_local(self.client_address[0]):
+                    return self._json(403, {"error": "Solo desde el propio portátil."})
+                try:
+                    return self._json(200, {"ventanas": nucleo.core.ventanas_lista()})
+                except Exception as e:                 # noqa: BLE001
+                    return self._json(500, {"error": str(e)})
             if u.path == "/mejoras":                    # v3.07: solo desde este portátil
                 if not es_local(self.client_address[0]):
                     return self._json(403, {"error": "Las mejoras de KiraOS solo se miran en el propio portátil."})
@@ -1134,6 +1180,12 @@ class ClienteNucleo:
 
     def mejoras(self):
         return self._pedir("/mejoras", timeout=10)
+
+    def ventanas(self):
+        try:
+            return self._pedir("/ventanas", timeout=5).get("ventanas") or []
+        except Exception:
+            return []
 
     def tarea_accion(self, tid, accion):
         return self._pedir("/tarea/accion", {"id": tid, "accion": accion}, timeout=10)

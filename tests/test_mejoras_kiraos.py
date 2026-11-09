@@ -82,7 +82,7 @@ fake_pan = types.SimpleNamespace(enviar_orden=lambda p: {"aprobable": True, "nom
 fc = types.SimpleNamespace(dir=T, registrar_actividad=lambda: None, nueva_tarea=lambda: None, _panel=fake_pan,
                            es_estudia_general=lambda o: None)
 r = npk.ejecutar(fc, "Kira, mejórate: que me digas la hora", lambda f, t: None)
-ok(r["ok"] and "NO la he instalado" in r["texto"] and "«Mejoras»" in r["texto"] and "DOS veces" in r["texto"],
+ok(r["ok"] and "NO la he instalado" in r["texto"] and "Cuaderno ▸ Mejoras" in r["texto"] and "DOS veces" in r["texto"],
    "«mejórate: …» la deja esperando y dice dónde instalarla")
 fake_pan.enviar_orden = lambda p: {"aprobable": False, "texto": "no pasó: falta registrar"}
 r = npk.ejecutar(fc, "mejórate: algo raro", lambda f, t: None)

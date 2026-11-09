@@ -155,7 +155,40 @@ class EscritorioMixin:
             p = nk.cargar(getattr(self, "ruta_nac", None)) or {}
         except Exception:
             pass
-        return {"llamar": p.get("llamar", ""), "wifi": w, "voz": self.voz_activa, "iconos": ICONOS}
+        return {"llamar": p.get("llamar", ""), "wifi": w, "voz": self.voz_activa, "iconos": ICONOS,
+                "extras": [{k: v[k] for k in ("id", "en", "titulo")} for v in self.ventanas_extra()]}
+
+    # ---------- v3.19: las ventanas/secciones/botones que Kira se añadió (solo datos: texto y botones) ----------
+    def ventanas_extra(self):
+        ahora = time.time()
+        c = getattr(self, "_extras_cache", None)
+        if c and ahora - c[0] < 10:
+            return c[1]
+        lista = []
+        n = self._nucleo()
+        if n is not None and hasattr(n, "ventanas"):
+            try:
+                import ventanas_kira as vk
+                for v in n.ventanas() or []:
+                    try:                                  # se vuelve a validar aquí: la pantalla no se fía de nadie
+                        lv = vk.validar(v.get("id"), {k: v.get(k) for k in ("en", "titulo", "texto", "botones")})
+                        lv["modulo"] = str(v.get("modulo") or "")[:60]
+                        lista.append(lv)
+                    except Exception:
+                        continue
+            except Exception:
+                lista = []
+        self._extras_cache = (ahora, lista)
+        return lista
+
+    def _app_extra(self, ident):
+        v = next((x for x in self.ventanas_extra() if x["id"] == ident), None)
+        if v is None:
+            return {"titulo": ident, "texto": "Esta ventana ya no está (puede que se quitara su mejora).", "botones": []}
+        nota = (f"\n\n— Me la añadí yo (mejora «{v['modulo']}»). Para cambiarla, dime: «cambia la ventana {v['id']}: "
+                "…lo que quieras…». Los botones me dan órdenes, como si me las dijeras tú.")
+        return {"titulo": v["titulo"], "texto": (v["texto"] or "") + nota,
+                "botones": [{"texto": b["texto"], "accion": "decir:" + b["orden"]} for b in v["botones"]]}
 
     # ---------- v3.17: la VERSIÓN en el inicio ----------
     def version(self):
@@ -494,6 +527,11 @@ class EscritorioMixin:
     def app(self, nombre):
         """Lo que enseña una ventana: {"titulo", "texto", "botones": [{"texto", "accion"}]}.
         accion: «decir:frase» (se la dice a Kira), «app:otra» (abre otra ventana) o «hacer:x» (app_hacer)."""
+        if str(nombre).startswith("extra:"):            # v3.19: una ventana que Kira se añadió
+            try:
+                return self._app_extra(str(nombre)[6:])
+            except Exception as e:                    # noqa: BLE001
+                return {"titulo": str(nombre)[6:], "texto": f"[x] No he podido abrirla: {e}", "botones": []}
         try:
             return getattr(self, "_app_" + str(nombre))()
         except AttributeError:

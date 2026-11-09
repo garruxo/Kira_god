@@ -313,7 +313,13 @@ class LaboratorioMovil:
             etapa("juegos", motivo is None, motivo or "JUEGOS_OK " + ", ".join(juegos))
             if motivo:
                 return res
-        ordenes = {k: v for k, v in tabla.items() if not k.startswith("juego ")}
+        if any(k.startswith("ventana ") for k in tabla):    # v3.19: las ventanas son solo datos; se comprueban
+            import ventanas_kira
+            motivo = con_tope(ventanas_kira.probar, TOPE_CARGA, tabla)
+            etapa("ventanas", motivo is None, motivo or "VENTANAS_OK")
+            if motivo:
+                return res
+        ordenes = {k: v for k, v in tabla.items() if not k.startswith(("juego ", "ventana "))}
         fallo, raros = self._usar(ordenes)
         if fallo:
             etapa("prueba_de_uso", False, fallo)
@@ -338,6 +344,10 @@ class LaboratorioMovil:
             if prefijo.startswith("juego "):
                 continue
             ps = _parametros(fn)
+            if prefijo.startswith("ventana "):              # v3.19: ventana(texto) -> sus datos
+                if ps is not None and len(ps) != 1:
+                    return f"'{prefijo}' debe ser una función ventana(texto) que devuelve sus datos"
+                continue
             if ps is not None and len(ps) not in (1, 2):
                 return f"'{prefijo}' debe recibir (texto) o (texto, kira)"
         return None

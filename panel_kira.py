@@ -238,7 +238,7 @@ class PanelControl:
             self._pendiente, self.pedido_actual = p, str(d.get("pedido") or "")
             self.recuperada = True
 
-    def enviar_orden(self, pedido, max_intentos=MAX_INTENTOS) -> dict:
+    def enviar_orden(self, pedido, max_intentos=MAX_INTENTOS, nombre=None, extra="") -> dict:
         """Igual que _enviar_orden, apuntando el trabajo en curso (si Android cierra a Kira a mitad, al volver lo
         sabe y lo puede retomar)."""
         t = getattr(self.core, "trabajo", None)
@@ -247,12 +247,14 @@ class PanelControl:
         if t is not None and str(pedido or "").strip():
             t.empezar("mejora", pedido)
         try:
-            return self._enviar_orden(pedido, max_intentos)
+            return self._enviar_orden(pedido, max_intentos, nombre=nombre, extra=extra)
         finally:
             if t is not None:
                 t.terminar()
 
-    def _enviar_orden(self, pedido, max_intentos=MAX_INTENTOS) -> dict:
+    def _enviar_orden(self, pedido, max_intentos=MAX_INTENTOS, nombre=None, extra="") -> dict:
+        """v3.19: `nombre` fuerza el nombre del módulo (al CAMBIAR una ventana, la versión nueva sustituye a la vieja,
+        con copia para «Volver atrás»); `extra` (p. ej. el código actual) va al cerebro sin contar en MAX_PEDIDO."""
         """Genera, prueba y deja una mejora PENDIENTE de tu decisión. Reintenta con el motivo del fallo.
         Si están Kira (cerebro del móvil) y Claude, la escribe uno, la revisa el otro y se ponen de acuerdo
         (acuerdo_kira). Se prueba en el móvil (y en el ordenador si está conectado). Instalar: solo con tus dos toques."""
@@ -291,7 +293,8 @@ class PanelControl:
             est = {"ultimo": "[x] Sin resultado.", "lab_caido": False, "error_gen": ""}
 
             def proponer(aviso):
-                texto_pedido = pedido + (f"\n\n{contexto}" if contexto else "") + (f"\n\n{aviso}" if aviso else "")
+                texto_pedido = pedido + (f"\n\n{extra}" if extra else "") + (f"\n\n{contexto}" if contexto else "") + \
+                    (f"\n\n{aviso}" if aviso else "")
                 try:
                     if revisor:
                         return self.core.generar_mejora(texto_pedido, quien=autor)
@@ -308,12 +311,12 @@ class PanelControl:
                     est["error_gen"] = f"[x] Kira no pudo generar la mejora: {e}"
                     raise ak.Parar(str(e))
 
-            def probar(nombre, codigo):
+            def probar(nombre_ia, codigo):
                 previo = mejoras_ia_kira.precomprobar(codigo)  # revisión rápida, antes de gastar una prueba
                 if previo:
                     est["ultimo"] = "[x] Revisión previa: " + previo
                     raise ak.Reintentar(_limpia(previo, 300))
-                pend, err = self.promotor.preparar(nombre, codigo)
+                pend, err = self.promotor.preparar(nombre or nombre_ia, codigo)   # v3.19: el mismo módulo al cambiar
                 if err:
                     est["ultimo"] = "[x] " + err
                     raise ak.Reintentar(_limpia(err, 300))

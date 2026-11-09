@@ -213,6 +213,7 @@ class KiraGodCore:
     def cargar_modulos(self):
         """Carga KIRA_DATA_DIR/modulos/*.py. Cada módulo define registrar() -> {prefijo: funcion(texto)->str}."""
         self.comandos_modulos, self.errores_modulos, self.juegos_modulos = {}, {}, {}
+        self.ventanas_modulos = {}                         # v3.19: ventanas/secciones/botones que se añadió
         carpeta = os.path.join(self.dir, "modulos")
         if not os.path.isdir(carpeta):
             return 0
@@ -234,6 +235,12 @@ class KiraGodCore:
                     if not (isinstance(prefijo, str) and prefijo.strip() and callable(fn)):
                         continue
                     prefijo = prefijo.strip().lower()
+                    if prefijo.startswith("ventana "):        # v3.19: {"ventana mis redes": ventana(texto) -> datos}
+                        import ventanas_kira as vk
+                        v = vk.validar(vk.id_de(prefijo), fn(""))
+                        v["modulo"] = nombre
+                        self.ventanas_modulos[v["id"]] = v
+                        continue
                     if prefijo.startswith("juego "):          # {"juego naves": crear(motor) -> clase de Juego}
                         import motor_juegos_kira as mj
                         clase = fn(mj)
@@ -247,6 +254,11 @@ class KiraGodCore:
                 logger.error(f"Módulo '{nombre}' no cargó: {e}")
                 self.registrar_error("módulos", f"Módulo '{nombre}' no cargó: {e}")
         return len(self.comandos_modulos)
+
+    def ventanas_lista(self):
+        """v3.19: las ventanas/secciones/botones que Kira se ha añadido (ya validadas: solo texto y botones)."""
+        return sorted((dict(v) for v in getattr(self, "ventanas_modulos", {}).values()),
+                      key=lambda v: (v["en"], v["titulo"].lower()))
 
     @property
     def herramientas(self):
@@ -779,8 +791,10 @@ class KiraGodCore:
         extra = self.texto_librerias_para_programar()
         usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n{extra}" if extra else "") + \
             (f"\n\n{saber}" if saber else "")
-        texto = self._llamar_api(clave, mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA,
-                                 usuario)
+        import ventanas_kira as vk                       # v3.19: si pide una ventana/botón/sección, el ejemplo bueno
+        sistema = (mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA) + \
+            vk.ejemplo_para_cerebro(pedido.split("\n\n")[0])
+        texto = self._llamar_api(clave, sistema, usuario)
         return mi.extraer_modulo(texto)
 
     # ---------- trabajar en EQUIPO: Kira (cerebro del móvil) + Claude ----------

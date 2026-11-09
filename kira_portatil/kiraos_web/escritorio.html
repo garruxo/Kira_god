@@ -55,6 +55,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* ---------- iconos del escritorio ---------- */
 #iconos{position:fixed;left:42px;top:38px;display:grid;grid-template-columns:repeat(3,128px);gap:22px 16px}
+#iconos{max-height:calc(100vh - 120px);overflow-y:auto}
+#iconos.c4{grid-template-columns:repeat(4,128px)}#iconos.c5{grid-template-columns:repeat(5,128px)}
 .icono{display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 6px;border-radius:14px;cursor:pointer;
   transition:background .15s}
 .icono:hover,.icono:focus{background:rgba(120,170,240,.08);outline:none}
@@ -80,6 +82,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   color:#9ff1ff;font-size:14px;font-weight:600;box-shadow:inset 0 0 0 1px rgba(34,211,238,.3)}
 .volver:hover{background:rgba(34,211,238,.2)}
 .vcab h2{flex:1;font-size:16px;font-weight:600;letter-spacing:.3px}
+.vextras{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.vextras button{background:rgba(46,230,255,.10);border:1px solid rgba(46,230,255,.35);border-radius:8px;padding:5px 10px;font-size:12.5px;color:#bff5ff}
+.vextras button:hover{background:rgba(46,230,255,.2)}
+.nota-extra{margin-top:14px;font-size:12px;color:var(--tenue);line-height:1.45}
 .cerrar{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--tenue)}
 .cerrar:hover{background:rgba(244,114,208,.18);color:#fff}
 .vcuerpo{flex:1;overflow:auto;padding:20px 24px;-webkit-user-select:text;user-select:text}
@@ -256,6 +262,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <button class="volver" id="volver" title="Volver al escritorio">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>Escritorio</button>
     <h2 id="vtitulo">—</h2>
+    <div class="vextras" id="vextras"></div>
     <button class="cerrar" id="cerrar" title="Cerrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div class="vcuerpo" id="vcuerpo"></div>
@@ -301,6 +308,7 @@ var ICO = {
   cuaderno:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   programando:'<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   terminal:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/>',
+  extra:'<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><path d="M17 13v8M13 17h8"/>',
   movil:'<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/>',
   mejoras:'<path d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.4l-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/>',
   ajustes:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
@@ -309,7 +317,8 @@ var ICO = {
   apagar:'<path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/>',
   salir:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l-5-5 5-5M5 12h11"/>'
 };
-function svg(n, extra){ return '<svg viewBox="0 0 24 24"'+(extra||'')+'>'+(ICO[n]||'')+'</svg>'; }
+function svg(n, extra){ if(String(n).indexOf("extra:")===0) n="extra";
+  return '<svg viewBox="0 0 24 24"'+(extra||'')+'>'+(ICO[n]||'')+'</svg>'; }
 var ICONOS = [
   {id:"hablar",titulo:"Hablar con Kira",sub:"la conversación"},{id:"buscador",titulo:"Buscador",sub:"internet, como Google"},
   {id:"wifi",titulo:"WiFi",sub:"redes y conexión"},
@@ -318,7 +327,17 @@ var ICONOS = [
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
 var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
-function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; } return OCULTAS[id]||id; }
+var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
+function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
+  for(var j=0;j<EXTRAS.length;j++){ if("extra:"+EXTRAS[j].id===id) return EXTRAS[j].titulo; } return OCULTAS[id]||id; }
+function todosIconos(){ return ICONOS.concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
+  return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; })); }
+function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
+  var b=$("vextras"); if(!b) return;
+  var l=EXTRAS.filter(function(e){ return e.en===id; });
+  b.innerHTML=l.map(function(e){ return '<button data-extra="'+esc(e.id)+'">+ '+esc(e.titulo)+'</button>'; }).join("");
+  [].forEach.call(b.querySelectorAll("[data-extra]"), function(x){ x.onclick=function(){ abrir("extra:"+x.dataset.extra); }; });
+}
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 var $ = function(id){ return document.getElementById(id); };
 
@@ -328,7 +347,7 @@ var DEMO_REDES=[{ssid:"MiCasa",senal:72,segura:true,guardada:true,en_uso:true,ba
   {ssid:"Bar Pepe",senal:22,segura:false,guardada:false,en_uso:false,banda:"2,4 GHz"}];
 var demoCharlas={};
 var FAKE = {
-  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"}}); },
+  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[]}); },
   hablar:function(t){ var id="d"+Date.now(); demoCharlas[id]={t:Date.now(),
       r:"Estoy aquí, Jefe. Te lo digo en voz alta; si quieres leerlo, pulsa «Texto» en la barra."}; return Promise.resolve({id:id}); },
   tarea_hablar:function(id){ var c=demoCharlas[id]; var n=Math.min(c.r.length, Math.floor((Date.now()-c.t)/9));
@@ -362,6 +381,8 @@ var FAKE = {
         botones:[{texto:"Instalar",accion:"hacer:aplicar",dos:true},{texto:"Descartar",accion:"hacer:rechazar"}]},
       ajustes:{titulo:"Ajustes",texto:"KiraOS versión 2.90.\nCerebro: rápido.\nVoz: puesta.\n\nPARTIDA DE NACIMIENTO DE KIRA\nNací el sábado 7 de noviembre de 2026.",
         botones:[{texto:"Cerebro rápido",accion:"hacer:rapido"},{texto:"Cerebro grande",accion:"hacer:grande"},{texto:"Con voz",accion:"hacer:voz_si"},{texto:"Sin voz",accion:"hacer:voz_no"}]}};
+    if(String(n).indexOf("extra:")===0){ var e=(FAKE._extras||[]).filter(function(x){ return "extra:"+x.id===n; })[0]||{};
+      return Promise.resolve({titulo:e.titulo,texto:e.texto,botones:(e.botones||[]).map(function(b){ return {texto:b.texto,accion:"decir:"+b.orden}; })}); }
     return Promise.resolve(T[n]||{titulo:n,texto:"",botones:[]}); },
   app_hacer:function(n,a){ return Promise.resolve({texto:"(ejemplo) "+a}); },
   sistema:function(a){ return Promise.resolve({ok:true,texto:"(ejemplo) "+a}); },
@@ -398,7 +419,9 @@ window.addEventListener("message", function(ev){
 
 // ---------- escritorio ----------
 function pintaIconos(){
-  $("iconos").innerHTML = ICONOS.map(function(i){
+  var tod=todosIconos();                          // v3.19: con ventanas añadidas, más columnas (que no tapen la barra)
+  $("iconos").className = tod.length>16 ? "c5" : (tod.length>12 ? "c4" : "");
+  $("iconos").innerHTML = tod.map(function(i){
     return '<div class="icono" tabindex="0" data-app="'+i.id+'"><div class="tile">'+svg(i.id)+'</div><span>'+esc(i.titulo)+
            '<small>'+esc(i.sub)+'</small></span></div>'; }).join("");
   [].forEach.call(document.querySelectorAll(".icono"), function(el){
@@ -420,6 +443,7 @@ function pintaBarra(d){
   $("wifiBarras").innerHTML=barras(w.ssid?w.senal:null);
   $("wifiNombre").textContent = w.ssid ? w.ssid : (w.radio===false ? "WiFi apagada" : "Sin WiFi");
   if(d.llamar) $("hola").innerHTML="Hola, <b>"+esc(d.llamar)+"</b>";
+  if(d.extras){ var antes=JSON.stringify(EXTRAS); EXTRAS=d.extras||[]; if(JSON.stringify(EXTRAS)!==antes){ pintaIconos(); if(actual) pintaExtras(actual); } }
   if(typeof d.voz==="boolean"){ vozOn=d.voz; pintaVoz(); }
 }
 function refrescaBarra(){ llama("barra").then(pintaBarra).catch(function(){}); }
@@ -463,7 +487,7 @@ $("orbe").onclick=irOrbe;
 var actual=null, relojApp=null;
 function abrir(id, consulta, tipo){
   cierraMenus(); if(relojApp){ clearTimeout(relojApp); relojApp=null; } paraTerm();
-  actual=id; $("vtitulo").textContent=nombreDe(id);
+  actual=id; $("vtitulo").textContent=nombreDe(id); pintaExtras(id);
   var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Un momento…</div>';
   $("ventana").classList.add("on");
   $("abiertas").innerHTML='<div class="chip">'+svg(id)+esc(nombreDe(id))+'</div>';
