@@ -141,7 +141,7 @@ with tempfile.TemporaryDirectory() as d:
         ok("Cancelado" in str(e), "se puede cancelar")
 
 src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kira_god.py"), encoding="utf-8").read()
-ok('startswith("config github:")' in src and src.index('startswith("config github:")') < src.index(
+ok('if m_gh:' in src and src.index('if m_gh:') < src.index(
     "self.registrar_buffer_volatil(command)"), "la clave de GitHub no pasa por el búfer ni por el registro")
 
 print("\nTODO BIEN" if not fallos else f"\n{fallos} FALLOS")

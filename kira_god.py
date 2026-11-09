@@ -1582,7 +1582,7 @@ class KiraGodCore:
             return {"ok": False, "texto": "Para hacer apps de verdad necesito tu clave de GitHub (solo una vez). En "
                     "github.com: tu foto › Settings › Developer settings › Personal access tokens › Tokens (classic) "
                     "› Generate new token (classic); marca «public_repo» y «workflow». Luego escríbeme AQUÍ "
-                    "«config github: » y la clave, y vuelve a pedirme la app."}
+                    "«config github» y la clave (con o sin dos puntos), y vuelve a pedirme la app."}
         if not codigo and pedido:
             paso(0.0, "Escribo el programa de la app…")
             r = self.programa_acordado("un programa " + str(pedido).strip(" :"), al_paso=lambda t: paso(None, t))
@@ -3740,9 +3740,11 @@ class KiraGodCore:
             logger.info("Clave de API actualizada (valor no registrado).")
             return "[OK] Clave guardada. Ya puedes usar: mejorar <lo que quieres>"
 
-        if cmd_lower.startswith("config github:"):         # la clave de GitHub (apps de verdad de tus juegos)
+        m_gh = re.match(r"^\s*(?:config\s+github\s*:?|(?:mi\s+)?clave\s+de\s+github(?:\s+es)?\s*:?)\s*(\S+)\s*$",
+                        command, flags=re.I)
+        if m_gh:                                            # la clave de GitHub (apps de verdad). v3.15: sin «:» también
             import apk_juegos_kira as apk
-            clave = command.split(":", 1)[1].strip()
+            clave = m_gh.group(1).strip()
             if not apk.es_token(clave):
                 return "[x] Esa clave de GitHub no tiene buena pinta: empieza por «ghp_» (o «github_pat_»)."
             ruta = os.path.join(self.dir, "github_token.txt")
@@ -3753,7 +3755,8 @@ class KiraGodCore:
             except Exception:
                 pass
             logger.info("Clave de GitHub guardada (valor no registrado).")
-            return ("[OK] Clave de GitHub guardada. Juega un juego y dime «conviértelo en una app de verdad». "
+            return ("[OK] Clave de GitHub guardada. Ya puedes pedirme «hazme una app android que…» (o, tras un "
+                    "programa o un juego, «conviértelo en una app de verdad»). "
                     "Para quitarla: «olvida mi clave de github».")
         if cmd_lower.strip(" .") in ("olvida mi clave de github", "borra mi clave de github", "quita mi clave de github"):
             try:
