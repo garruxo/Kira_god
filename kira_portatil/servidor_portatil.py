@@ -441,12 +441,16 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                 except RuntimeError as e:
                     return self._json(503, {"ok": False, "error": str(e)})
                 datos = json.dumps(d).encode("utf-8")
+                fin = threading.Event()
                 try:
                     c = http.client.HTTPConnection("127.0.0.1", cerebro.puerto, timeout=900)
                     c.request("POST", "/v1/chat/completions", body=datos,
                               headers={"Content-Type": "application/json", "Content-Length": str(len(datos))})
+                    # v3.18: si quien preguntó se va («Parar»), se corta también al cerebro, aunque aún esté LEYENDO
+                    threading.Thread(target=vigilar_cliente, args=(self.connection, c, fin), daemon=True).start()
                     r = c.getresponse()
                 except (OSError, http.client.HTTPException) as e:
+                    fin.set()
                     return self._json(502, {"ok": False, "error": f"el cerebro no contesta: {e}"})
                 self.send_response(r.status)
                 self.send_header("Content-Type", r.getheader("Content-Type", "application/json"))
@@ -462,18 +466,48 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                             self.wfile.write(b"%x\r\n%s\r\n" % (len(trozo), trozo))
                             self.wfile.flush()
                         self.wfile.write(b"0\r\n\r\n")
-                    except OSError:                         # el móvil colgó (p. ej. «para»): se deja de enviar
+                    except (OSError, http.client.HTTPException):   # colgaron (p. ej. «para»): se deja de enviar
                         pass
                     finally:
+                        fin.set()
                         c.close()
                     return
-                cuerpo = r.read()
+                try:
+                    cuerpo = r.read()
+                except (OSError, http.client.HTTPException):
+                    cuerpo = b""
+                fin.set()
                 c.close()
                 self.send_header("Content-Length", str(len(cuerpo)))
                 self.end_headers()
                 self.wfile.write(cuerpo)
 
     return ThreadingHTTPServer((host, puerto), Manejador)
+
+
+def cliente_se_fue(sock):
+    """v3.18 (puro con un socket): ¿cerró la conexión quien preguntó? (legible y sin datos = colgó)."""
+    import select
+    try:
+        listo, _, _ = select.select([sock], [], [], 0)
+        if not listo:
+            return False
+        return sock.recv(1, socket.MSG_PEEK) == b""
+    except (OSError, ValueError):
+        return True
+
+
+def vigilar_cliente(sock, conexion_cerebro, fin, cada=0.4):
+    """Mientras dura la pregunta: si el cliente colgó, cierra la conexión con llama-server para que deje de
+    trabajar (y suelte el cerebro para la siguiente)."""
+    while not fin.wait(cada):
+        if cliente_se_fue(sock):
+            try:
+                if conexion_cerebro.sock is not None:
+                    conexion_cerebro.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            return
 
 
 def descargas(prueba=False, sin_grande=False, ligero=False):

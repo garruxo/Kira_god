@@ -651,6 +651,13 @@ class KiraGodCore:
     CANCELAR_DURA = 25.0          # un «cancela» corta lo que está en marcha; pasado este rato ya no cuenta
 
     def cancelado(self):
+        extra = self.__dict__.get("parar_extra")              # v3.18: en KiraOS, el «Parar» de la tarea (no caduca)
+        if callable(extra):
+            try:
+                if extra():
+                    return True
+            except Exception:
+                pass
         ev = self._evento_cancelar()
         if ev.is_set() and time.monotonic() - self.__dict__.get("_cancelar_t", 0.0) > self.CANCELAR_DURA:
             ev.clear()

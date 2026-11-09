@@ -203,8 +203,13 @@ class Casa:
                              "chat_template_kwargs": {"enable_thinking": False}}).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
                                      headers={"Content-Type": "application/json", "X-Kira-Token": self.token})
+        vigia = None
+        if parar is not None and self._abrir is urllib.request.urlopen and self.url.startswith("http://"):
+            abrir = lambda rq, timeout: self._abrir_cortable(rq, timeout, parar)   # noqa: E731  v3.18
+        else:
+            abrir = self._abrir
         try:
-            with self._abrir(req, timeout=timeout) as r:
+            with abrir(req, timeout=timeout) as r:
                 if al_trozo:
                     crudo = []
                     texto = ci.leer_sse(r, lambda d: (d["choices"][0].get("delta") or {}).get("content") or "",
@@ -217,7 +222,7 @@ class Casa:
                 else:
                     datos = json.loads(r.read(4_000_000).decode("utf-8"))
                     texto = datos["choices"][0]["message"]["content"]
-        except ci.Cancelada:
+        except (ci.Cancelada, Cancelada):
             raise Cancelada("Cancelado.")
         except urllib.error.HTTPError as e:
             self._cache = (0.0, None)
@@ -231,6 +236,73 @@ class Casa:
         if not texto:
             raise CasaError("El cerebro de casa no llegó a responder.")
         return texto
+
+    def _abrir_cortable(self, req, timeout, parar):
+        """v3.18: como urlopen, pero «Parar» corta YA aunque el cerebro aún esté LEYENDO el pedido (minutos sin decir
+        nada en el Packard Bell): un vigía mira `parar()` cada 0,3 s y, si toca, cierra la conexión → el cerebro de
+        casa lo nota y deja de trabajar en ello. Lanza Cancelada."""
+        import http.client
+        import urllib.parse
+        u = urllib.parse.urlsplit(req.full_url)
+        conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=timeout)
+        listo = threading.Event()
+        cortado = []
+
+        def vigia():
+            while not listo.wait(0.3):
+                try:
+                    if parar():
+                        cortado.append(1)
+                        if conn.sock is not None:
+                            conn.sock.shutdown(socket.SHUT_RDWR)
+                        return
+                except Exception:
+                    return
+        cabeceras = {k: v for k, v in req.header_items()}
+        try:
+            conn.request(req.get_method(), u.path + (("?" + u.query) if u.query else ""), body=req.data,
+                         headers=cabeceras)
+            threading.Thread(target=vigia, daemon=True).start()
+            r = conn.getresponse()
+        except Exception:
+            listo.set()
+            conn.close()
+            if cortado or parar():
+                raise Cancelada("Cancelado.")
+            raise
+        if r.status >= 400:
+            listo.set()
+            cuerpo = r.read()
+            conn.close()
+            raise urllib.error.HTTPError(req.full_url, r.status, r.reason, r.headers, None)
+
+        class _Resp:
+            def __init__(self):
+                self.status = r.status
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                listo.set()
+                conn.close()
+
+            def readline(self, *a):
+                try:
+                    return r.readline(*a)
+                except Exception:
+                    if cortado or parar():
+                        raise Cancelada("Cancelado.")
+                    raise
+
+            def read(self, *a):
+                try:
+                    return r.read(*a)
+                except Exception:
+                    if cortado or parar():
+                        raise Cancelada("Cancelado.")
+                    raise
+        return _Resp()
 
     def pintar(self, prompt, negativo="", ancho=None, alto=None, semilla=None, timeout=900):
         """Los bytes del PNG que pinta el portátil. Lanza CasaError."""

@@ -480,6 +480,23 @@ class Trabajos:
         t = self.tareas.get(self.actual) if self.actual else None
         return bool(t and t["estado"] == "en curso")
 
+    def parar_actual(self, borrar=False):
+        """v3.18: «Parar»/«Borrar» la que se está haciendo. Queda MARCADA hasta que acabe (antes el «cancela» caducaba
+        a los 25 s y, con el cerebro del Packard Bell leyendo varios minutos, la tarea seguía como si nada)."""
+        with self._lock:
+            t = self.tareas.get(self.actual) if self.actual else None
+            if not t or t["estado"] != "en curso":
+                return None
+            t["parar"] = True
+            if borrar:
+                t["borrar_al_acabar"] = True
+            return t["id"]
+
+    def debe_parar(self):
+        """¿Hay que parar la tarea en curso? (lo mira el núcleo en cada paso, junto a su «cancelado»)."""
+        t = self.tareas.get(self.actual) if self.actual else None
+        return bool(t and t.get("parar"))
+
     def en_cola(self):
         with self._lock:
             return len(self.cola)
@@ -535,13 +552,17 @@ class Trabajos:
                 if texto:
                     _t["avance"] = (_t["avance"] + [str(texto)[:300]])[-40:]
             try:
+                if t.get("parar"):                 # la paraste justo antes de empezar
+                    raise _Parada("Parado.")
                 r = self._hacer(t["orden"], paso) or {}
+                if t.get("parar"):                 # se paró pero lo de dentro no lo dijo: cuenta como parada
+                    raise _Parada("Parado.")
                 t.update(respuesta=str(r.get("texto") or ""), codigo=r.get("codigo"), nombre=r.get("nombre"),
                          estado="hecho", fraccion=1.0, fin=time.time())
                 if r.get("ok") is False and not str(t["respuesta"]).lstrip().startswith("[x]"):
                     t["respuesta"] = "[x] " + t["respuesta"]
             except Exception as e:                 # noqa: BLE001
-                cancel = type(e).__name__ == "Cancelada"
+                cancel = type(e).__name__ in ("Cancelada", "_Parada") or bool(t.get("parar"))
                 t.update(estado="cancelado" if cancel else "error",
                          respuesta="Parado." if cancel else f"[x] {e}", fin=time.time())
             self._cerrar(t)
@@ -635,6 +656,10 @@ class Trabajos:
 # =====================================================================================
 #  EL NÚCLEO (se puede reiniciar tras importar la memoria)
 # =====================================================================================
+class _Parada(Exception):
+    pass
+
+
 class Nucleo:
     def __init__(self, datos, crear=None, con_maquina=False):
         self.datos = datos
@@ -646,6 +671,10 @@ class Nucleo:
         self._lock_sinc = threading.Lock()
 
     def _hacer(self, orden, paso):
+        try:
+            self.core.nueva_tarea()                  # un «cancela» de antes no corta esta
+        except Exception:
+            pass
         r = ejecutar(self.core, orden, paso)
         if getattr(self.core, "pedir_reinicio", False):     # v3.11: tras ponerse las mejoras, se reinicia solo
             self.core.pedir_reinicio = False
@@ -661,6 +690,10 @@ class Nucleo:
         return kira_god.KiraGodCore()
 
     def _enganchar(self):
+        try:                                     # v3.18: el «Parar» de la tarea vale hasta que acabe (no caduca)
+            self.core.parar_extra = lambda: bool(getattr(self, "trabajos", None) and self.trabajos.debe_parar())
+        except Exception:
+            pass
         try:
             self.core.es_kiraos = True           # v3.02: soy KiraOS (no reenvío órdenes a KiraOS: sería a mí misma)
         except Exception:
@@ -724,6 +757,7 @@ class Nucleo:
         curso = t["estado"] == "en curso"
         if accion == "parar":
             if curso:
+                tb.parar_actual()
                 try:
                     self.core.cancelar()
                 except Exception:
@@ -735,6 +769,7 @@ class Nucleo:
         if accion == "borrar":
             r = tb.quitar(tid)
             if r == "en curso":
+                tb.parar_actual(borrar=True)
                 try:
                     self.core.cancelar()
                 except Exception:
@@ -1041,6 +1076,10 @@ def crear_servidor(host, puerto, token, nucleo):
                     return self._json(400, {"error": str(e)})
                 return self._json(200, {"ok": True, "resumen": resumen, "respuesta": respuesta})
             if u.path == "/cancelar":
+                try:
+                    nucleo.trabajos.parar_actual()
+                except Exception:
+                    pass
                 try:
                     nucleo.core.cancelar()
                 except Exception:
