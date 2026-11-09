@@ -48,8 +48,41 @@ ICONOS = [
     {"id": "cuaderno", "titulo": "Cuaderno", "sub": "lo que piensa"},
     {"id": "programando", "titulo": "Programando", "sub": "verla escribir código"},
     {"id": "movil", "titulo": "Móvil", "sub": "sincronía con Kira app"},
+    {"id": "terminal", "titulo": "Terminal", "sub": "Linux sin salir de Kira"},
     {"id": "ajustes", "titulo": "Ajustes", "sub": "cerebro, voz, nacimiento"},
 ]
+
+try:                                              # v3.17: la versión con la que se ABRIÓ esta pantalla
+    import version_kira as _vk
+    VERSION_AL_ABRIR = _vk.VERSION
+except Exception:                                 # noqa: BLE001
+    VERSION_AL_ABRIR = "?"
+
+
+def version_en_disco(ruta=None):
+    """v3.17: la versión que hay DESCARGADA en el disco (tras «implementa las mejoras»), sin importarla otra vez."""
+    ruta = ruta or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "version_kira.py")
+    try:
+        m = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', open(ruta, encoding="utf-8").read())
+        return m.group(1) if m else None
+    except OSError:
+        return None
+
+
+def estado_version(pantalla, disco=None, nucleo=None):
+    """v3.17 (puro): {"version", "texto", "aviso", "al_dia"} para enseñar en el inicio. Si lo descargado, la
+    pantalla y el núcleo no van con la MISMA versión, avisa de reiniciar (pasó en la v3.11: el núcleo seguía viejo)."""
+    pantalla = str(pantalla or "?")
+    aviso = ""
+    if disco and disco != pantalla:
+        aviso = (f"Ya tengo descargada la {disco}, pero esta pantalla aún va con la {pantalla}: reinicia el portátil "
+                 "para estrenarla.")
+    elif nucleo and nucleo != pantalla:
+        aviso = (f"Mi núcleo va con la {nucleo} y la pantalla con la {pantalla}: reinicia el portátil para que "
+                 "vayan iguales.")
+    texto = f"KiraOS versión {pantalla}" + ("" if aviso else (" · todo con la misma versión" if nucleo else ""))
+    return {"version": pantalla, "texto": texto, "aviso": aviso, "al_dia": not aviso,
+            "disco": disco, "nucleo": nucleo}
 
 
 def para_voz(texto, maximo=420):
@@ -123,6 +156,55 @@ class EscritorioMixin:
         except Exception:
             pass
         return {"llamar": p.get("llamar", ""), "wifi": w, "voz": self.voz_activa, "iconos": ICONOS}
+
+    # ---------- v3.17: la VERSIÓN en el inicio ----------
+    def version(self):
+        nucleo = None
+        n = self._nucleo()
+        if n is not None and hasattr(n, "hola"):
+            try:
+                nucleo = (n.hola() or {}).get("version")
+            except Exception:
+                nucleo = None
+        return estado_version(VERSION_AL_ABRIR, version_en_disco(), nucleo)
+
+    # ---------- v3.17: la TERMINAL (Linux sin salir de Kira; solo en este portátil) ----------
+    def _term(self):
+        t = getattr(self, "_terminal", None)
+        if t is None:
+            import terminal_kira
+            t = self._terminal = terminal_kira.Terminal()
+        return t
+
+    def terminal_abrir(self):
+        t = self._term()
+        if not t.vivo:
+            t.iniciar()
+            time.sleep(0.3)
+        return t.leer(0)
+
+    def terminal_leer(self, desde=0):
+        return self._term().leer(desde)
+
+    def terminal_escribir(self, linea, clave=False):
+        self._term().escribir(linea, bool(clave))
+        return True
+
+    def terminal_tecla(self, nombre):
+        return self._term().tecla(nombre)
+
+    def terminal_completar(self, linea):
+        return self._term().completar(linea)
+
+    def terminal_limpiar(self):
+        return self._term().limpiar_pantalla()
+
+    def terminal_nueva(self):
+        t = getattr(self, "_terminal", None)
+        if t is not None:
+            t.cerrar()
+        self._terminal = None
+        return self.terminal_abrir()
 
     # ---------- HABLAR CON KIRA (desde cualquier sitio) ----------
     def hablar(self, texto):

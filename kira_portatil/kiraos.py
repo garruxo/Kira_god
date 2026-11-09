@@ -133,8 +133,14 @@ class Api(EscritorioMixin):
             except Exception:
                 pass
         p = nk.cargar(self.ruta_nac)
+        try:
+            import version_kira
+            ver = version_kira.VERSION
+        except Exception:
+            ver = ""
         return {"hay_pin": bl.hay_pin(self.ruta_pin), "nombre": nombre, "cerebro": CEREBRO_NOMBRE,
-                "nacida": bool(p), "llamar": (p or {}).get("llamar", ""), "fecha": (p or {}).get("fecha", "")}
+                "nacida": bool(p), "llamar": (p or {}).get("llamar", ""), "fecha": (p or {}).get("fecha", ""),
+                "version": ver}
 
     def equipo(self):
         """Lo que se ve del equipo en la escena del nacimiento."""

@@ -378,6 +378,7 @@ function arrancarInfo(){
     llamar = d.llamar || "";
     if(llamar){ document.querySelector("#acceso .hi").innerHTML = "Hola, <b>" + esc(llamar) + "</b>"; }
     if(d.cerebro){ foot.textContent="Cerebro de Kira · " + d.cerebro + " · todo se queda en tu portátil"; }
+    if(d.version){ foot.textContent=(foot.textContent?foot.textContent+" · ":"")+"KiraOS versión "+d.version; window.KIRA_VERSION=d.version; }
     if(d.nacida===false){ nacimiento(); }
     else { document.body.classList.remove("esperando"); fase="reposo"; }
   }).catch(function(){ document.body.classList.remove("esperando"); fase="reposo"; });

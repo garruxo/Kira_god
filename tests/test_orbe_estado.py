@@ -77,7 +77,7 @@ ok(e["ocupada"] and abs(e["fraccion"] - 0.4) < 1e-9 and e["inicio"] and e["avanc
    "el núcleo da fracción, inicio y último paso")
 ev.set()
 
-ok("mejoras" not in [i["id"] for i in ek.ICONOS] and len(ek.ICONOS) == 10, "«Mejoras» ya no está en el escritorio")
+ok("mejoras" not in [i["id"] for i in ek.ICONOS] and len(ek.ICONOS) == 11, "«Mejoras» ya no está en el escritorio")
 
 node = shutil.which("node")
 html = os.path.join(RAIZ, "kira_portatil", "kiraos_web", "escritorio.html")
@@ -117,7 +117,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
     if out.startswith("{"):
         d = json.loads(out)
         ok(not d["errs"], "Chromium: sin errores " + str(d["errs"]))
-        ok("mejoras" not in d["iconos"] and len(d["iconos"]) == 10, "Chromium: sin el icono Mejoras")
+        ok("mejoras" not in d["iconos"] and len(d["iconos"]) == 11, "Chromium: sin el icono Mejoras")
         ok(d["modo1"] == "Pensando", "Chromium: el orbe dice «Pensando»")
         ok(d["modo2"] == "Estudiando" and "12 min" in d["eta"] and d["ocupada"], "Chromium: «Estudiando» + tiempo estimado")
         ok("Instalar o deshacer" in d["boton"] and d["sinBoton"] == 0, "Chromium: el botón de Mejoras solo en su pestaña")

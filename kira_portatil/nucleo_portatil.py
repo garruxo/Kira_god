@@ -1106,6 +1106,12 @@ class ClienteNucleo:
         return self._pedir("/mejora", {"accion": accion, "nombre": nombre, "confirmado": confirmado is True},
                            timeout=120)
 
+    def hola(self):
+        try:
+            return self._pedir("/hola", timeout=3)
+        except Exception:
+            return {}
+
     def disponible(self):
         try:
             return self._pedir("/hola", timeout=2).get("kira_nucleo") == 1
