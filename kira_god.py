@@ -732,8 +732,9 @@ class KiraGodCore:
 
         def trozo(t):
             try:
+                ahora = time.time()
                 self.pizarra = {"texto": str(t or "")[-20000:], "inicio": self.pizarra.get("inicio"),
-                                "cuando": time.time()}
+                                "cuando": ahora, "primera": self.pizarra.get("primera") or (ahora if t else None)}
             except Exception:
                 pass
             if al_trozo is not None:

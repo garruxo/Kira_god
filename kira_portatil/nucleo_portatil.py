@@ -844,9 +844,10 @@ def _sin_claves(texto):
 def pizarra_de(core):
     """v3.14: lo que el cerebro está escribiendo AHORA (el texto hasta ahora), si es reciente."""
     p = getattr(core, "pizarra", None) or {}
-    if not p.get("texto") or time.time() - float(p.get("cuando") or 0) > 900:
-        return None
-    return {"texto": _sin_claves(str(p["texto"])[-12000:]), "inicio": p.get("inicio"), "cuando": p.get("cuando")}
+    if not p.get("inicio") or time.time() - float(p.get("cuando") or 0) > 900:
+        return None                                 # v3.16: también vacía (= el cerebro aún lee las instrucciones)
+    return {"texto": _sin_claves(str(p.get("texto") or "")[-12000:]), "inicio": p.get("inicio"), "cuando": p.get("cuando"),
+            "primera": p.get("primera")}
 
 
 def actividad(core):

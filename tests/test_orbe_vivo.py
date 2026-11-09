@@ -121,6 +121,30 @@ v = esc.programando_vivo()
 ok(v.get("estado") == "listo" and "def final" in v["codigo"] and v["archivo"] == "final.py", "al acabar: el código terminado")
 ok(nuc.estado()["pizarra"] is None, "sin tarea en curso no hay pizarra")
 
+# ---------- v3.16: mientras espera, qué hace el cerebro por dentro ----------
+F = ek.fase_cerebro
+f = F({"texto": "", "inicio": 1000.0}, None, 1000.0 + 300)
+ok(f["paso"] == "leyendo" and "leyendo las instrucciones" in f["texto"] and "5 min" in f["texto"],
+   "sin palabras aún: «leyendo las instrucciones · lleva unos 5 min»: " + f["texto"])
+f = F({"texto": "Voy a hacer una función que " * 5, "inicio": 1000.0, "primera": 1240.0}, None, 1300.0)
+ok(f["paso"] == "escribiendo" and f["palabras"] == 30 and f["por_minuto"] == 30 and f["dice"].startswith("Voy a hacer"),
+   "ya escribe: palabras, ritmo y lo que va diciendo: " + f["texto"])
+ok(F({"texto": "```python\ndef a", "inicio": 1.0}, None, 61.0)["dice"] == "", "si ya es código, no lo repite como «dice»")
+ok(F(None, 500.0, 560.0)["paso"] == "leyendo", "sin pizarra aún: cuenta desde que empezó la tarea")
+nuc.core.pizarra = {"texto": "", "inicio": time.time() - 120, "cuando": time.time() - 120}
+tb.empezar("escríbeme un programa largo")
+ev.clear()
+lim = time.time() + 5
+while time.time() < lim and not tb.ocupado():
+    time.sleep(0.02)
+v = esc.programando_vivo()
+ok(v.get("estado") == "esperando" and v["fase"]["paso"] == "leyendo" and "2 min" in v["fase"]["texto"],
+   "Programando lo dice mientras el cerebro lee: " + str(v.get("fase", {}).get("texto")))
+ev.set()
+lim = time.time() + 5
+while time.time() < lim and tb.ocupado():
+    time.sleep(0.02)
+
 # ---------- pulsar el orbe ----------
 D = ek.destino_orbe
 ok(D({"modo": "Programando"}) == {"app": "programando"}, "programando → Programando")
@@ -195,18 +219,21 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
   const p2 = await b.newPage({viewport:{width:1200,height:700}}); p2.on('pageerror', e => errs.push(String(e)));
   await p2.addInitScript(() => { window._k=0; const trozos=["def suma(a, b):", "def suma(a, b):\n    return a + b", "def suma(a, b):\n    return a + b\n\nprint(suma(2, 3))"];
     window.pywebview = {api:{programando_datos:function(){ var i=Math.min(window._k++, 3);
+      if(i===0) return Promise.resolve({estado:"esperando", pedido:"una suma", codigo:"", lineas:[], fase:{paso:"leyendo", texto:"Mi cerebro está leyendo las instrucciones · lleva 3 min"}});
       if(i<3) return Promise.resolve({estado:"en_vivo", pedido:"una suma", archivo:"programa.py", codigo:trozos[i], lineas:[{n:1,codigo:"def suma(a, b):",nota:"def: define <b>"}]});
       return Promise.resolve({estado:"listo", pedido:"una suma", archivo:"suma.py", codigo:trozos[2], resumen:"Una función.", lineas:[{n:1,codigo:"def suma(a, b):",nota:"def: define <b>"}]}); }}}; });
   await p2.goto('file://' + process.argv[3]); await p2.waitForTimeout(900);
+  const fase0 = await p2.textContent('#fase');
+  await p2.waitForTimeout(2700);
   const vivo1 = await p2.evaluate(() => window.KIRA_PROG);
   const est1 = await p2.textContent('#estado');
-  await p2.waitForTimeout(8600);
+  await p2.waitForTimeout(8000);
   const vivo2 = await p2.evaluate(() => window.KIRA_PROG);
   const est2 = await p2.textContent('#estado');
   const notas = await p2.$$eval('.nota', l => l.length);
   const html = await p2.$eval('.nota .t', x => x.innerHTML);
   await p2.screenshot({path: process.argv[4]});
-  console.log(JSON.stringify({errs, encima, t1, marco, t2, pest, pedidas, txt, trasCerrar, vivo1, est1, vivo2, est2, notas, html}));
+  console.log(JSON.stringify({errs, encima, t1, marco, t2, pest, pedidas, txt, trasCerrar, fase0, vivo1, est1, vivo2, est2, notas, html}));
   await b.close(); })().catch(async e => { console.log('ERR ' + e); if (b) await b.close(); });
 """
     fjs = os.path.join(T, "o.js")
@@ -227,6 +254,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
         ok(d["t2"] == "Cuaderno" and d["pest"] == ["pensamiento"], "Chromium: el orbe pensando abre Cuaderno ▸ Pensamiento")
         ok(d["pedidas"] >= 2 and d["txt"].startswith("vuelta"), "Chromium: la ventana de la máquina se refresca sola")
         ok(d["trasCerrar"] <= d["pedidas"] + 1, "Chromium: al cerrarla deja de pedir")
+        ok("leyendo las instrucciones" in d["fase0"], "Chromium: mientras espera dice que el cerebro lee")
         ok(d["vivo1"] and d["vivo1"]["estado"] == "en_vivo" and "Escribiendo en vivo" in d["est1"],
            "Chromium: «Programando» dice que escribe en vivo")
         ok(d["vivo2"]["estado"] == "listo" and "print(suma(2, 3))" in d["vivo2"]["escrito"] and "Listo" in d["est2"],

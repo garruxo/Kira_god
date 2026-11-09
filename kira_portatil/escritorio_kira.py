@@ -207,10 +207,12 @@ class EscritorioMixin:
         cod = codigo_de_pizarra(piz.get("texto", "")) if piz else ""
         haciendo = str(e.get("haciendo") or "")
         if cod.strip():
-            return _explicado(cod, haciendo, "en_vivo", e.get("avance") or "")
+            r = _explicado(cod, haciendo, "en_vivo", e.get("avance") or "")
+            r["fase"] = fase_cerebro(piz, e.get("inicio"))
+            return r
         if e.get("ocupada") and _PROGRAMA.search(haciendo):
             return {"pedido": haciendo, "archivo": "…", "lineas": [], "resumen": "", "estado": "esperando",
-                    "avance": e.get("avance") or "", "codigo": ""}
+                    "avance": e.get("avance") or "", "codigo": "", "fase": fase_cerebro(piz, e.get("inicio"))}
         propio = getattr(self, "programa", None)
         ult = e.get("ultimo_codigo") or {}
         if ult.get("codigo") and (not propio or float(ult.get("cuando") or 0) >= float(propio.get("cuando") or 0)):
@@ -790,6 +792,29 @@ def codigo_de_pizarra(texto):
     if re.match(r"\s*(?:#|def |class |import |from \S+ import |async def |@)", t):
         return t.rstrip()
     return ""
+
+
+def fase_cerebro(piz, inicio_tarea=None, ahora=None):
+    """v3.16 (puro): qué está haciendo el cerebro por dentro, para que la espera se entienda:
+    - aún no ha escrito nada → «leyendo las instrucciones» (en el Packard Bell, unos minutos antes de la 1.ª palabra);
+    - ya escribe → cuántas palabras lleva y a qué ritmo, y lo último que va diciendo (si aún no es código)."""
+    ahora = time.time() if ahora is None else ahora
+    piz = piz or {}
+    ini = piz.get("inicio") or inicio_tarea
+    lleva = max(0, int(ahora - float(ini))) if ini else 0
+    texto = str(piz.get("texto") or "")
+    if not texto.strip():
+        return {"paso": "leyendo", "lleva": lleva, "palabras": 0, "por_minuto": 0, "dice": "",
+                "texto": "Mi cerebro está leyendo las instrucciones y lo que sé del tema (en este portátil tarda unos "
+                         "minutos antes de escribir la primera palabra)" + (f" · lleva {texto_eta(lleva)}" if lleva else "")}
+    pal = len(texto.split())
+    prim = piz.get("primera") or ini
+    escribiendo = max(1.0, ahora - float(prim)) if prim else 0
+    pm = int(round(pal * 60 / escribiendo)) if escribiendo else 0
+    dice = "" if "```" in texto else re.sub(r"\s+", " ", texto[-300:]).strip()
+    return {"paso": "escribiendo", "lleva": lleva, "palabras": pal, "por_minuto": pm, "dice": dice,
+            "texto": f"Escribiendo: {pal} palabras" + (f", unas {pm} por minuto" if pm else "") +
+                     (f" · lleva {texto_eta(lleva)}" if lleva else "")}
 
 
 def _explicado(codigo, pedido, estado, avance="", nombre=None):

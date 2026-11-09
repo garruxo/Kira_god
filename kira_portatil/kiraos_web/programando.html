@@ -30,6 +30,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#060d09;color:#cfeed
 .nota.on{opacity:1;transform:none}
 .nota .l{color:#28e07a;font-weight:700;font-size:11.5px}
 .nota .t{color:#bfe6cb;font-size:12.5px;line-height:1.45;margin-top:2px}
+.fase{color:#e0c23a;font-size:12px;padding:6px 22px;border-bottom:1px solid #12301c;background:#0b1409}
+.dice{color:#8fae99;font-size:12.5px;white-space:normal;margin-top:14px;line-height:1.5;font-style:italic}
 .resumen{color:#9fd9b2;font-size:12.5px;padding:10px 16px;border-top:1px solid #16351f;min-height:20px}
 .pie{display:flex;gap:10px;padding:12px 22px;border-top:1px solid #16351f;align-items:center}
 .ap{background:#145a2c;color:#d8ffe6;padding:11px 26px;border-radius:9px;font-weight:700;font-size:13px;box-shadow:0 0 12px rgba(40,224,122,.25)}
@@ -41,6 +43,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#060d09;color:#cfeed
   <div class="top"><div class="orb"><b>K</b></div><h1>KIRA PROGRAMANDO</h1>
     <div class="estado" id="estado"><span class="p"></span>Escribiendo…</div></div>
   <div class="pide" id="pide">Le pediste: <b>…</b></div>
+  <div class="fase" id="fase" style="display:none"></div>
   <div class="main">
     <div class="codewrap">
       <div class="cab">📄 <span class="f" id="archivo">modulo.py</span> · lo que Kira está escribiendo</div>
@@ -183,7 +186,12 @@ async function vivo(d){
   if(d.archivo) document.getElementById("archivo").textContent=d.archivo;
   var meta=String(d.codigo||"");
   pintaEstado(d);
-  if(d.estado==="esperando" && !meta){ if(!escrito) document.getElementById("code").innerHTML='<span class="row"><span class="ln">1</span><span class="cur"></span></span>'; return; }
+  var f=d.fase||{}, fz=document.getElementById("fase");
+  fz.textContent=f.texto||""; fz.style.display=f.texto?"":"none";
+  if(d.estado==="esperando" && !meta){
+    if(!escrito) document.getElementById("code").innerHTML='<span class="row"><span class="ln">1</span><span class="cur"></span></span>'+
+      (f.dice?'<div class="dice">Lo que va diciendo (aún no es código):<br>'+esc(f.dice)+'</div>':'');
+    return; }
   if(meta.indexOf(escrito)!==0){ escrito=""; notasVistas=0; document.getElementById("exp").innerHTML=""; }
   if(animando) return; animando=true;
   while(escrito.length<meta.length){                  // teclea lo nuevo; si va muy por detrás, más deprisa
@@ -193,6 +201,7 @@ async function vivo(d){
     await espera(14);
   }
   pintaCodigo(escrito, d.estado==="en_vivo");
+  if(d.estado!=="en_vivo"){ fz.style.display="none"; }
   pintaNotas(d.lineas);
   document.getElementById("resumen").textContent=d.estado==="en_vivo"?"":(d.resumen||"");
   window.KIRA_PROG={estado:d.estado||"", escrito:escrito};
