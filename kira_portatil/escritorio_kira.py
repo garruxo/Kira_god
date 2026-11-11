@@ -33,7 +33,7 @@ _TRANSITORIA = re.compile(r"^[\s·•\-*]*(?:En cola\b|Pensando…|Pensando\.\.\
                          r"Estudiando «|Empiezo\b|Un momento)", re.I)
 
 _NO_ES_WEB = re.compile(
-    r"\b(?:wi-?fi|aparatos?|dispositivos?|puertos?|pdfs?|recuerdos?|ba[uú]l|notas|cuaderno|soluciones|"
+    r"\b(?:wi-?fi|bluetooth|brillo|volumen|salvapantallas|aparatos?|dispositivos?|puertos?|pdfs?|recuerdos?|ba[uú]l|notas|cuaderno|soluciones|"
     r"m[aá]quina|emparejar|actualizaci[oó]n(?:es)?|mejoras|novedades|c[oó]digo\s+de\s+emparejar|en\s+(?:mi|tu|la)\s+red|mis\s+documentos|tus\s+documentos|"
     r"tus\s+recetas|tu\s+receta|recetas?\s+de\s+(?:ingenier|grafo|programaci|ciberseg|dise[nñ]|cadena|compresi|"
     r"compilador|sistemas|redes\s+neuronales))", re.I)
@@ -156,7 +156,16 @@ class EscritorioMixin:
         except Exception:
             pass
         return {"llamar": p.get("llamar", ""), "wifi": w, "voz": self.voz_activa, "iconos": ICONOS,
-                "extras": [{k: v[k] for k in ("id", "en", "titulo")} for v in self.ventanas_extra()]}
+                "extras": [{k: v.get(k, "") for k in ("id", "en", "titulo", "icono")} for v in self.ventanas_extra()],
+                "aspecto": self.aspecto()}
+
+    # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
+    def aspecto(self):
+        try:
+            import sistema_kira
+            return sistema_kira.para_pantalla(getattr(self, "ruta_sistema", None))
+        except Exception:
+            return {}
 
     # ---------- v3.19: las ventanas/secciones/botones que Kira se añadió (solo datos: texto y botones) ----------
     def ventanas_extra(self):
@@ -171,7 +180,8 @@ class EscritorioMixin:
                 import ventanas_kira as vk
                 for v in n.ventanas() or []:
                     try:                                  # se vuelve a validar aquí: la pantalla no se fía de nadie
-                        lv = vk.validar(v.get("id"), {k: v.get(k) for k in ("en", "titulo", "texto", "botones")})
+                        lv = vk.validar(v.get("id"), {k: v.get(k) for k in ("en", "titulo", "texto", "botones", "icono")
+                                                             if k != "icono" or v.get(k)})
                         lv["modulo"] = str(v.get("modulo") or "")[:60]
                         lista.append(lv)
                     except Exception:
@@ -258,7 +268,19 @@ class EscritorioMixin:
 
     def _contestar(self, t, texto):
         try:
-            if self.cli is None:
+            o_s = None
+            try:                                                   # v3.21: cambiar el sistema se hace AQUÍ, al
+                import sistema_kira                                # momento (no espera en la cola del núcleo)
+                o_s = sistema_kira.orden(texto)
+            except Exception:
+                o_s = None
+            if o_s is not None:
+                t["respuesta"] = sistema_kira.hacer(o_s[0], o_s[1], ruta=getattr(self, "ruta_sistema", None),
+                                                    equipo=getattr(self, "equipo_sis", None))
+                t["aspecto"] = True                                # la pantalla se vuelve a pintar
+                if o_s[0] == "salva_ver":
+                    t["salvapantallas"] = True
+            elif self.cli is None:
                 t["respuesta"] = ("No encuentro mi cerebro de casa (el servidor de Kira). Si acabas de encender, "
                                   "espera un minuto y vuelve a hablarme.")
             else:
@@ -338,7 +360,11 @@ class EscritorioMixin:
         t = getattr(self, "_charlas", {}).get(str(cid))
         if not t:
             return {"estado": "no existe"}
-        return {k: t[k] for k in ("estado", "respuesta", "lineas", "pedir_clave")}
+        r = {k: t[k] for k in ("estado", "respuesta", "lineas", "pedir_clave")}
+        for k in ("aspecto", "salvapantallas"):
+            if t.get(k):
+                r[k] = True
+        return r
 
     def voz_activa_poner(self, encender):
         self._ini_escritorio()
@@ -794,7 +820,14 @@ class EscritorioMixin:
             ver = version_kira.VERSION
         except Exception:
             ver = "?"
+        sis = ""
+        try:                                          # v3.21: lo que le has cambiado a su sistema
+            import sistema_kira
+            sis = sistema_kira.texto_estado(getattr(self, "ruta_sistema", None))
+        except Exception:
+            pass
         texto = (f"KiraOS versión {ver}.\nCerebro: {cual}.\nVoz: {'puesta' if self.voz_activa else 'quitada'}."
+                 + (f"\n\nMI SISTEMA (cámbialo pidiéndomelo):\n{sis}" if sis else "")
                  + (f"\n\n{partida}" if partida else ""))
         return {"titulo": "Ajustes", "texto": texto,
                 "botones": [{"texto": "Cerebro rápido", "accion": "hacer:rapido"},
@@ -802,7 +835,20 @@ class EscritorioMixin:
                             {"texto": "Con voz", "accion": "hacer:voz_si"},
                             {"texto": "Sin voz", "accion": "hacer:voz_no"},
                             {"texto": "Estudia solo lo mío", "accion": "decir:estudia solo lo que yo te mande"},
-                            {"texto": "Piensa también libre", "accion": "decir:piensa libre"}]}
+                            {"texto": "Piensa también libre", "accion": "decir:piensa libre"},
+                            {"texto": "Tema noche", "accion": "decir:cambia el tema a noche"},
+                            {"texto": "Tema bosque", "accion": "decir:cambia el tema a bosque"},
+                            {"texto": "Tema océano", "accion": "decir:cambia el tema a oceano"},
+                            {"texto": "Tema fuego", "accion": "decir:cambia el tema a fuego"},
+                            {"texto": "Tema violeta", "accion": "decir:cambia el tema a violeta"},
+                            {"texto": "Tema claro", "accion": "decir:cambia el tema a claro"},
+                            {"texto": "Ver salvapantallas", "accion": "decir:enséñame el salvapantallas"},
+                            {"texto": "Más brillo", "accion": "decir:sube el brillo"},
+                            {"texto": "Menos brillo", "accion": "decir:baja el brillo"},
+                            {"texto": "Más volumen", "accion": "decir:sube el volumen"},
+                            {"texto": "Menos volumen", "accion": "decir:baja el volumen"},
+                            {"texto": "Bluetooth: aparatos", "accion": "decir:busca aparatos bluetooth"},
+                            {"texto": "Deshacer último cambio", "accion": "decir:deshaz el último cambio"}]}
 
     # ---------- apagar / reiniciar ----------
     # v2.98: apagar/reiniciar prueban varias formas, por orden, hasta que una funcione (antes solo `systemctl` y sin
@@ -834,6 +880,17 @@ class EscritorioMixin:
         if ordenes is None:
             return {"ok": False, "texto": "No conozco esa orden."}
         correr = correr or self._correr_sistema
+        try:                                          # v3.21: «al apagar di: …» (se dice antes de apagar)
+            import sistema_kira
+            adios = sistema_kira.despedida(getattr(self, "ruta_sistema", None))
+        except Exception:
+            adios = ""
+        if adios and getattr(self, "voz_activa", True):
+            try:
+                self._hablar(adios)
+                time.sleep(getattr(self, "pausa_despedida", 3.0))
+            except Exception:
+                pass
         motivos = []
         for orden in ordenes:
             try:
@@ -843,7 +900,7 @@ class EscritorioMixin:
                 continue
             cod, err = (0, "") if r is None else r    # correr de las pruebas: None = fue bien
             if cod == 0:
-                return {"ok": True, "texto": "Hasta luego." if accion == "apagar" else "Vuelvo enseguida."}
+                return {"ok": True, "texto": (adios or "Hasta luego.") if accion == "apagar" else "Vuelvo enseguida."}
             if err:
                 motivos.append(err.splitlines()[-1][:160])
         que = "apagar" if accion == "apagar" else "reiniciar"

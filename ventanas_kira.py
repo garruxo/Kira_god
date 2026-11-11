@@ -24,6 +24,9 @@ import re
 
 EN_VENTANAS = ("escritorio", "wifi", "red", "maquina", "cuaderno", "movil", "ajustes", "terminal", "buscador", "mapa",
                "programando", "hablar")
+# v3.21: el DIBUJO del icono de una ventana nueva (solo un nombre de esta lista: la pantalla tiene los dibujos)
+ICONOS_EXTRA = ("estrella", "corazon", "rayo", "nota", "casa", "sol", "luna", "musica", "camara", "libro", "escudo",
+                "reloj", "bluetooth", "altavoz", "brillo", "juego", "mensaje", "carpeta")
 MAX_TITULO = 40
 MAX_TEXTO = 3000
 MAX_BOTONES = 12
@@ -70,14 +73,17 @@ def validar(ident, datos):
         raise VentanaError(f"el nombre de la ventana «{ident}» no vale: minúsculas, números y espacios, máx. 40")
     if not isinstance(datos, dict):
         raise VentanaError("la función de la ventana debe devolver un diccionario {\"en\", \"titulo\", \"texto\", \"botones\"}")
-    raros = set(datos) - {"en", "titulo", "texto", "botones"}
+    raros = set(datos) - {"en", "titulo", "texto", "botones", "icono"}
     if raros:
-        raise VentanaError("la ventana solo admite en, titulo, texto y botones (sobra: " + ", ".join(sorted(map(str, raros))) + ")")
+        raise VentanaError("la ventana solo admite en, titulo, texto, botones e icono (sobra: " + ", ".join(sorted(map(str, raros))) + ")")
     en = _texto(datos.get("en") or "escritorio", 30, "«en»").lower()
     en = _ALIAS_EN.get(en, en)
     if en not in EN_VENTANAS:
         raise VentanaError(f"«en» debe ser uno de: {', '.join(EN_VENTANAS)} (no «{en}»)")
     titulo = _texto(datos.get("titulo") or ident.capitalize(), MAX_TITULO, "el título")
+    icono = _texto(datos.get("icono"), 20, "«icono»").lower().translate(str.maketrans("áéíóú", "aeiou"))
+    if icono and icono not in ICONOS_EXTRA:
+        raise VentanaError(f"«icono» debe ser uno de: {', '.join(ICONOS_EXTRA)} (no «{icono}»)")
     texto = _texto(datos.get("texto"), MAX_TEXTO, "el texto")
     botones = datos.get("botones") or []
     if not isinstance(botones, (list, tuple)):
@@ -95,7 +101,10 @@ def validar(ident, datos):
         limpios.append({"texto": bt, "orden": orden})
     if not texto and not limpios:
         raise VentanaError("la ventana está vacía: pon un texto o algún botón")
-    return {"id": ident, "en": en, "titulo": titulo, "texto": texto, "botones": limpios}
+    r = {"id": ident, "en": en, "titulo": titulo, "texto": texto, "botones": limpios}
+    if icono:
+        r["icono"] = icono
+    return r
 
 
 def probar(tabla):
@@ -138,6 +147,7 @@ def registrar():
     return {"ventana mis redes": ventana}
 ```
 «en» puede ser: ''' + ", ".join(EN_VENTANAS) + ''' («escritorio» = un icono nuevo). Cada botón: {"texto", "orden"}.
+Opcional "icono" (el dibujo del icono en el escritorio): ''' + ", ".join(ICONOS_EXTRA) + '''.
 Si el botón necesita algo nuevo, añade también su orden al diccionario (por ejemplo "mis redes hoy": funcion(texto)).'''
 
 

@@ -380,6 +380,12 @@ def ejecutar(core, orden, paso):
     import maquina_kira as mq
     import wifi_kira as wk
     import sentidos_portatil as sp
+    import sistema_kira as sis_                   # v3.21: cambiar SU sistema (aspecto, salvapantallas, voz, brillo,
+    o_s = sis_.orden(o)                            # sonido, bluetooth…) — antes que las ventanas («pon el icono…»)
+    if o_s is not None:
+        paso(0.3, "Cambio mi sistema…")
+        r_s = sis_.hacer(o_s[0], o_s[1])
+        return {"texto": r_s, **({"ok": False} if r_s.startswith("[x]") else {})}
     import ventanas_kira as vk_                    # v3.19: «crea/cambia/quita la ventana/el botón/la sección…» (antes que
     o_v = vk_.orden(o.rstrip(" .!¡?¿"))            # la WiFi: «crea una sección en la wifi…» es esto, no la WiFi)
     if o_v is not None:

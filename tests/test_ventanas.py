@@ -166,7 +166,7 @@ esc.nucleo_cli = NucleoFalso()
 ex = esc.ventanas_extra()
 ok([x["id"] for x in ex] == ["mis redes", "trampa"], "la pantalla vuelve a validar (la rota no sale)")
 b = esc.barra()
-ok({"id": "mis redes", "en": "wifi", "titulo": "Mis redes"} in b["extras"], "la barra le pasa las ventanas a la pantalla")
+ok({"id": "mis redes", "en": "wifi", "titulo": "Mis redes", "icono": ""} in b["extras"], "la barra le pasa las ventanas a la pantalla")
 a = esc.app("extra:mis redes")
 ok(a["titulo"] == "Mis redes" and [x["accion"] for x in a["botones"]] == ["decir:redes guardadas", "decir:saludo de redes"],
    "abrirla: sus botones le dan las órdenes a Kira")

@@ -100,9 +100,17 @@ def voz_portatil(texto, correr=None):
     """Dice `texto` en voz alta con el lector de Ubuntu (spd-say / espeak), sin bloquear. Si no hay ninguno, no pasa
     nada (devuelve False). `correr` se puede inyectar en las pruebas."""
     correr = correr or (lambda orden: subprocess.Popen(orden, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-    for prog, orden in (("spd-say", ["spd-say", "-l", "es", texto]),
-                        ("espeak-ng", ["espeak-ng", "-v", "es", texto]),
-                        ("espeak", ["espeak", "-v", "es", texto])):
+    vel, tono = 0, 0
+    try:                                          # v3.21: «habla más despacio», «voz más grave»…
+        import sistema_kira
+        vel, tono = sistema_kira.opciones_voz()
+    except Exception:
+        pass
+    ajuste = (["-r", str(vel), "-p", str(tono)] if (vel, tono) != (0, 0) else [])
+    esp = ["-s", str(max(80, min(320, 175 + vel))), "-p", str(max(0, min(99, 50 + tono // 2)))] if (vel, tono) != (0, 0) else []
+    for prog, orden in (("spd-say", ["spd-say", "-l", "es"] + ajuste + [texto]),
+                        ("espeak-ng", ["espeak-ng", "-v", "es"] + esp + [texto]),
+                        ("espeak", ["espeak", "-v", "es"] + esp + [texto])):
         if shutil.which(prog):
             try:
                 correr(orden)
@@ -199,6 +207,12 @@ class Api(EscritorioMixin):
         return getattr(self, "programa", None) or {}
 
     def voz(self, texto):
+        if texto == "Sistema Kira activado":          # v3.21: «al encender dime: …»
+            try:
+                import sistema_kira
+                texto = sistema_kira.saludo() or texto
+            except Exception:
+                pass
         threading.Thread(target=self._hablar, args=(texto,), daemon=True).start()
         return True
 
@@ -403,6 +417,12 @@ def _ajustes_grafica_vieja():
 
 def main(argv=None):
     _ajustes_grafica_vieja()
+    try:                                          # v3.21: vuelve a poner lo que no se guarda solo (apagar la pantalla)
+        import threading as _th
+        import sistema_kira
+        _th.Thread(target=sistema_kira.reaplicar, daemon=True).start()
+    except Exception:
+        pass
     ap = argparse.ArgumentParser(description="El arranque de KiraOS en el portátil")
     ap.add_argument("--url", default="http://127.0.0.1:8770")
     ap.add_argument("--pantalla", action="store_true", help="a pantalla completa (modo KiraOS)")

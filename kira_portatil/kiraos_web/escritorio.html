@@ -246,6 +246,17 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #trabajo button:hover{background:rgba(255,255,255,.16)}
 #trabajo button.parar{background:rgba(244,114,208,.22)}
 @keyframes latir{50%{opacity:.35}}
+/* v3.21: SALVAPANTALLAS (lo eliges con una frase: orbe, estrellas, reloj, negro) */
+#salva{position:fixed;inset:0;z-index:9000;background:#000;display:none;cursor:none;overflow:hidden}
+#salva.on{display:block}
+#salva canvas{position:absolute;inset:0;width:100%;height:100%}
+#salva .sorbe{position:absolute;width:30vmin;height:30vmin;border-radius:50%;display:grid;place-items:center;
+  border:2px solid var(--cian);box-shadow:0 0 60px var(--cian),inset 0 0 40px var(--rosa);color:var(--texto);
+  font-size:5vmin;font-weight:700;letter-spacing:.3em;animation:slate 4s ease-in-out infinite;transition:left 6s ease,top 6s ease}
+#salva .sreloj{position:absolute;color:var(--texto);font-size:16vmin;font-weight:200;text-shadow:0 0 30px var(--cian);
+  transition:left 8s ease,top 8s ease;text-align:center}
+#salva .sreloj small{display:block;font-size:3.4vmin;color:var(--tenue);font-weight:400}
+@keyframes slate{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.06);opacity:1}}
 </style>
 </head>
 <body>
@@ -274,6 +285,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 <div id="menu"></div>
 <div id="aviso"></div>
+<div id="salva"></div>
 
 <div id="barra">
   <button id="btnKira" title="Menú de KiraOS"><b>K</b></button>
@@ -315,9 +327,29 @@ var ICO = {
   bloquear:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   reiniciar:'<path d="M20 11a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
   apagar:'<path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/>',
-  salir:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l-5-5 5-5M5 12h11"/>'
+  salir:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l-5-5 5-5M5 12h11"/>',
+  // v3.21: dibujos que puede elegir una ventana NUEVA («icono» de su mejora)
+  estrella:'<path d="M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.4l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',
+  corazon:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  rayo:'<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>', nota:'<path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h4"/>',
+  casa:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10M10 20v-6h4v6"/>',
+  sol:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  luna:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  musica:'<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  camara:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l2-3h4l2 3"/><circle cx="12" cy="13.5" r="3.5"/>',
+  libro:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7"/>',
+  escudo:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  reloj:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  bluetooth:'<path d="M7 7l10 10-5 4V3l5 4L7 17"/>',
+  altavoz:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
+  brillo:'<circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4"/>',
+  juego:'<rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r=".8"/><circle cx="18" cy="13" r=".8"/>',
+  mensaje:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  carpeta:'<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
 };
-function svg(n, extra){ if(String(n).indexOf("extra:")===0) n="extra";
+function svg(n, extra){ if(String(n).indexOf("extra:")===0){       // v3.21: la ventana nueva puede traer su dibujo
+    var ex=null, idx=String(n).slice(6); for(var k=0;k<EXTRAS.length;k++){ if(EXTRAS[k].id===idx) ex=EXTRAS[k]; }
+    n=(ex && ex.icono && ICO[ex.icono]) ? ex.icono : "extra"; }
   return '<svg viewBox="0 0 24 24"'+(extra||'')+'>'+(ICO[n]||'')+'</svg>'; }
 var ICONOS = [
   {id:"hablar",titulo:"Hablar con Kira",sub:"la conversación"},{id:"buscador",titulo:"Buscador",sub:"internet, como Google"},
@@ -330,7 +362,8 @@ var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mej
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
   for(var j=0;j<EXTRAS.length;j++){ if("extra:"+EXTRAS[j].id===id) return EXTRAS[j].titulo; } return OCULTAS[id]||id; }
-function todosIconos(){ return ICONOS.concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
+var ASPECTO={};                                   // v3.21: lo que el dueño cambió (tema, iconos ocultos, salvapantallas)
+function todosIconos(){ var oc=(ASPECTO.ocultos||[]); return ICONOS.filter(function(i){ return oc.indexOf(i.id)<0; }).concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
   return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; })); }
 function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
   var b=$("vextras"); if(!b) return;
@@ -347,7 +380,7 @@ var DEMO_REDES=[{ssid:"MiCasa",senal:72,segura:true,guardada:true,en_uso:true,ba
   {ssid:"Bar Pepe",senal:22,segura:false,guardada:false,en_uso:false,banda:"2,4 GHz"}];
 var demoCharlas={};
 var FAKE = {
-  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[]}); },
+  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],aspecto:FAKE._aspecto||null}); },
   hablar:function(t){ var id="d"+Date.now(); demoCharlas[id]={t:Date.now(),
       r:"Estoy aquí, Jefe. Te lo digo en voz alta; si quieres leerlo, pulsa «Texto» en la barra."}; return Promise.resolve({id:id}); },
   tarea_hablar:function(id){ var c=demoCharlas[id]; var n=Math.min(c.r.length, Math.floor((Date.now()-c.t)/9));
@@ -445,7 +478,60 @@ function pintaBarra(d){
   if(d.llamar) $("hola").innerHTML="Hola, <b>"+esc(d.llamar)+"</b>";
   if(d.extras){ var antes=JSON.stringify(EXTRAS); EXTRAS=d.extras||[]; if(JSON.stringify(EXTRAS)!==antes){ pintaIconos(); if(actual) pintaExtras(actual); } }
   if(typeof d.voz==="boolean"){ vozOn=d.voz; pintaVoz(); }
+  if(d.aspecto) ponAspecto(d.aspecto);
 }
+// ---------- v3.21: el ASPECTO que tú eliges («cambia el tema a bosque», «oculta el icono del mapa»…) ----------
+function claroDe(hex){ var h=String(hex||"").replace("#",""); if(h.length!==6) return false;
+  var r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
+  return (0.299*r+0.587*g+0.114*b) > 150; }
+function ponAspecto(a){
+  var antes=JSON.stringify(ASPECTO.ocultos||[]); ASPECTO=a||{};
+  var c=ASPECTO.colores||{}, R=document.documentElement.style, ok=/^#[0-9a-fA-F]{6}$/;
+  if(ok.test(c.fondo||"") && ok.test(c.neon||"") && ok.test(c.acento||"") && ok.test(c.texto||"")){
+    R.setProperty("--fondo", c.fondo); R.setProperty("--cian", c.neon); R.setProperty("--rosa", c.acento);
+    R.setProperty("--texto", c.texto);
+    var claro=claroDe(c.fondo);
+    R.setProperty("--panel", claro ? "rgba(255,255,255,.97)" : "rgba(12,17,31,.97)");
+    R.setProperty("--borde", claro ? "rgba(0,0,0,.14)" : "rgba(130,170,230,.16)");
+    R.setProperty("--tenue", claro ? "#4b5563" : "#8b98b3");
+    $("fondo").style.background = "radial-gradient(1100px 700px at 72% 38%,"+c.neon+"26 0%,"+c.fondo+" 55%,"+c.fondo+" 100%)";
+    document.body.dataset.tema = ASPECTO.tema||"";
+  }
+  if(JSON.stringify(ASPECTO.ocultos||[])!==antes) pintaIconos();
+}
+// ---------- v3.21: el SALVAPANTALLAS ----------
+var ultimoToque=Date.now(), salvaReloj=null, salvaAnim=null;
+function salvaOn(){ return $("salva").classList.contains("on"); }
+function mostrarSalva(){
+  var s=(ASPECTO.salvapantallas||{}), est=s.estilo||"orbe", box=$("salva");
+  box.innerHTML=""; box.classList.add("on"); box.dataset.estilo=est;
+  var mover=function(el){ var w=innerWidth, h=innerHeight, ew=el.offsetWidth||200, eh=el.offsetHeight||200;
+    el.style.left=Math.round(Math.random()*Math.max(1,w-ew))+"px"; el.style.top=Math.round(Math.random()*Math.max(1,h-eh))+"px"; };
+  if(est==="orbe"){ var o=document.createElement("div"); o.className="sorbe"; o.textContent="KIRA"; box.appendChild(o); mover(o);
+    salvaReloj=setInterval(function(){ mover(o); }, 7000); }
+  else if(est==="reloj"){ var r=document.createElement("div"); r.className="sreloj"; box.appendChild(r);
+    var pon=function(){ var d=new Date(); r.innerHTML=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)+
+      "<small>"+esc(d.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"}))+"</small>"; };
+    pon(); mover(r); salvaReloj=setInterval(function(){ pon(); mover(r); }, 9000); }
+  else if(est==="estrellas"){ var cv=document.createElement("canvas"); box.appendChild(cv);
+    var W=cv.width=innerWidth, H=cv.height=innerHeight, ctx=cv.getContext("2d"), N=180, e=[];
+    var col=getComputedStyle(document.documentElement).getPropertyValue("--cian").trim()||"#22d3ee";
+    for(var i=0;i<N;i++) e.push({x:(Math.random()-.5)*W, y:(Math.random()-.5)*H, z:Math.random()*W});
+    var paso=function(){ ctx.fillStyle="rgba(0,0,0,.35)"; ctx.fillRect(0,0,W,H);
+      for(var i=0;i<N;i++){ var p=e[i]; p.z-=6; if(p.z<1){ p.x=(Math.random()-.5)*W; p.y=(Math.random()-.5)*H; p.z=W; }
+        var k=200/p.z, x=W/2+p.x*k, y=H/2+p.y*k, t=Math.max(.5,(1-p.z/W)*3);
+        ctx.fillStyle=i%7?"#fff":col; ctx.fillRect(x,y,t,t); }
+      salvaAnim=requestAnimationFrame(paso); };
+    paso(); }
+  window.KIRA_SALVA={estilo:est, visto:true};
+}
+function quitarSalva(){ if(!salvaOn()) return; $("salva").classList.remove("on"); $("salva").innerHTML="";
+  if(salvaReloj){ clearInterval(salvaReloj); salvaReloj=null; } if(salvaAnim){ cancelAnimationFrame(salvaAnim); salvaAnim=null; } }
+["mousemove","mousedown","keydown","wheel","touchstart"].forEach(function(ev){
+  document.addEventListener(ev, function(e){ ultimoToque=Date.now();
+    if(salvaOn()){ quitarSalva(); if(ev==="keydown"||ev==="mousedown"){ e.preventDefault(); e.stopPropagation(); } } }, true); });
+setInterval(function(){ var s=ASPECTO.salvapantallas||{};
+  if(s.activo && !salvaOn() && Date.now()-ultimoToque > (s.minutos||10)*60000) mostrarSalva(); }, 5000);
 function refrescaBarra(){ llama("barra").then(pintaBarra).catch(function(){}); }
 
 // ---------- OCUPADA / COLA / PARAR / PAUSAR (v2.95) ----------
@@ -808,6 +894,8 @@ function hablarCon(texto){
           var vt=$("verTexto"); if(vt) vt.onclick=function(){ abreCajon(true); quitaAviso(); };
           var ca=$("callar"); if(ca) ca.onclick=function(){ llama("callar"); quitaAviso(); };
           if(d.pedir_clave){ abrir("wifi"); }
+          if(d.aspecto) refrescaBarra();                       // v3.21: cambiaste algo de mi sistema
+          if(d.salvapantallas) setTimeout(function(){ refrescaBarra(); setTimeout(mostrarSalva, 600); }, 300);
         }
       }).catch(function(){});
     }, 350);
