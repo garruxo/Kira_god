@@ -275,8 +275,12 @@ class EscritorioMixin:
             except Exception:
                 o_s = None
             if o_s is not None:
+                try:
+                    ex = [(v["id"], v["titulo"]) for v in self.ventanas_extra() if v.get("en") == "escritorio"]
+                except Exception:
+                    ex = []
                 t["respuesta"] = sistema_kira.hacer(o_s[0], o_s[1], ruta=getattr(self, "ruta_sistema", None),
-                                                    equipo=getattr(self, "equipo_sis", None))
+                                                    equipo=getattr(self, "equipo_sis", None), extras=ex)
                 t["aspecto"] = True                                # la pantalla se vuelve a pintar
                 if o_s[0] == "salva_ver":
                     t["salvapantallas"] = True

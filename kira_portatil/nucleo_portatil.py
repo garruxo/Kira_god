@@ -384,7 +384,11 @@ def ejecutar(core, orden, paso):
     o_s = sis_.orden(o)                            # sonido, bluetooth…) — antes que las ventanas («pon el icono…»)
     if o_s is not None:
         paso(0.3, "Cambio mi sistema…")
-        r_s = sis_.hacer(o_s[0], o_s[1])
+        try:
+            ex_ = [(v["id"], v["titulo"]) for v in core.ventanas_lista() if v.get("en") == "escritorio"]
+        except Exception:
+            ex_ = []
+        r_s = sis_.hacer(o_s[0], o_s[1], extras=ex_)
         return {"texto": r_s, **({"ok": False} if r_s.startswith("[x]") else {})}
     import ventanas_kira as vk_                    # v3.19: «crea/cambia/quita la ventana/el botón/la sección…» (antes que
     o_v = vk_.orden(o.rstrip(" .!¡?¿"))            # la WiFi: «crea una sección en la wifi…» es esto, no la WiFi)

@@ -55,9 +55,25 @@ ESTILOS = ("orbe", "estrellas", "reloj", "negro")
 ICONOS_OCULTABLES = {"buscador": "buscador", "wifi": "wifi", "wi fi": "wifi", "red": "red", "mi red": "red",
                      "mapa": "mapa", "mapa de ataques": "mapa", "maquina": "maquina", "maquina virtual": "maquina",
                      "cuaderno": "cuaderno", "programando": "programando", "movil": "movil", "terminal": "terminal"}
+# v3.22: TODOS los iconos de serie (para moverlos, cambiarles el dibujo o el nombre) y los dibujos que se pueden poner
+ICONOS_BASE = ("hablar", "buscador", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "movil", "terminal",
+               "ajustes")
+NOMBRES_ICONO = dict(ICONOS_OCULTABLES, **{"hablar": "hablar", "hablar con kira": "hablar", "conversacion": "hablar",
+                                           "ajustes": "ajustes", "configuracion": "ajustes", "google": "buscador"})
+DIBUJOS = ("hablar", "buscador", "wifi", "red", "mapa", "maquina", "cuaderno", "programando", "terminal", "movil",
+           "ajustes", "bloquear", "estrella", "corazon", "rayo", "nota", "casa", "sol", "luna", "musica", "camara",
+           "libro", "escudo", "reloj", "bluetooth", "altavoz", "brillo", "juego", "mensaje", "carpeta", "extra")
+ALIAS_DIBUJO = {"lupa": "buscador", "bocadillo": "hablar", "globo": "mapa", "mundo": "mapa", "bombilla": "cuaderno",
+                "idea": "cuaderno", "ordenador": "maquina", "pantalla": "maquina", "telefono": "movil",
+                "candado": "bloquear", "engranaje": "ajustes", "rueda": "ajustes", "estrellita": "estrella",
+                "corazoncito": "corazon", "relampago": "rayo", "papel": "nota", "hoja": "nota", "nota musical": "musica",
+                "cancion": "musica", "foto": "camara", "escudo de seguridad": "escudo", "seguridad": "escudo",
+                "hora": "reloj", "sonido": "altavoz", "volumen": "altavoz", "mando": "juego", "videojuego": "juego",
+                "sobre": "mensaje", "correo": "mensaje", "carpetas": "carpeta", "red de casa": "red",
+                "codigo": "programando", "consola": "terminal", "cuadrados": "extra"}
 DEFECTO = {"tema": "noche", "salvapantallas": {"activo": True, "minutos": 10, "estilo": "orbe"},
            "saludo": "", "despedida": "", "voz": {"velocidad": 0, "tono": 0}, "ocultos": [],
-           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0}
+           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}}
 MAX_FRASE = 140
 MAX_HISTORIAL = 30
 _MAC = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -145,7 +161,43 @@ def para_pantalla(ruta=None):
             "salvapantallas": {"activo": bool(s.get("activo", True)),
                                "minutos": max(1, min(120, int(s.get("minutos") or 10))),
                                "estilo": s.get("estilo") if s.get("estilo") in ESTILOS else "orbe"},
-            "saludo": str(d.get("saludo") or "")[:MAX_FRASE], "despedida": str(d.get("despedida") or "")[:MAX_FRASE]}
+            "saludo": str(d.get("saludo") or "")[:MAX_FRASE], "despedida": str(d.get("despedida") or "")[:MAX_FRASE],
+            "orden_iconos": [str(i)[:60] for i in (d.get("orden_iconos") or []) if _id_icono_valido(i)][:60],
+            "dibujos": {str(k)[:60]: v for k, v in (d.get("dibujos") or {}).items()
+                        if _id_icono_valido(k) and v in DIBUJOS},
+            "nombres": {str(k)[:60]: _limpia_nombre(v) for k, v in (d.get("nombres") or {}).items()
+                        if _id_icono_valido(k) and _limpia_nombre(v)}}
+
+
+def _id_icono_valido(i):
+    i = str(i or "")
+    return i in ICONOS_BASE or bool(re.match(r"^extra:[a-z0-9áéíóúñü][a-z0-9áéíóúñü _-]{0,39}$", i))
+
+
+def _limpia_nombre(t):
+    t = re.sub(r"[\x00-\x1f\x7f<>]", "", str(t or "")).strip()
+    return t[:30]
+
+
+def dibujo_de(palabra):
+    p = re.sub(r"^(?:un|una|el|la|unos|unas)\s+", "", _plano(palabra).strip())
+    p = ALIAS_DIBUJO.get(p, p)
+    return p if p in DIBUJOS else None
+
+
+def resolver_icono(nombre, extras=()):
+    """«el mapa» → «mapa»; «mi día» (una ventana que se añadió) → «extra:mi dia». None si no existe."""
+    n = re.sub(r"^(?:de\s+la\s+|del\s+|de\s+|el\s+|la\s+|los\s+|las\s+|mi\s+|tu\s+)", "", _plano(nombre).strip())
+    n = re.sub(r"\s+(?:del\s+escritorio|de\s+la\s+pantalla(?:\s+principal)?)$", "", n).strip(" «»\"'")
+    if n in NOMBRES_ICONO:
+        return NOMBRES_ICONO[n]
+    for ident, titulo in extras:
+        if n in (_plano(ident), _plano(titulo)):
+            return "extra:" + ident
+    for ident, titulo in extras:
+        if n and (n in _plano(titulo) or n in _plano(ident)):
+            return "extra:" + ident
+    return None
 
 
 def opciones_voz(ruta=None):
@@ -493,6 +545,46 @@ def orden(texto):
         return ("mostrar", ICONOS_OCULTABLES[m.group("n").strip()])
     if re.match(r"^(?:muestra|ensena|vuelve\s+a\s+poner)(?:me)?\s+todos\s+los\s+iconos$", t):
         return ("mostrar", "todos")
+    # --- v3.22: mover iconos, cambiarles el dibujo o el nombre ---
+    if re.match(r"^(?:deja|pon|vuelve\s+a\s+poner)\s+(?:todos\s+)?los\s+iconos\s+(?:como\s+(?:estaban|al\s+principio|de\s+serie)|"
+                r"en\s+su\s+sitio|en\s+orden)$", t) or re.match(r"^ordena\s+los\s+iconos\s+como\s+estaban$", t):
+        return ("iconos_serie", None)
+    m = re.match(r"^(?:mueve|pon|coloca|lleva|pasa)(?:me)?\s+(?:el\s+)?icono\s+(?P<n>.+?)\s+(?P<d>(?:al|a\s+la|el|en\s+el|en\s+la|"
+                 r"antes\s+de(?:l)?|delante\s+de(?:l)?|despues\s+de(?:l)?|detras\s+de(?:l)?|junto\s+a(?:l)?)\s+.+)$", t)
+    if m:
+        d = m.group("d")
+        dm = re.match(r"^(?:al|el|en\s+el)\s+(?:principio|primero|inicio|primer\s+lugar)$", d)
+        if dm:
+            donde = ("inicio", None)
+        elif re.match(r"^(?:al|el|en\s+el)\s+(?:final|ultimo|fin|ultimo\s+lugar)$", d):
+            donde = ("final", None)
+        elif re.match(r"^(?:a\s+la|en\s+la)\s+posicion\s+(\d{1,2})$", d):
+            donde = ("posicion", int(re.search(r"\d+", d).group()))
+        else:
+            dm = re.match(r"^(antes\s+de(?:l)?|delante\s+de(?:l)?|despues\s+de(?:l)?|detras\s+de(?:l)?|junto\s+a(?:l)?)\s+(?P<o>.+)$", d)
+            if not dm:
+                dm = None
+            if dm:
+                antes = dm.group(1).startswith(("antes", "delante"))
+                otro = orig[len(orig) - len(dm.group("o")):].strip()
+                donde = ("antes" if antes else "despues", otro)
+            else:
+                donde = None
+        if donde:
+            nom = orig[m.start("n"):m.end("n")]
+            return ("mover_icono", (nom, donde))
+    m = re.match(r"^(?:cambia|cambiale|pon(?:le)?)\s+(?:el\s+)?(?:icono|dibujo)\s+(?:de\s+la\s+|del\s+|de\s+)?(?P<n>.+?)\s+"
+                 r"(?:por|a|en)\s+(?:un\s+|una\s+|el\s+|la\s+)?(?:dibujo\s+de\s+(?:un\s+|una\s+)?)?(?P<d>[a-z ]{2,25})$", t) or \
+        re.match(r"^pon(?:le)?\s+(?:un\s+|una\s+)?(?P<d>[a-z ]{2,25}?)\s+(?:al|en\s+el)\s+icono\s+(?:de\s+la\s+|del\s+|de\s+)?(?P<n>.+)$", t)
+    if m and dibujo_de(m.group("d")):
+        return ("dibujo_icono", (orig[m.start("n"):m.end("n")], dibujo_de(m.group("d"))))
+    m = re.match(r"^(?:cambia|cambiale|pon(?:le)?)\s+(?:el\s+)?nombre\s+(?:al\s+|del\s+)?icono\s+(?:de\s+la\s+|del\s+|de\s+)?(?P<n>.+?)\s+"
+                 r"(?:a|por|en)\s+(?P<x>.+)$", t) or \
+        re.match(r"^(?:renombra|llama)\s+(?:al\s+|el\s+)?icono\s+(?:de\s+la\s+|del\s+|de\s+)?(?P<n>.+?)\s+(?:a|como|por)\s+(?P<x>.+)$", t)
+    if m:
+        nuevo = _limpia_nombre(orig[m.start("x"):m.end("x")].strip("«»\"' "))
+        if nuevo:
+            return ("nombre_icono", (orig[m.start("n"):m.end("n")], nuevo))
     # --- salvapantallas ---
     if re.search(r"\b(?:salvapantallas|salva\s+pantallas|protector\s+de\s+pantalla)\b", t):
         if re.match(r"^(?:quita|apaga|desactiva|sin|no\s+quiero)\b", t):
@@ -574,7 +666,9 @@ def orden(texto):
 QUE_PUEDO = (
     "Puedes cambiarme, con una frase:\n"
     "· el aspecto: «cambia el tema a bosque» (" + ", ".join(TEMAS) + "; o verde, azul, rojo…)\n"
-    "· los iconos: «oculta el icono del mapa» / «vuelve a poner el icono del mapa»\n"
+    "· los iconos: «oculta el icono del mapa» / «vuelve a poner el icono del mapa», «mueve el icono del mapa al "
+    "principio» (o al final, a la posición 3, antes del wifi…), «cambia el icono del mapa por una estrella», "
+    "«cambia el nombre del icono del mapa a Ataques», «deja los iconos como estaban»\n"
     "· el salvapantallas: «pon el salvapantallas de estrellas» (orbe, estrellas, reloj, negro), "
     "«salvapantallas a los 5 minutos», «quita el salvapantallas», «enséñame el salvapantallas»\n"
     "· al encender y al apagar: «al encender dime: buenos días», «al apagar di: hasta mañana»\n"
@@ -600,10 +694,70 @@ def texto_estado(ruta=None):
     return "\n".join(lin) + "\n\n" + QUE_PUEDO
 
 
-def hacer(accion, valor, ruta=None, equipo=None):
-    """Hace la orden. Devuelve el texto para decírtelo. Nunca lanza: un fallo se cuenta."""
+def _orden_actual(d, extras):
+    """El orden de los iconos tal como se ven ahora (los de serie + las ventanas nuevas del escritorio)."""
+    todos = list(ICONOS_BASE) + ["extra:" + i for i, _ in extras]
+    guardado = [i for i in (d.get("orden_iconos") or []) if i in todos]
+    return guardado + [i for i in todos if i not in guardado]
+
+
+def _nombre_visible(ident, d, extras):
+    n = (d.get("nombres") or {}).get(ident)
+    if n:
+        return n
+    if ident.startswith("extra:"):
+        return dict(extras).get(ident[6:], ident[6:])
+    return ident
+
+
+def hacer(accion, valor, ruta=None, equipo=None, extras=()):
+    """Hace la orden. Devuelve el texto para decírtelo. Nunca lanza: un fallo se cuenta.
+    `extras`: [(id, título)] de las ventanas que Kira se añadió (para moverlas o cambiarlas también)."""
     eq = equipo or Equipo(ruta=ruta)
+    extras = [(str(a), str(b)) for a, b in (extras or [])]
     try:
+        if accion == "iconos_serie":
+            d = cargar(ruta)
+            d2 = {"orden_iconos": [], "dibujos": {}, "nombres": {}}
+            for k, v in d2.items():
+                cambiar(k, v, ruta, que="iconos como estaban")
+            return "Iconos como estaban: su sitio, su dibujo y su nombre de siempre."
+        if accion in ("mover_icono", "dibujo_icono", "nombre_icono"):
+            nombre = valor[0]
+            ident = resolver_icono(nombre, extras)
+            if ident is None:
+                return f"[x] No encuentro el icono «{nombre}». Los que hay: " + ", ".join(
+                    [i for i in ICONOS_BASE] + [t for _, t in extras]) + "."
+            d = cargar(ruta)
+            if accion == "dibujo_icono":
+                dib = dict(d.get("dibujos") or {})
+                dib[ident] = valor[1]
+                cambiar("dibujos", dib, ruta, que=f"dibujo del icono {ident}")
+                return (f"Hecho: el icono «{_nombre_visible(ident, d, extras)}» lleva ahora el dibujo de «{valor[1]}». "
+                        "Dibujos que hay: " + ", ".join(d_ for d_ in DIBUJOS if d_ != "extra") + ".")
+            if accion == "nombre_icono":
+                nom = dict(d.get("nombres") or {})
+                nom[ident] = valor[1]
+                cambiar("nombres", nom, ruta, que=f"nombre del icono {ident}")
+                return f"Hecho: el icono ahora se llama «{valor[1]}»."
+            orden_ = _orden_actual(d, extras)
+            orden_.remove(ident)
+            tipo, ref = valor[1]
+            if tipo == "inicio":
+                orden_.insert(0, ident)
+            elif tipo == "final":
+                orden_.append(ident)
+            elif tipo == "posicion":
+                orden_.insert(max(0, min(len(orden_), int(ref) - 1)), ident)
+            else:
+                otro = resolver_icono(ref, extras)
+                if otro is None or otro == ident:
+                    return f"[x] No encuentro el icono «{ref}» para ponerlo al lado."
+                k = orden_.index(otro)
+                orden_.insert(k if tipo == "antes" else k + 1, ident)
+            cambiar("orden_iconos", orden_, ruta, que=f"mover el icono {ident}")
+            pos = orden_.index(ident) + 1
+            return f"Hecho: el icono «{_nombre_visible(ident, d, extras)}» está ahora en el puesto {pos}."
         if accion == "estado":
             return texto_estado(ruta)
         if accion == "deshacer":
@@ -686,11 +840,11 @@ def hacer(accion, valor, ruta=None, equipo=None):
     return "No conozco ese cambio."
 
 
-def responder(texto, ruta=None, equipo=None):
+def responder(texto, ruta=None, equipo=None, extras=()):
     o = orden(texto)
     if o is None:
         return None
-    return hacer(o[0], o[1], ruta=ruta, equipo=equipo)
+    return hacer(o[0], o[1], ruta=ruta, equipo=equipo, extras=extras)
 
 
 def reaplicar(ruta=None, equipo=None):

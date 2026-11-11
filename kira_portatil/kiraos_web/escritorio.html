@@ -360,11 +360,17 @@ var ICONOS = [
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
 var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
-function nombreDe(id){ for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
+function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
+  for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
   for(var j=0;j<EXTRAS.length;j++){ if("extra:"+EXTRAS[j].id===id) return EXTRAS[j].titulo; } return OCULTAS[id]||id; }
 var ASPECTO={};                                   // v3.21: lo que el dueño cambió (tema, iconos ocultos, salvapantallas)
-function todosIconos(){ var oc=(ASPECTO.ocultos||[]); return ICONOS.filter(function(i){ return oc.indexOf(i.id)<0; }).concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
-  return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; })); }
+function todosIconos(){ var oc=(ASPECTO.ocultos||[]); var l=ICONOS.filter(function(i){ return oc.indexOf(i.id)<0; }).concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
+  return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; }));
+  // v3.22: tu orden, tus nombres y tus dibujos («mueve el icono…», «cambia el nombre…», «cambia el icono… por…»)
+  var ord=ASPECTO.orden_iconos||[], nom=ASPECTO.nombres||{}, dib=ASPECTO.dibujos||{};
+  l=l.map(function(i){ var c={id:i.id,titulo:nom[i.id]||i.titulo,sub:i.sub,dib:(dib[i.id]&&ICO[dib[i.id]])?dib[i.id]:null}; return c; });
+  if(ord.length){ l.sort(function(a,b){ var x=ord.indexOf(a.id), y=ord.indexOf(b.id); x=x<0?999:x; y=y<0?999:y; return x-y; }); }
+  return l; }
 function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
   var b=$("vextras"); if(!b) return;
   var l=EXTRAS.filter(function(e){ return e.en===id; });
@@ -455,7 +461,7 @@ function pintaIconos(){
   var tod=todosIconos();                          // v3.19: con ventanas añadidas, más columnas (que no tapen la barra)
   $("iconos").className = tod.length>16 ? "c5" : (tod.length>12 ? "c4" : "");
   $("iconos").innerHTML = tod.map(function(i){
-    return '<div class="icono" tabindex="0" data-app="'+i.id+'"><div class="tile">'+svg(i.id)+'</div><span>'+esc(i.titulo)+
+    return '<div class="icono" tabindex="0" data-app="'+esc(i.id)+'"><div class="tile">'+svg(i.dib||i.id)+'</div><span>'+esc(i.titulo)+
            '<small>'+esc(i.sub)+'</small></span></div>'; }).join("");
   [].forEach.call(document.querySelectorAll(".icono"), function(el){
     el.addEventListener("click", function(){ abrir(el.dataset.app); });
@@ -485,7 +491,7 @@ function claroDe(hex){ var h=String(hex||"").replace("#",""); if(h.length!==6) r
   var r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
   return (0.299*r+0.587*g+0.114*b) > 150; }
 function ponAspecto(a){
-  var antes=JSON.stringify(ASPECTO.ocultos||[]); ASPECTO=a||{};
+  ASPECTO=a||{};
   var c=ASPECTO.colores||{}, R=document.documentElement.style, ok=/^#[0-9a-fA-F]{6}$/;
   if(ok.test(c.fondo||"") && ok.test(c.neon||"") && ok.test(c.acento||"") && ok.test(c.texto||"")){
     R.setProperty("--fondo", c.fondo); R.setProperty("--cian", c.neon); R.setProperty("--rosa", c.acento);
@@ -497,7 +503,8 @@ function ponAspecto(a){
     $("fondo").style.background = "radial-gradient(1100px 700px at 72% 38%,"+c.neon+"26 0%,"+c.fondo+" 55%,"+c.fondo+" 100%)";
     document.body.dataset.tema = ASPECTO.tema||"";
   }
-  if(JSON.stringify(ASPECTO.ocultos||[])!==antes) pintaIconos();
+  var ahora=JSON.stringify([ASPECTO.ocultos||[],ASPECTO.orden_iconos||[],ASPECTO.nombres||{},ASPECTO.dibujos||{}]);
+  if(ahora!==ponAspecto.ultimo){ ponAspecto.ultimo=ahora; pintaIconos(); }
 }
 // ---------- v3.21: el SALVAPANTALLAS ----------
 var ultimoToque=Date.now(), salvaReloj=null, salvaAnim=null;
