@@ -89,8 +89,20 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .cerrar{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--tenue)}
 .cerrar:hover{background:rgba(244,114,208,.18);color:#fff}
 .vcuerpo{flex:1;overflow:auto;padding:20px 24px;-webkit-user-select:text;user-select:text}
-.vcuerpo.marco{padding:0;overflow:hidden}
-.vcuerpo iframe{width:100%;height:100%;border:0;background:#05070f}
+.vcuerpo.marco{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.vcuerpo iframe{width:100%;height:100%;flex:1;border:0;background:#05070f}
+/* v3.23: las salas POR DENTRO (lo que tú le pides: letra, color, tamaño, botones, notas y tarjetas de Kira) */
+#ventana.t-pequena{left:18vw;right:18vw;top:9vh;bottom:calc(var(--barra) + 9vh)}
+#ventana.t-grande{left:1.2vw;right:1.2vw;top:8px;bottom:calc(var(--barra) + 8px)}
+#ventana.t-completa{left:0;right:0;top:0;bottom:var(--barra);border-radius:0}
+.vcuerpo.l-pequena{zoom:.88}.vcuerpo.l-grande{zoom:1.18}.vcuerpo.l-enorme{zoom:1.4}
+.nota-sala,.tarjeta-extra{margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(34,211,238,.07);
+  border:1px solid var(--borde);white-space:pre-wrap;line-height:1.5;font-size:14px}
+.vcuerpo.marco .nota-sala,.vcuerpo.marco .tarjeta-extra{margin:10px 12px}
+.nota-sala{border-left:3px solid var(--rosa)}
+.tarjeta-extra h4{margin:0 0 6px;font-size:14px;color:var(--cian)}
+.tarjeta-extra.abajo{margin:14px 0 0}
+.tarjeta-extra .botones{margin-top:10px}
 .texto{white-space:pre-wrap;line-height:1.55;font-size:15px;color:#d8e0ee}
 .botones{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 .b{padding:9px 16px;border-radius:10px;background:rgba(130,170,230,.1);box-shadow:inset 0 0 0 1px var(--borde);font-size:14px}
@@ -373,7 +385,7 @@ function todosIconos(){ var oc=(ASPECTO.ocultos||[]); var l=ICONOS.filter(functi
   return l; }
 function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
   var b=$("vextras"); if(!b) return;
-  var l=EXTRAS.filter(function(e){ return e.en===id; });
+  var l=EXTRAS.filter(function(e){ return e.en===id && (!e.lugar || e.lugar==="boton"); });
   b.innerHTML=l.map(function(e){ return '<button data-extra="'+esc(e.id)+'">+ '+esc(e.titulo)+'</button>'; }).join("");
   [].forEach.call(b.querySelectorAll("[data-extra]"), function(x){ x.onclick=function(){ abrir("extra:"+x.dataset.extra); }; });
 }
@@ -505,6 +517,7 @@ function ponAspecto(a){
   }
   var ahora=JSON.stringify([ASPECTO.ocultos||[],ASPECTO.orden_iconos||[],ASPECTO.nombres||{},ASPECTO.dibujos||{}]);
   if(ahora!==ponAspecto.ultimo){ ponAspecto.ultimo=ahora; pintaIconos(); }
+  if(actual) aplicaSala(actual);                       // v3.23: la sala abierta se cambia al momento
 }
 // ---------- v3.21: el SALVAPANTALLAS ----------
 var ultimoToque=Date.now(), salvaReloj=null, salvaAnim=null;
@@ -582,7 +595,7 @@ function abrir(id, consulta, tipo){
   cierraMenus(); if(relojApp){ clearTimeout(relojApp); relojApp=null; } paraTerm();
   actual=id; $("vtitulo").textContent=nombreDe(id); pintaExtras(id);
   var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Un momento…</div>';
-  $("ventana").classList.add("on");
+  $("ventana").classList.add("on"); aplicaSala(id);
   $("abiertas").innerHTML='<div class="chip">'+svg(id)+esc(nombreDe(id))+'</div>';
   if(id==="hablar") return pintaHablar();
   if(id==="buscador") return pintaBuscador(consulta, tipo);
@@ -598,6 +611,48 @@ function abrir(id, consulta, tipo){
   llama("app", id).then(function(d){ pintaApp(id, d); })
     .catch(function(){ c.innerHTML='<div class="texto">No he podido abrir esta ventana.</div>'; });
 }
+// ---------- v3.23: lo que le has cambiado POR DENTRO a cada sala (solo datos: la pantalla los aplica) ----------
+function plano(t){ return String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+function pielDe(id){ return ((ASPECTO.salas||{})[id])||{}; }
+var obsSala=null;
+function aplicaSala(id){
+  if(!id || actual!==id) return;
+  var p=pielDe(id), v=$("ventana"), c=$("vcuerpo"), ok=/^#[0-9a-fA-F]{6}$/;
+  if(obsSala) obsSala.disconnect();
+  ["t-pequena","t-grande","t-completa"].forEach(function(k){ v.classList.remove(k); });
+  if(p.tamano) v.classList.add("t-"+p.tamano);
+  ["l-pequena","l-grande","l-enorme"].forEach(function(k){ c.classList.remove(k); });
+  if(p.letra) c.classList.add("l-"+p.letra);
+  var col=p.colores||{};
+  ["--cian","--rosa","--fondo"].forEach(function(k){ v.style.removeProperty(k); });
+  if(ok.test(col.neon||"")&&ok.test(col.acento||"")){ v.style.setProperty("--cian", col.neon); v.style.setProperty("--rosa", col.acento); }
+  var oc=(p.ocultar||[]).map(plano), ren={};
+  Object.keys(p.renombrar||{}).forEach(function(k){ ren[plano(k)]=p.renombrar[k]; });
+  [].forEach.call(c.querySelectorAll("button"), function(b){
+    if(b.dataset.armado) return;
+    var orig=b.dataset.orig!=null ? b.dataset.orig : b.textContent;
+    var k=plano(orig);
+    if(ren[k]!=null){ if(b.dataset.orig==null) b.dataset.orig=orig; if(b.textContent!==ren[k]) b.textContent=ren[k]; }
+    else if(b.dataset.orig!=null){ b.textContent=b.dataset.orig; delete b.dataset.orig; }
+    b.style.display = oc.indexOf(k)>=0 ? "none" : "";
+  });
+  var hay=c.querySelector(".nota-sala");
+  if(p.nota){ if(!hay){ hay=document.createElement("div"); hay.className="nota-sala"; c.insertBefore(hay, c.firstChild); }
+    if(hay.textContent!==p.nota) hay.textContent=p.nota; }
+  else if(hay) hay.remove();
+  EXTRAS.filter(function(e){ return e.en===id && (e.lugar==="arriba"||e.lugar==="abajo"); }).forEach(function(e){
+    var sel='.tarjeta-extra[data-extra="'+CSS.escape(e.id)+'"]';
+    if(c.querySelector(sel)) return;
+    var t=document.createElement("div"); t.className="tarjeta-extra "+e.lugar; t.dataset.extra=e.id;
+    t.innerHTML='<h4>'+esc(e.titulo)+'</h4>'+(e.texto?'<div>'+esc(e.texto)+'</div>':'')+'<div class="botones">'+(e.botones||[]).map(function(b){
+      return '<button class="b" data-orden="'+esc(b.orden)+'">'+esc(b.texto)+'</button>'; }).join("")+'</div>';
+    [].forEach.call(t.querySelectorAll("[data-orden]"), function(b){ b.onclick=function(){ enviar(b.dataset.orden); }; });
+    if(e.lugar==="arriba"){ var n=c.querySelector(".nota-sala"); c.insertBefore(t, n?n.nextSibling:c.firstChild); } else c.appendChild(t);
+  });
+  window.KIRA_SALA={id:id, piel:p};
+  if(!obsSala) obsSala=new MutationObserver(function(){ aplicaSala(actual); });
+  obsSala.observe(c, {childList:true, subtree:true, characterData:true});
+}
 function volver(){ if(relojApp){ clearTimeout(relojApp); relojApp=null; } paraTerm(); $("ventana").classList.remove("on"); actual=null; $("abiertas").innerHTML=""; $("vcuerpo").innerHTML=""; }
 $("volver").onclick=volver; $("cerrar").onclick=volver;
 
@@ -606,7 +661,9 @@ function pintaApp(id, d){
   d=d||{}; var c=$("vcuerpo");
   var pes=d.pestanas||null, texto=d.texto||"", botones=d.botones||[], filas=null, secs=null;
   if(pes&&pes.length){                                  // v3.08: ventanas con PESTAÑAS (el cuaderno)
-    var sel=pestApp[id]; if(!pes.some(function(p){return p.id===sel;})) sel=pes[0].id;
+    var sel=pestApp[id];
+    if(!pes.some(function(p){return p.id===sel;})){ var pi=plano((pielDe(id).pestana)||"");   // v3.23: con la que se abre
+      var ini=pes.filter(function(p){ return pi && plano(p.titulo)===pi; })[0]; sel=ini?ini.id:pes[0].id; }
     pestApp[id]=sel;
     pes.forEach(function(p){ if(p.id===sel){ texto=p.texto||""; if(p.botones) botones=p.botones; if(p.filas){ filas=p.filas; secs=p.secciones||null; } } });
   }

@@ -73,7 +73,7 @@ ALIAS_DIBUJO = {"lupa": "buscador", "bocadillo": "hablar", "globo": "mapa", "mun
                 "codigo": "programando", "consola": "terminal", "cuadrados": "extra"}
 DEFECTO = {"tema": "noche", "salvapantallas": {"activo": True, "minutos": 10, "estilo": "orbe"},
            "saludo": "", "despedida": "", "voz": {"velocidad": 0, "tono": 0}, "ocultos": [],
-           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}}
+           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}, "salas": {}}
 MAX_FRASE = 140
 MAX_HISTORIAL = 30
 _MAC = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -166,7 +166,63 @@ def para_pantalla(ruta=None):
             "dibujos": {str(k)[:60]: v for k, v in (d.get("dibujos") or {}).items()
                         if _id_icono_valido(k) and v in DIBUJOS},
             "nombres": {str(k)[:60]: _limpia_nombre(v) for k, v in (d.get("nombres") or {}).items()
-                        if _id_icono_valido(k) and _limpia_nombre(v)}}
+                        if _id_icono_valido(k) and _limpia_nombre(v)},
+            "salas": limpia_salas(d.get("salas"))}
+
+
+# ---------- v3.23: las SALAS por dentro (solo DATOS: la pantalla los aplica; nada de código de pantalla) ----------
+LETRAS = ("pequena", "normal", "grande", "enorme")
+TAMANOS = ("pequena", "normal", "grande", "completa")
+MAX_NOTA = 600
+MAX_LISTA = 40
+
+
+def _txt(v, maximo):
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", str(v or "")).strip()[:maximo]
+
+
+def limpia_salas(salas):
+    """Deja solo lo que la pantalla sabe aplicar, con su forma y tamaño (un archivo tocado a mano no rompe nada)."""
+    out = {}
+    if not isinstance(salas, dict):
+        return out
+    for sala, p in salas.items():
+        if sala not in ICONOS_BASE or not isinstance(p, dict):
+            continue
+        q = {}
+        if p.get("letra") in LETRAS and p["letra"] != "normal":
+            q["letra"] = p["letra"]
+        if p.get("color") in TEMAS:
+            q["color"] = p["color"]
+            q["colores"] = dict(TEMAS[p["color"]])
+        if p.get("tamano") in TAMANOS and p["tamano"] != "normal":
+            q["tamano"] = p["tamano"]
+        oc = [_txt(x, 40) for x in (p.get("ocultar") or []) if _txt(x, 40)][:MAX_LISTA]
+        if oc:
+            q["ocultar"] = oc
+        ren = {_txt(k, 40): _txt(v, 40) for k, v in list((p.get("renombrar") or {}).items())[:MAX_LISTA]
+               if _txt(k, 40) and _txt(v, 40)}
+        if ren:
+            q["renombrar"] = ren
+        if _txt(p.get("pestana"), 40):
+            q["pestana"] = _txt(p.get("pestana"), 40)
+        if _txt(p.get("nota"), MAX_NOTA):
+            q["nota"] = _txt(p.get("nota"), MAX_NOTA)
+        if q:
+            out[sala] = q
+    return out
+
+
+_SALA_PRE = re.compile(r"^(?:(?:en|de|del|a|al)\s+)?(?:(?:la|el)\s+)?(?:(?:sala|ventana|apartado|seccion|pantalla)\s+(?:de\s+(?:la\s+|el\s+)?|del\s+)?)?")
+
+
+def resolver_sala(nombre):
+    """«la sala programando», «el cuaderno», «la ventana de la wifi» → «programando», «cuaderno», «wifi». None si no."""
+    n = _SALA_PRE.sub("", _plano(nombre).strip(" ,.«»\"'"))
+    n = re.sub(r"^(?:la|el|mi|tu)\s+", "", n).strip()
+    if n in NOMBRES_ICONO:
+        return NOMBRES_ICONO[n]
+    return n if n in ICONOS_BASE else None
 
 
 def _id_icono_valido(i):
@@ -545,6 +601,10 @@ def orden(texto):
         return ("mostrar", ICONOS_OCULTABLES[m.group("n").strip()])
     if re.match(r"^(?:muestra|ensena|vuelve\s+a\s+poner)(?:me)?\s+todos\s+los\s+iconos$", t):
         return ("mostrar", "todos")
+    # --- v3.23: las SALAS por dentro ---
+    o_sala = orden_sala(orig, t)
+    if o_sala:
+        return o_sala
     # --- v3.22: mover iconos, cambiarles el dibujo o el nombre ---
     if re.match(r"^(?:deja|pon|vuelve\s+a\s+poner)\s+(?:todos\s+)?los\s+iconos\s+(?:como\s+(?:estaban|al\s+principio|de\s+serie)|"
                 r"en\s+su\s+sitio|en\s+orden)$", t) or re.match(r"^ordena\s+los\s+iconos\s+como\s+estaban$", t):
@@ -669,6 +729,9 @@ QUE_PUEDO = (
     "· los iconos: «oculta el icono del mapa» / «vuelve a poner el icono del mapa», «mueve el icono del mapa al "
     "principio» (o al final, a la posición 3, antes del wifi…), «cambia el icono del mapa por una estrella», "
     "«cambia el nombre del icono del mapa a Ataques», «deja los iconos como estaban»\n"
+    "· las salas POR DENTRO: «en el cuaderno, letra más grande», «pon el cuaderno en verde», «haz la ventana del mapa "
+    "a pantalla completa», «quita el botón Cerebro grande de ajustes», «cambia el botón Sin voz de ajustes por "
+    "Callada», «que el cuaderno se abra en Tareas», «pon una nota en programando: …», «deja la sala X como estaba»\n"
     "· el salvapantallas: «pon el salvapantallas de estrellas» (orbe, estrellas, reloj, negro), "
     "«salvapantallas a los 5 minutos», «quita el salvapantallas», «enséñame el salvapantallas»\n"
     "· al encender y al apagar: «al encender dime: buenos días», «al apagar di: hasta mañana»\n"
@@ -694,6 +757,89 @@ def texto_estado(ruta=None):
     return "\n".join(lin) + "\n\n" + QUE_PUEDO
 
 
+_NOM_SALA = r"(?P<s>(?:la\s+sala\s+(?:de\s+(?:la\s+|el\s+)?|del\s+)?|la\s+ventana\s+(?:de\s+(?:la\s+|el\s+)?|del\s+)?|el\s+|la\s+|los\s+)?[a-z][a-z ]{1,24}?)"
+_BOTON = r"(?:boton|pestana|opcion)"
+
+
+def _letra_de(t):
+    if re.search(r"\b(?:enorme|gigante|muy\s+grande)\b", t):
+        return "enorme"
+    if re.search(r"\b(?:mas\s+grande|grande|gorda)\b", t):
+        return "+" if "mas" in t.split() else "grande"
+    if re.search(r"\b(?:mas\s+pequena|pequena|chica|mas\s+chica)\b", t):
+        return "-" if "mas" in t.split() else "pequena"
+    if re.search(r"\b(?:normal|de\s+siempre)\b", t):
+        return "normal"
+    return None
+
+
+def orden_sala(orig, t):
+    """(accion, (sala, …)) para cambiar una sala POR DENTRO, o None. `t` = `orig` en minúsculas y sin tildes."""
+    def sala_en(txt):
+        return resolver_sala(txt) if txt else None
+
+    def trozo(m, g):
+        return orig[m.start(g):m.end(g)].strip(" ,.«»\"'")
+    # dejar como estaba
+    m = re.match(r"^(?:deja|pon|vuelve\s+a\s+dejar)\s+(?:la\s+sala\s+|la\s+ventana\s+)?(?:de\s+|del\s+)?" + _NOM_SALA +
+                 r"\s+como\s+estaba$", t)
+    if m and sala_en(m.group("s")):
+        return ("sala_serie", (sala_en(m.group("s")),))
+    if re.match(r"^(?:deja|pon)\s+todas\s+las\s+salas\s+como\s+estaban$", t):
+        return ("sala_serie", ("todas",))
+    # letra
+    m = re.match(r"^(?:en\s+|a\s+)" + _NOM_SALA + r"\s*,?\s+(?:pon(?:me)?\s+)?(?:la\s+)?letra\s+(?P<v>.+)$", t) or \
+        re.match(r"^(?:pon(?:me)?|haz(?:me)?)\s+(?:la\s+)?letra\s+(?P<v>.+?)\s+(?:en|de|del)\s+" + _NOM_SALA + r"$", t) or \
+        re.match(r"^(?:haz|pon)\s+(?:mas\s+)?(?P<v>grande|pequena|enorme)\s+la\s+letra\s+(?:de|del|en)\s+" + _NOM_SALA + r"$", t)
+    if m and sala_en(m.group("s")) and _letra_de(m.group("v")):
+        return ("sala_letra", (sala_en(m.group("s")), _letra_de(m.group("v"))))
+    # color de la sala
+    m = re.match(r"^(?:pon|pinta|viste)\s+" + _NOM_SALA + r"\s+(?:en|de)\s+(?:color\s+)?(?P<c>[a-z ]{3,15})$", t) or \
+        re.match(r"^(?:cambia|pon)\s+(?:el\s+)?color\s+(?:de|del)\s+" + _NOM_SALA + r"\s+(?:a|en|por)\s+(?:color\s+)?(?P<c>[a-z ]{3,15})$", t)
+    if m and sala_en(m.group("s")) and tema_de(m.group("c")):
+        return ("sala_color", (sala_en(m.group("s")), tema_de(m.group("c"))))
+    # tamaño de la ventana
+    m = re.match(r"^(?:haz|pon)\s+(?:la\s+ventana\s+(?:de\s+(?:la\s+|el\s+)?|del\s+)?|la\s+sala\s+(?:de\s+)?)?" + _NOM_SALA +
+                 r"\s+(?P<v>mas\s+grande|mas\s+pequen[ao]|grande|pequen[ao]|normal|a\s+pantalla\s+completa|en\s+pantalla\s+completa)$", t)
+    if m and sala_en(m.group("s")):
+        v = m.group("v")
+        tam = "completa" if "completa" in v else ("grande" if "grande" in v else ("pequena" if "peque" in v else "normal"))
+        return ("sala_tamano", (sala_en(m.group("s")), tam))
+    # pestaña con la que se abre
+    m = re.match(r"^(?:que\s+)?(?:abre\s+)?(?:el\s+|la\s+)?(?P<s>[a-z ]{3,25}?)\s+(?:se\s+abra|siempre)?\s*(?:se\s+abra\s+)?"
+                 r"(?:siempre\s+)?en\s+(?:la\s+pestana\s+)?(?P<p>[a-z ]{3,25})$", t)
+    if m and sala_en(m.group("s")) and re.search(r"\b(?:se\s+abra|abre|siempre)\b", t) and "pantalla" not in t:
+        return ("sala_pestana", (sala_en(m.group("s")), trozo(m, "p")))
+    # ocultar un botón o pestaña («quita el botón X de ajustes», «en ajustes oculta el botón X»)
+    m = re.match(r"^(?:quita|oculta|esconde|borra)(?:me)?\s+(?:el\s+|la\s+)?" + _BOTON + r"\s+(?P<b>.+?)\s+(?:de|del|en)\s+" +
+                 _NOM_SALA + r"$", t) or \
+        re.match(r"^en\s+" + _NOM_SALA + r"\s*,?\s+(?:quita|oculta|esconde)(?:me)?\s+(?:el\s+|la\s+)?" + _BOTON + r"\s+(?P<b>.+)$", t)
+    if m and sala_en(m.group("s")):
+        return ("sala_ocultar", (sala_en(m.group("s")), trozo(m, "b")))
+    m = re.match(r"^(?:vuelve\s+a\s+poner|devuelve|recupera|ensena|muestra)(?:me)?\s+(?:el\s+|la\s+)?" + _BOTON +
+                 r"\s+(?P<b>.+?)\s+(?:de|del|en)\s+" + _NOM_SALA + r"$", t)
+    if m and sala_en(m.group("s")):
+        return ("sala_mostrar", (sala_en(m.group("s")), trozo(m, "b")))
+    # renombrar un botón o pestaña
+    m = re.match(r"^(?:cambia|cambiale)\s+(?:el\s+nombre\s+(?:del\s+|de\s+la\s+)|el\s+|la\s+)?" + _BOTON + r"\s+(?P<b>.+?)\s+(?:de|del|en)\s+" +
+                 _NOM_SALA + r"\s+(?:a|por)\s+(?P<n>.+)$", t) or \
+        re.match(r"^(?:renombra|llama)\s+(?:al\s+|el\s+|la\s+|a\s+la\s+)?" + _BOTON + r"\s+(?P<b>.+?)\s+(?:de|del|en)\s+" +
+                 _NOM_SALA + r"\s+(?:como|a)\s+(?P<n>.+)$", t) or \
+        re.match(r"^en\s+" + _NOM_SALA + r"\s*,?\s+(?:cambia|renombra)\s+(?:el\s+|la\s+)?" + _BOTON + r"\s+(?P<b>.+?)\s+(?:por|a|como)\s+(?P<n>.+)$", t)
+    if m and sala_en(m.group("s")):
+        nuevo = _txt(trozo(m, "n"), 40)
+        if nuevo:
+            return ("sala_renombrar", (sala_en(m.group("s")), trozo(m, "b"), nuevo))
+    # una nota fija dentro de la sala
+    m = re.match(r"^(?:pon|escribe|apunta|deja)(?:me)?\s+(?:una\s+)?nota\s+(?:en|dentro\s+de(?:l)?)\s+" + _NOM_SALA + r"\s*(?::|,|\s+que\s+(?:diga|ponga)|\s+diciendo)\s*(?P<n>.+)$", t)
+    if m and sala_en(m.group("s")) and len(m.group("n")) >= 2:
+        return ("sala_nota", (sala_en(m.group("s")), trozo(m, "n")))
+    m = re.match(r"^(?:quita|borra)\s+la\s+nota\s+(?:de|del)\s+" + _NOM_SALA + r"$", t)
+    if m and sala_en(m.group("s")):
+        return ("sala_nota", (sala_en(m.group("s")), ""))
+    return None
+
+
 def _orden_actual(d, extras):
     """El orden de los iconos tal como se ven ahora (los de serie + las ventanas nuevas del escritorio)."""
     todos = list(ICONOS_BASE) + ["extra:" + i for i, _ in extras]
@@ -716,6 +862,8 @@ def hacer(accion, valor, ruta=None, equipo=None, extras=()):
     eq = equipo or Equipo(ruta=ruta)
     extras = [(str(a), str(b)) for a, b in (extras or [])]
     try:
+        if accion.startswith("sala_"):
+            return _hacer_sala(accion, valor, ruta)
         if accion == "iconos_serie":
             d = cargar(ruta)
             d2 = {"orden_iconos": [], "dibujos": {}, "nombres": {}}
@@ -838,6 +986,62 @@ def hacer(accion, valor, ruta=None, equipo=None, extras=()):
     except Exception as e:                        # noqa: BLE001
         return f"[x] No he podido: {e}"
     return "No conozco ese cambio."
+
+
+def _hacer_sala(accion, valor, ruta):
+    d = cargar(ruta)
+    salas = dict(d.get("salas") or {})
+    sala = valor[0]
+    if accion == "sala_serie":
+        if sala == "todas":
+            cambiar("salas", {}, ruta, que="todas las salas como estaban")
+            return "Todas las salas como estaban."
+        salas.pop(sala, None)
+        cambiar("salas", salas, ruta, que=f"sala {sala} como estaba")
+        return f"La sala «{sala}» vuelve a estar como siempre."
+    p = dict(salas.get(sala) or {})
+    if accion == "sala_letra":
+        v = valor[1]
+        if v in ("+", "-"):
+            i = LETRAS.index(p.get("letra", "normal")) + (1 if v == "+" else -1)
+            v = LETRAS[max(0, min(len(LETRAS) - 1, i))]
+        p["letra"] = v
+        msg = f"Letra {v.replace('pequena', 'pequeña')} en «{sala}»."
+    elif accion == "sala_color":
+        p["color"] = valor[1]
+        msg = f"La sala «{sala}» viste ahora de «{valor[1]}» (el resto de KiraOS sigue con su tema)."
+    elif accion == "sala_tamano":
+        p["tamano"] = valor[1]
+        msg = {"completa": f"«{sala}» se abrirá a pantalla completa.", "grande": f"«{sala}» se abrirá más grande.",
+               "pequena": f"«{sala}» se abrirá más pequeña.", "normal": f"«{sala}» se abrirá con su tamaño de siempre."}[valor[1]]
+    elif accion == "sala_pestana":
+        p["pestana"] = _txt(valor[1], 40)
+        msg = f"«{sala}» se abrirá en la pestaña «{p['pestana']}» (si existe)."
+    elif accion == "sala_ocultar":
+        oc = [x for x in p.get("ocultar") or [] if _plano(x) != _plano(valor[1])]
+        p["ocultar"] = (oc + [_txt(valor[1], 40)])[-MAX_LISTA:]
+        msg = (f"He quitado «{valor[1]}» de «{sala}». Para traerlo: «vuelve a poner el botón {valor[1]} en {sala}» "
+               f"o «deja la sala {sala} como estaba».")
+    elif accion == "sala_mostrar":
+        p["ocultar"] = [x for x in p.get("ocultar") or [] if _plano(x) != _plano(valor[1])]
+        msg = f"«{valor[1]}» vuelve a estar en «{sala}»."
+    elif accion == "sala_renombrar":
+        ren = {k: v for k, v in (p.get("renombrar") or {}).items() if _plano(k) != _plano(valor[1])}
+        ren[_txt(valor[1], 40)] = valor[2]
+        p["renombrar"] = ren
+        msg = f"En «{sala}», «{valor[1]}» se llama ahora «{valor[2]}» (hace lo mismo que antes)."
+    elif accion == "sala_nota":
+        if valor[1]:
+            p["nota"] = _txt(valor[1], MAX_NOTA)
+            msg = f"Nota puesta arriba de «{sala}»."
+        else:
+            p.pop("nota", None)
+            msg = f"Nota quitada de «{sala}»."
+    else:
+        return "No conozco ese cambio."
+    salas[sala] = p
+    cambiar("salas", salas, ruta, que=f"sala {sala}")
+    return msg
 
 
 def responder(texto, ruta=None, equipo=None, extras=()):

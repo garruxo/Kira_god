@@ -27,6 +27,9 @@ EN_VENTANAS = ("escritorio", "wifi", "red", "maquina", "cuaderno", "movil", "aju
 # v3.21: el DIBUJO del icono de una ventana nueva (solo un nombre de esta lista: la pantalla tiene los dibujos)
 ICONOS_EXTRA = ("estrella", "corazon", "rayo", "nota", "casa", "sol", "luna", "musica", "camara", "libro", "escudo",
                 "reloj", "bluetooth", "altavoz", "brillo", "juego", "mensaje", "carpeta")
+# v3.23: dónde sale DENTRO de una sala: «boton» (arriba, en la cabecera; lo de siempre), «arriba» o «abajo» (una
+# tarjeta dentro de la propia sala, con su texto y sus botones)
+LUGARES = ("boton", "arriba", "abajo")
 MAX_TITULO = 40
 MAX_TEXTO = 3000
 MAX_BOTONES = 12
@@ -73,9 +76,9 @@ def validar(ident, datos):
         raise VentanaError(f"el nombre de la ventana «{ident}» no vale: minúsculas, números y espacios, máx. 40")
     if not isinstance(datos, dict):
         raise VentanaError("la función de la ventana debe devolver un diccionario {\"en\", \"titulo\", \"texto\", \"botones\"}")
-    raros = set(datos) - {"en", "titulo", "texto", "botones", "icono"}
+    raros = set(datos) - {"en", "titulo", "texto", "botones", "icono", "lugar"}
     if raros:
-        raise VentanaError("la ventana solo admite en, titulo, texto, botones e icono (sobra: " + ", ".join(sorted(map(str, raros))) + ")")
+        raise VentanaError("la ventana solo admite en, titulo, texto, botones, icono y lugar (sobra: " + ", ".join(sorted(map(str, raros))) + ")")
     en = _texto(datos.get("en") or "escritorio", 30, "«en»").lower()
     en = _ALIAS_EN.get(en, en)
     if en not in EN_VENTANAS:
@@ -101,7 +104,14 @@ def validar(ident, datos):
         limpios.append({"texto": bt, "orden": orden})
     if not texto and not limpios:
         raise VentanaError("la ventana está vacía: pon un texto o algún botón")
+    lugar = _texto(datos.get("lugar") or "boton", 10, "«lugar»").lower().replace("botón", "boton")
+    if lugar not in LUGARES:
+        raise VentanaError(f"«lugar» debe ser uno de: {', '.join(LUGARES)} (no «{lugar}»)")
+    if en == "escritorio":
+        lugar = "boton"                      # en el escritorio es un icono
     r = {"id": ident, "en": en, "titulo": titulo, "texto": texto, "botones": limpios}
+    if lugar != "boton":
+        r["lugar"] = lugar
     if icono:
         r["icono"] = icono
     return r
@@ -147,6 +157,7 @@ def registrar():
     return {"ventana mis redes": ventana}
 ```
 «en» puede ser: ''' + ", ".join(EN_VENTANAS) + ''' («escritorio» = un icono nuevo). Cada botón: {"texto", "orden"}.
+Opcional "lugar" (si sale DENTRO de una sala): "boton" (un botón arriba, por defecto), "arriba" o "abajo" (una tarjeta dentro de la sala).
 Opcional "icono" (el dibujo del icono en el escritorio): ''' + ", ".join(ICONOS_EXTRA) + '''.
 Si el botón necesita algo nuevo, añade también su orden al diccionario (por ejemplo "mis redes hoy": funcion(texto)).'''
 

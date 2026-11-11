@@ -156,7 +156,10 @@ class EscritorioMixin:
         except Exception:
             pass
         return {"llamar": p.get("llamar", ""), "wifi": w, "voz": self.voz_activa, "iconos": ICONOS,
-                "extras": [{k: v.get(k, "") for k in ("id", "en", "titulo", "icono")} for v in self.ventanas_extra()],
+                "extras": [dict({k: v.get(k, "") for k in ("id", "en", "titulo", "icono")},
+                                **({"lugar": v["lugar"], "texto": v.get("texto", ""), "botones": v.get("botones", [])}
+                                   if v.get("lugar") in ("arriba", "abajo") else {}))
+                           for v in self.ventanas_extra()],
                 "aspecto": self.aspecto()}
 
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
@@ -180,8 +183,8 @@ class EscritorioMixin:
                 import ventanas_kira as vk
                 for v in n.ventanas() or []:
                     try:                                  # se vuelve a validar aquí: la pantalla no se fía de nadie
-                        lv = vk.validar(v.get("id"), {k: v.get(k) for k in ("en", "titulo", "texto", "botones", "icono")
-                                                             if k != "icono" or v.get(k)})
+                        lv = vk.validar(v.get("id"), {k: v.get(k) for k in ("en", "titulo", "texto", "botones", "icono", "lugar")
+                                                             if k not in ("icono", "lugar") or v.get(k)})
                         lv["modulo"] = str(v.get("modulo") or "")[:60]
                         lista.append(lv)
                     except Exception:
