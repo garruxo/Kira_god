@@ -340,6 +340,14 @@ if [ \$# -eq 0 ]; then exec /usr/bin/python3 "$AQUI/pensador_kira.py" --cuaderno
 exec /usr/bin/python3 "$AQUI/pensador_kira.py" "\$@"
 KIRAPIENSA
   $SUDO chmod +x /usr/local/bin/kira-pensar
+  # v3.34: permiso UNA vez para instalar programas del sistema sin pedir la contraseña cada vez (se puede quitar con --quitar).
+  $SUDO tee /usr/local/bin/kira-permiso >/dev/null <<KIRAPERMISO
+#!/usr/bin/env bash
+# Da permiso UNA vez para que Kira instale programas del sistema (apt/dpkg) sin pedirte la contraseña cada vez.
+# Te pedirá la contraseña solo esta vez.   Para quitarlo:  kira-permiso --quitar
+exec bash "$AQUI/permiso_apps.sh" "\$@"
+KIRAPERMISO
+  $SUDO chmod +x /usr/local/bin/kira-permiso
   # v2.88: KiraOS controla la WiFi del portátil (con nmcli; la clave solo se escribe en el portátil).
   $SUDO tee /usr/local/bin/kira-wifi >/dev/null <<KIRAWIFI
 #!/usr/bin/env bash

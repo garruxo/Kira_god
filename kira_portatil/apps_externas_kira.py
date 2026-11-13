@@ -601,9 +601,10 @@ def _bajar_defecto(url, destino):
 
 
 # ---------------- permiso de administrador UNA sola vez (v3.33) ----------------
-_PERMISO_UNA_VEZ = ("O dame permiso UNA vez para instalar del sistema sin contraseña: en la Terminal (icono Terminal) "
-                    "escribe  bash permiso_apps  y pulsa Tab, y te pedirá la contraseña solo esa vez. Luego ya no te "
-                    "la pido más.")
+_PERMISO_UNA_VEZ = ("O dame permiso UNA vez y ya no te pido más la contraseña: en la Terminal (icono Terminal) escribe "
+                    " kira-permiso  y pulsa Intro. Si dice que no lo encuentra, escribe primero  cd kira_god/kira_portatil"
+                    "  (Intro) y luego  bash permiso_apps  (Intro). Te pedirá la contraseña solo esa vez. (Los signos «/» "
+                    "y «_» están en los botones de la Terminal, y con Tab se autocompletan los nombres.)")
 
 
 def admin_sin_clave(correr=None):
