@@ -373,6 +373,50 @@ def _crear_acceso(core, titulo, codigo):
         pass
 
 
+def _buscar_app(core, nombre):
+    """v3.28: busca entre las apps externas instaladas una que se llame como `nombre` (exacta o parecida)."""
+    try:
+        import accesos_kira as ak
+        nl = str(nombre or "").strip().lower()
+        externas = [a for a in ak.listar(core.dir) if a.get("tipo") == "externa"]
+        for a in externas:
+            if str(a.get("titulo", "")).strip().lower() == nl:
+                return a
+        for a in externas:
+            tl = str(a.get("titulo", "")).strip().lower()
+            if tl and (nl in tl or tl in nl):
+                return a
+    except Exception:
+        pass
+    return None
+
+
+def _instalar_app(core, fuente, paso):
+    """v3.28: instala la app que el dueño pidió (sin administrador) y la deja como icono en el escritorio."""
+    import apps_externas_kira as aex
+    import accesos_kira as ak
+    paso(0.0, f"Instalo {fuente}…")
+    r = aex.instalar(fuente, al_paso=lambda t: paso(None, t))
+    if not r.get("ok"):
+        # «admin» no es un error: es que necesita la Terminal con tu contraseña (no lo hago sola)
+        return {"texto": ("" if r.get("admin") else "[x] ") + r.get("mensaje", "No pude instalarla."),
+                "ok": bool(r.get("admin"))}
+    iid = ak.anadir_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+    extra = "" if iid else " (ya la tenías)"
+    return {"texto": r.get("mensaje", "Instalada.") + extra +
+            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla."}
+
+
+def _usar_app(core, nombre):
+    """v3.28: «usa/abre X» → lanza la app externa instalada."""
+    import apps_externas_kira as aex
+    a = _buscar_app(core, nombre)
+    if not a:
+        return {"texto": f"No tengo instalada ninguna app «{nombre}». Dime «instala {nombre}» y la pongo.", "ok": False}
+    r = aex.lanzar(a)
+    return {"texto": r.get("mensaje", ""), **({} if r.get("ok") else {"ok": False})}
+
+
 def ejecutar(core, orden, paso):
     """Hace la orden con el núcleo. `paso(fraccion|None, texto)` va contando. Devuelve {texto, codigo?, nombre?}."""
     import re
@@ -413,6 +457,13 @@ def ejecutar(core, orden, paso):
         tipo, describir = so
         paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
         return {"texto": sp.hacer(tipo, describir)}
+    import apps_externas_kira as aex              # v3.28: instalar/usar apps que el dueño pide (GitHub, AppImage…)
+    oi = aex.es_orden_instalar(o)
+    if oi:
+        return _instalar_app(core, oi, paso)
+    ou = aex.es_orden_usar(o)
+    if ou and _buscar_app(core, ou):             # solo si TIENE esa app instalada (si no, que siga el reparto normal)
+        return _usar_app(core, ou)
     om = mq.orden_maquina(o)                      # v2.85: su MÁQUINA VIRTUAL (Linux ligero)
     if om:
         accion, carga = om

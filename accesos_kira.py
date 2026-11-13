@@ -96,6 +96,27 @@ def anadir(dir_, titulo, codigo="", tipo="programa", icono="programa"):
     return iid
 
 
+def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
+    """v3.28: acceso directo de una APP EXTERNA que el dueño mandó instalar (de GitHub, un AppImage…). No es una app web:
+    al pulsarla se LANZA en el portátil (`lanzar`, una lista de argumentos) y al desinstalarla se borra su `carpeta`.
+    Deduplicado por título. Devuelve el id (o None si ya existía o no hay título)."""
+    titulo = str(titulo or "").strip()[:60]
+    if not titulo or existe(dir_, titulo):
+        return None
+    lista = _leer(dir_)
+    usados = {a.get("id") for a in lista}
+    iid = base = _id(titulo)
+    k = 2
+    while iid in usados:
+        iid = f"{base}_{k}"
+        k += 1
+    lista.append({"id": iid, "titulo": titulo, "tipo": "externa", "icono": icono or "app",
+                  "cuando": int(time.time()), "tiene_html": False,
+                  "lanzar": list(lanzar or []), "carpeta": str(carpeta or "")})
+    _guardar(dir_, lista)
+    return iid
+
+
 def uno(dir_, iid):
     for a in _leer(dir_):
         if a.get("id") == iid:
@@ -115,14 +136,26 @@ def html_de(dir_, iid):
 
 
 def quitar(dir_, iid):
-    """DESINSTALAR el acceso directo (clic derecho ▸ Desinstalar): quita el icono y borra su .html. True si existía."""
+    """DESINSTALAR el acceso directo (clic derecho ▸ Desinstalar): quita el icono y borra su .html (programa) o la carpeta
+    de la app externa. True si existía. Candado: solo borra carpetas DENTRO de `dir_` (nunca una ruta de fuera)."""
     lista = _leer(dir_)
-    quedan = [a for a in lista if a.get("id") != iid]
-    quitado = len(quedan) != len(lista)
+    a = next((x for x in lista if x.get("id") == iid), None)
+    quedan = [x for x in lista if x.get("id") != iid]
+    quitado = a is not None
     if quitado:
         _guardar(dir_, quedan)
         try:
             os.remove(os.path.join(dir_, CARPETA, str(iid) + ".html"))
         except OSError:
             pass
+        carpeta = (a or {}).get("carpeta") or ""
+        if carpeta:
+            try:
+                raiz = os.path.realpath(dir_)
+                real = os.path.realpath(carpeta)
+                if real != raiz and (real + os.sep).startswith(raiz + os.sep) and os.path.isdir(real):
+                    import shutil
+                    shutil.rmtree(real, ignore_errors=True)
+            except OSError:
+                pass
     return quitado

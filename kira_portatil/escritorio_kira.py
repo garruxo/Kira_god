@@ -177,10 +177,19 @@ class EscritorioMixin:
             return []
 
     def abrir_acceso(self, iid):
-        """Abre el programa del acceso directo: devuelve su app web (un .html que lo ejecuta y muestra, aislado)."""
+        """Abre el acceso directo: un programa de Kira se muestra como app web; una app EXTERNA (v3.28) se LANZA en el
+        portátil (clic en su icono = abrirla)."""
         try:
             import accesos_kira as ak
             a = ak.uno(DATOS_NUCLEO, iid) or {}
+            if a.get("tipo") == "externa":
+                try:
+                    import apps_externas_kira as aex
+                    r = aex.lanzar(a)
+                except Exception as e:                    # noqa: BLE001
+                    r = {"ok": False, "mensaje": str(e)}
+                return {"titulo": a.get("titulo", "App"), "externa": True,
+                        "lanzada": bool(r.get("ok")), "mensaje": r.get("mensaje", "")}
             return {"titulo": a.get("titulo", "Programa"), "html": ak.html_de(DATOS_NUCLEO, iid)}
         except Exception as e:
             return {"titulo": "Programa", "html": "", "error": str(e)}

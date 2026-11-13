@@ -412,7 +412,9 @@ var DEMO_REDES=[{ssid:"MiCasa",senal:72,segura:true,guardada:true,en_uso:true,ba
 var demoCharlas={};
 var FAKE = {
   barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],accesos:FAKE._accesos||[],aspecto:FAKE._aspecto||null}); },
-  abrir_acceso:function(iid){ var a=(FAKE._accesos||[]).filter(function(x){ return x.id===iid; })[0]||{}; return Promise.resolve({titulo:a.titulo||"Programa",html:a.tiene_html===false?"":"<!doctype html><title>demo</title><body>Hola desde el programa de Kira</body>"}); },
+  abrir_acceso:function(iid){ var a=(FAKE._accesos||[]).filter(function(x){ return x.id===iid; })[0]||{};
+    if(a.tipo==="externa") return Promise.resolve({titulo:a.titulo||"App",externa:true,lanzada:true,mensaje:"Abriendo "+(a.titulo||"la app")+"…"});
+    return Promise.resolve({titulo:a.titulo||"Programa",html:a.tiene_html===false?"":"<!doctype html><title>demo</title><body>Hola desde el programa de Kira</body>"}); },
   desinstalar_acceso:function(iid){ FAKE._accesos=(FAKE._accesos||[]).filter(function(x){ return x.id!==iid; }); return Promise.resolve({ok:true}); },
   hablar:function(t){ var id="d"+Date.now(); demoCharlas[id]={t:Date.now(),
       r:"Estoy aquí, Jefe. Te lo digo en voz alta; si quieres leerlo, pulsa «Texto» en la barra."}; return Promise.resolve({id:id}); },
@@ -524,11 +526,16 @@ function desinstalaAcceso(iid, titulo){
 }
 document.addEventListener("click", cierraMenuAcceso);
 document.addEventListener("keydown", function(e){ if(e.key==="Escape") cierraMenuAcceso(); });
-function pintaAcceso(iid){                          // v3.26: abre el programa (su app web) en una ventana
-  var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Abriendo el programa…</div>';
+function pintaAcceso(iid){                          // v3.26: abre el programa (app web) o v3.28: lanza la app externa
+  var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Abriendo…</div>';
   llama("abrir_acceso", iid).then(function(d){
     d=d||{};
-    if(d.html){
+    if(d.externa){                                 // v3.28: app externa (se lanza en el portátil, no hay nada que mostrar)
+      c.className="vcuerpo";
+      c.innerHTML='<div class="texto">'+esc(d.mensaje||(d.lanzada?("Abriendo "+(d.titulo||"la app")+"…"):"No pude abrirla."))+
+        '<br><br>Es una app que instalaste. Se abre en su propia ventana. '+
+        '<button class="acc" data-x="quitar">Desinstalar</button></div>';
+    } else if(d.html){
       c.className="vcuerpo marco";
       c.innerHTML='<div class="appbar"><button data-x="quitar" class="peligro">Desinstalar</button>'+
         '<span>Programa hecho por Kira · clic derecho en su icono para desinstalarlo</span></div>'+
