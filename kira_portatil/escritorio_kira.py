@@ -164,7 +164,34 @@ class EscritorioMixin:
                                 **({"lugar": v["lugar"], "texto": v.get("texto", ""), "botones": v.get("botones", [])}
                                    if v.get("lugar") in ("arriba", "abajo") else {}))
                            for v in self.ventanas_extra()],
+                "accesos": self.accesos(),                    # v3.26: accesos directos de los programas creados
                 "aspecto": self.aspecto()}
+
+    # ---------- v3.26: accesos directos de los programas que Kira creó (icono en el escritorio; clic derecho ▸ desinstalar) ----------
+    def accesos(self):
+        try:
+            import accesos_kira as ak
+            return [{k: a.get(k) for k in ("id", "titulo", "icono", "tipo", "tiene_html")}
+                    for a in ak.listar(DATOS_NUCLEO)]
+        except Exception:
+            return []
+
+    def abrir_acceso(self, iid):
+        """Abre el programa del acceso directo: devuelve su app web (un .html que lo ejecuta y muestra, aislado)."""
+        try:
+            import accesos_kira as ak
+            a = ak.uno(DATOS_NUCLEO, iid) or {}
+            return {"titulo": a.get("titulo", "Programa"), "html": ak.html_de(DATOS_NUCLEO, iid)}
+        except Exception as e:
+            return {"titulo": "Programa", "html": "", "error": str(e)}
+
+    def desinstalar_acceso(self, iid):
+        """Clic derecho ▸ Desinstalar: quita el icono del escritorio y borra su app web."""
+        try:
+            import accesos_kira as ak
+            return {"ok": bool(ak.quitar(DATOS_NUCLEO, iid))}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
     def aspecto(self):

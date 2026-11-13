@@ -91,6 +91,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .vcuerpo{flex:1;overflow:auto;padding:20px 24px;-webkit-user-select:text;user-select:text}
 .vcuerpo.marco{padding:0;overflow:hidden;display:flex;flex-direction:column}
 .vcuerpo iframe{width:100%;height:100%;flex:1;border:0;background:#05070f}
+.appbar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0b1020;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;color:#aab3c5}
+.appbar button{padding:5px 12px;border-radius:8px;border:0;cursor:pointer;background:#1a2133;color:#e7ecf5}
+.appbar button.peligro{background:#3a1420;color:#ffc2cc;box-shadow:inset 0 0 0 1px rgba(251,113,133,.5)}
+.ctxmenu{position:fixed;z-index:9999;min-width:170px;background:#0d1326;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.ctxmenu .ctxtit{font-size:12px;color:#8a93a6;padding:4px 8px 6px;border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.ctxmenu button{display:block;width:100%;text-align:left;padding:7px 10px;border:0;border-radius:7px;background:transparent;color:#e7ecf5;cursor:pointer;font-size:14px}
+.ctxmenu button:hover{background:#1a2133}
+.ctxmenu button.peligro{color:#ffc2cc}
 /* v3.23: las salas POR DENTRO (lo que tú le pides: letra, color, tamaño, botones, notas y tarjetas de Kira) */
 #ventana.t-pequena{left:18vw;right:18vw;top:9vh;bottom:calc(var(--barra) + 9vh)}
 #ventana.t-grande{left:1.2vw;right:1.2vw;top:8px;bottom:calc(var(--barra) + 8px)}
@@ -357,7 +365,8 @@ var ICO = {
   brillo:'<circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4"/>',
   juego:'<rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r=".8"/><circle cx="18" cy="13" r=".8"/>',
   mensaje:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
-  carpeta:'<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
+  carpeta:'<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  programa:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18"/><path d="M8 13l2 2-2 2M13 17h3"/>'
 };
 function svg(n, extra){ if(String(n).indexOf("extra:")===0){       // v3.21: la ventana nueva puede traer su dibujo
     var ex=null, idx=String(n).slice(6); for(var k=0;k<EXTRAS.length;k++){ if(EXTRAS[k].id===idx) ex=EXTRAS[k]; }
@@ -372,15 +381,19 @@ var ICONOS = [
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
 var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
+var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
   for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
   for(var j=0;j<EXTRAS.length;j++){ if("extra:"+EXTRAS[j].id===id) return EXTRAS[j].titulo; } return OCULTAS[id]||id; }
 var ASPECTO={};                                   // v3.21: lo que el dueño cambió (tema, iconos ocultos, salvapantallas)
 function todosIconos(){ var oc=(ASPECTO.ocultos||[]); var l=ICONOS.filter(function(i){ return oc.indexOf(i.id)<0; }).concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
-  return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; }));
+  return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; }))
+  .concat(ACCESOS.map(function(a){                 // v3.26: los programas que Kira hizo, como acceso directo
+    return {id:"acceso:"+a.id, titulo:a.titulo, sub:"programa de Kira", dib:(a.icono&&ICO[a.icono])?a.icono:"programa", acceso:true}; }));
   // v3.22: tu orden, tus nombres y tus dibujos («mueve el icono…», «cambia el nombre…», «cambia el icono… por…»)
   var ord=ASPECTO.orden_iconos||[], nom=ASPECTO.nombres||{}, dib=ASPECTO.dibujos||{};
-  l=l.map(function(i){ var c={id:i.id,titulo:nom[i.id]||i.titulo,sub:i.sub,dib:(dib[i.id]&&ICO[dib[i.id]])?dib[i.id]:null}; return c; });
+  l=l.map(function(i){ return {id:i.id,titulo:nom[i.id]||i.titulo,sub:i.sub,
+    dib:(dib[i.id]&&ICO[dib[i.id]])?dib[i.id]:(i.dib||null), acceso:!!i.acceso}; });
   if(ord.length){ l.sort(function(a,b){ var x=ord.indexOf(a.id), y=ord.indexOf(b.id); x=x<0?999:x; y=y<0?999:y; return x-y; }); }
   return l; }
 function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
@@ -398,7 +411,9 @@ var DEMO_REDES=[{ssid:"MiCasa",senal:72,segura:true,guardada:true,en_uso:true,ba
   {ssid:"Bar Pepe",senal:22,segura:false,guardada:false,en_uso:false,banda:"2,4 GHz"}];
 var demoCharlas={};
 var FAKE = {
-  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],aspecto:FAKE._aspecto||null}); },
+  barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],accesos:FAKE._accesos||[],aspecto:FAKE._aspecto||null}); },
+  abrir_acceso:function(iid){ var a=(FAKE._accesos||[]).filter(function(x){ return x.id===iid; })[0]||{}; return Promise.resolve({titulo:a.titulo||"Programa",html:a.tiene_html===false?"":"<!doctype html><title>demo</title><body>Hola desde el programa de Kira</body>"}); },
+  desinstalar_acceso:function(iid){ FAKE._accesos=(FAKE._accesos||[]).filter(function(x){ return x.id!==iid; }); return Promise.resolve({ok:true}); },
   hablar:function(t){ var id="d"+Date.now(); demoCharlas[id]={t:Date.now(),
       r:"Estoy aquí, Jefe. Te lo digo en voz alta; si quieres leerlo, pulsa «Texto» en la barra."}; return Promise.resolve({id:id}); },
   tarea_hablar:function(id){ var c=demoCharlas[id]; var n=Math.min(c.r.length, Math.floor((Date.now()-c.t)/9));
@@ -476,10 +491,56 @@ function pintaIconos(){
   $("iconos").innerHTML = tod.map(function(i){
     return '<div class="icono" tabindex="0" data-app="'+esc(i.id)+'"><div class="tile">'+svg(i.dib||i.id)+'</div><span>'+esc(i.titulo)+
            '<small>'+esc(i.sub)+'</small></span></div>'; }).join("");
+  var ids=tod.map(function(i){ return i.id; });
   [].forEach.call(document.querySelectorAll(".icono"), function(el){
     el.addEventListener("click", function(){ abrir(el.dataset.app); });
     el.addEventListener("keydown", function(e){ if(e.key==="Enter") abrir(el.dataset.app); });
+    // v3.26: clic derecho sobre un PROGRAMA de Kira → menú como en Windows (Abrir / Desinstalar)
+    if(String(el.dataset.app).indexOf("acceso:")===0){
+      el.addEventListener("contextmenu", function(e){ e.preventDefault(); menuAcceso(el.dataset.app, e.clientX, e.clientY); });
+    }
   });
+}
+function menuAcceso(id, x, y){                      // v3.26: menú contextual de un acceso directo
+  cierraMenuAcceso();
+  var iid=String(id).slice(7), a=null;
+  for(var k=0;k<ACCESOS.length;k++){ if(ACCESOS[k].id===iid) a=ACCESOS[k]; }
+  var m=document.createElement("div"); m.id="menuAcceso"; m.className="ctxmenu";
+  m.innerHTML='<div class="ctxtit">'+esc(a?a.titulo:"Programa")+'</div>'+
+    '<button data-a="abrir">Abrir</button><button data-a="desinstalar" class="peligro">Desinstalar</button>';
+  document.body.appendChild(m);
+  var mw=190, mh=96, px=Math.min(x, window.innerWidth-mw-8), py=Math.min(y, window.innerHeight-mh-8);
+  m.style.left=px+"px"; m.style.top=py+"px";
+  m.querySelector('[data-a="abrir"]').onclick=function(){ cierraMenuAcceso(); abrir(id); };
+  m.querySelector('[data-a="desinstalar"]').onclick=function(){ cierraMenuAcceso(); desinstalaAcceso(iid, a?a.titulo:""); };
+}
+function cierraMenuAcceso(){ var m=$("menuAcceso"); if(m) m.parentNode.removeChild(m); }
+function desinstalaAcceso(iid, titulo){
+  if(!confirm("¿Desinstalar «"+(titulo||"este programa")+"»? Se quitará del escritorio.")) return;
+  llama("desinstalar_acceso", iid).then(function(){
+    ACCESOS=ACCESOS.filter(function(a){ return a.id!==iid; }); pintaIconos();
+    if(actual==="acceso:"+iid){ $("ventana").classList.remove("on"); actual=null; }
+  }).catch(function(){});
+}
+document.addEventListener("click", cierraMenuAcceso);
+document.addEventListener("keydown", function(e){ if(e.key==="Escape") cierraMenuAcceso(); });
+function pintaAcceso(iid){                          // v3.26: abre el programa (su app web) en una ventana
+  var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Abriendo el programa…</div>';
+  llama("abrir_acceso", iid).then(function(d){
+    d=d||{};
+    if(d.html){
+      c.className="vcuerpo marco";
+      c.innerHTML='<div class="appbar"><button data-x="quitar" class="peligro">Desinstalar</button>'+
+        '<span>Programa hecho por Kira · clic derecho en su icono para desinstalarlo</span></div>'+
+        '<iframe title="'+esc(d.titulo||"Programa")+'" sandbox="allow-scripts"></iframe>';
+      c.querySelector("iframe").srcdoc=d.html;
+    } else {
+      c.className="vcuerpo";
+      c.innerHTML='<div class="texto">Este programa todavía no tiene nada que mostrar. '+
+        '<button class="acc" data-x="quitar">Desinstalar</button></div>';
+    }
+    var b=c.querySelector('[data-x="quitar"]'); if(b) b.onclick=function(){ desinstalaAcceso(iid, d.titulo||""); };
+  }).catch(function(){ c.className="vcuerpo"; c.innerHTML='<div class="texto">No pude abrir el programa.</div>'; });
 }
 function reloj(){
   var d=new Date(), h=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
@@ -496,6 +557,7 @@ function pintaBarra(d){
   $("wifiNombre").textContent = w.ssid ? w.ssid : (w.radio===false ? "WiFi apagada" : "Sin WiFi");
   if(d.llamar) $("hola").innerHTML="Hola, <b>"+esc(d.llamar)+"</b>";
   if(d.extras){ var antes=JSON.stringify(EXTRAS); EXTRAS=d.extras||[]; if(JSON.stringify(EXTRAS)!==antes){ pintaIconos(); if(actual) pintaExtras(actual); } }
+  if(d.accesos){ var antesA=JSON.stringify(ACCESOS); ACCESOS=d.accesos||[]; if(JSON.stringify(ACCESOS)!==antesA) pintaIconos(); }
   if(typeof d.voz==="boolean"){ vozOn=d.voz; pintaVoz(); }
   if(d.aspecto) ponAspecto(d.aspecto);
 }
@@ -602,6 +664,7 @@ function abrir(id, consulta, tipo){
   if(id==="buscador") return pintaBuscador(consulta, tipo);
   if(id==="wifi") return pintaWifi();
   if(id==="terminal") return pintaTerminal();
+  if(id.indexOf("acceso:")===0) return pintaAcceso(id.slice(7));   // v3.26: un programa de Kira
   if(id==="mapa"){ c.className="vcuerpo marco"; c.innerHTML='<iframe src="mapa.html" title="Mapa de ataques"></iframe>'; return; }
   if(id==="programando"){
     return llama("hay_programa").then(function(hay){

@@ -2719,6 +2719,14 @@ class KiraGodCore:
             pn.guardar(estado, ruta)
         except Exception:
             pass
+        # v3.26: en KiraOS, cada programa nuevo deja un ACCESO DIRECTO con icono en el escritorio (clic derecho ▸
+        # desinstalar, como en Windows). Se guarda como app web para abrirlo y verlo/manejarlo de forma segura.
+        if codigo and getattr(self, "es_kiraos", False):
+            try:
+                import accesos_kira as ak
+                ak.anadir(self.dir, str(tema or "Programa de Kira")[:60], codigo)
+            except Exception:
+                pass
 
     # ---------- FOCO: pensar en algo CONCRETO sin parar hasta resolverlo ----------
     def _ruta_foco(self):

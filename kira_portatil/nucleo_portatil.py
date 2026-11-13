@@ -362,6 +362,17 @@ def mejora_hacer(core, accion, nombre="", confirmado=False):
     return {"ok": False, "texto": "[x] No conozco esa acción."}
 
 
+def _crear_acceso(core, titulo, codigo):
+    """v3.26: deja un ACCESO DIRECTO con icono en el escritorio del programa recién hecho (clic derecho ▸ desinstalar)."""
+    if not codigo:
+        return
+    try:
+        import accesos_kira as ak
+        ak.anadir(core.dir, str(titulo or "Programa de Kira")[:60], codigo)
+    except Exception:
+        pass
+
+
 def ejecutar(core, orden, paso):
     """Hace la orden con el núcleo. `paso(fraccion|None, texto)` va contando. Devuelve {texto, codigo?, nombre?}."""
     import re
@@ -479,6 +490,7 @@ def ejecutar(core, orden, paso):
         if r.get("ok") and r.get("codigo"):
             maquina().ultimo_codigo = r.get("codigo")
             core.ultimo_codigo = r.get("codigo")
+            _crear_acceso(core, r.get("nombre") or exp, r.get("codigo"))   # v3.26: icono en el escritorio
         return {"texto": r.get("texto", ""), "codigo": r.get("codigo") if r.get("ok") else None,
                 "nombre": r.get("nombre"), "ok": bool(r.get("ok"))}
     prog = pk.pedido_programa(o)
@@ -489,6 +501,7 @@ def ejecutar(core, orden, paso):
             return {"texto": str(r.get("texto", "No me salió el programa.")).split("\n")[0], "ok": False}
         maquina().ultimo_codigo = r.get("codigo")
         core.ultimo_codigo = r.get("codigo")
+        _crear_acceso(core, r.get("nombre") or prog, r.get("codigo"))      # v3.26: icono en el escritorio
         texto = "Programa escrito y probado en modo seguro en el portátil."
         if en_maquina:
             try:
