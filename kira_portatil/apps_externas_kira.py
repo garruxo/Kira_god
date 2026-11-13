@@ -600,6 +600,23 @@ def _bajar_defecto(url, destino):
     return os.path.getsize(destino)
 
 
+# ---------------- permiso de administrador UNA sola vez (v3.33) ----------------
+_PERMISO_UNA_VEZ = ("O dame permiso UNA vez para instalar del sistema sin contraseña: en la Terminal (icono Terminal) "
+                    "escribe  bash permiso_apps  y pulsa Tab, y te pedirá la contraseña solo esa vez. Luego ya no te "
+                    "la pido más.")
+
+
+def admin_sin_clave(correr=None):
+    """¿El dueño ya me dio permiso (una vez, con «bash permiso_apps») para instalar del sistema SIN contraseña?
+    Se comprueba con `sudo -n`: si pide contraseña, es que no hay permiso."""
+    correr = correr or _correr_defecto
+    try:
+        rc, _s = correr(["sudo", "-n", "true"], timeout=10)
+        return rc == 0
+    except Exception:                                 # noqa: BLE001 - no hay sudo / falla → no hay permiso
+        return False
+
+
 def _revisar(carpeta, nombre, fuente, forzar, met):
     """v3.29: analiza lo descargado ANTES de dejarlo instalado. Si es PELIGROSO y no se fuerza, devuelve el aviso (para
     borrarlo y no instalarlo); si no, devuelve None y se sigue. Un AppImage/binario no se puede mirar por dentro: avisa
@@ -626,11 +643,23 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
     carpeta = os.path.join(base, _carpeta_id(nombre))
 
     if met == "nombre":
+        if admin_sin_clave(correr):                   # v3.33: ya me diste permiso → lo instalo del sistema (apt)
+            paso(f"Instalando {fuente} del sistema (apt)…")
+            try:
+                rc, salida = correr(["sudo", "-n", "apt-get", "install", "-y", fuente], timeout=1800)
+            except Exception as e:                    # noqa: BLE001
+                return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
+                        "mensaje": f"No pude instalar «{fuente}»: {e}"}
+            if rc == 0:
+                return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [fuente], "carpeta": "",
+                        "mensaje": (f"{fuente} instalado del sistema (con el permiso que me diste, sin pedirte la "
+                                    "contraseña). Lo tienes en el escritorio.")}
+            return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
+                    "mensaje": f"No pude instalar «{fuente}» (¿existe ese paquete?). apt dijo: {salida[-200:].strip()}"}
         return {"ok": False, "admin": True, "nombre": nombre, "lanzar": None, "carpeta": "",
-                "mensaje": (f"«{fuente}» parece un programa del sistema y para instalarlo necesito administrador. Por "
-                            "seguridad no lo hago sola: ábreme la Terminal y escribe  sudo apt install " + str(fuente) +
-                            "  — Xubuntu te pedirá TU contraseña. (O dime la dirección de GitHub o un AppImage y lo "
-                            "instalo yo sin contraseña.)")}
+                "mensaje": (f"«{fuente}» parece un programa del sistema y para instalarlo hace falta administrador. "
+                            "Por seguridad no lo hago sola: ábreme la Terminal y escribe  sudo apt install " +
+                            str(fuente) + "  — Xubuntu te pedirá TU contraseña. " + _PERMISO_UNA_VEZ)}
 
     try:
         os.makedirs(base, exist_ok=True)
@@ -728,15 +757,30 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
         raiz = os.path.join(carpeta, "contenido")
         paso("Descomprimiendo…")
         if tipo == "deb":
+            if admin_sin_clave(correr):              # v3.33: con tu permiso, lo instalo DE VERDAD en el sistema
+                paso("Instalando el .deb en el sistema (con tu permiso)…")
+                try:
+                    correr(["sudo", "-n", "dpkg", "-i", destino], timeout=600)
+                    correr(["sudo", "-n", "apt-get", "-f", "install", "-y"], timeout=1800)  # arregla dependencias
+                    rcp, pkg = correr(["dpkg-deb", "-f", destino, "Package"], timeout=60)
+                    pkg = pkg.strip() if rcp == 0 else ""
+                except Exception as e:               # noqa: BLE001
+                    return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta,
+                            "mensaje": f"No pude instalar {nombre}: {e}"}
+                return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [pkg] if pkg else None,
+                        "carpeta": carpeta, "dependencias": {"tiene": False},
+                        "mensaje": (f"{nombre} instalado del sistema (con el permiso que me diste, sin pedirte la "
+                                    "contraseña). Lo tienes en el escritorio.")}
             try:
                 rc, _salida = correr(["dpkg-deb", "-x", destino, raiz], timeout=300)
             except Exception:                        # noqa: BLE001 - no está dpkg-deb
                 rc = 127
             if rc != 0:
                 return {"ok": False, "admin": True, "nombre": nombre, "lanzar": None, "carpeta": carpeta,
-                        "mensaje": (f"Descargué {nombre} (.deb), pero para instalarlo del todo necesito administrador. "
+                        "mensaje": (f"Descargué {nombre} (.deb), pero para instalarlo del todo hace falta administrador. "
                                     "Ábreme la Terminal y escribe  sudo dpkg -i " + destino + "  (si se queja de "
-                                    "dependencias, luego  sudo apt -f install ). Te pedirá TU contraseña.")}
+                                    "dependencias, luego  sudo apt -f install ). Te pedirá TU contraseña. " +
+                                    _PERMISO_UNA_VEZ)}
         else:
             if not _extraer(destino, raiz):
                 import shutil

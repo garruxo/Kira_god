@@ -103,6 +103,8 @@ ok(r["ok"] and r["lanzar"] and r["lanzar"][0].endswith(os.path.join("usr", "bin"
 
 # ---------------- instalar: .deb (dpkg-deb -x, sin administrador) ----------------
 def correr_deb(args, cwd=None, timeout=0):
+    if args[:3] == ["sudo", "-n", "true"]:          # v3.33: esta prueba es el caso SIN permiso de admin
+        return 1, ""
     raiz = args[-1]
     os.makedirs(os.path.join(raiz, "usr", "bin"), exist_ok=True)
     binp = os.path.join(raiz, "usr", "bin", "paquete")

@@ -467,7 +467,7 @@ var FAKE = {
       {titulo:"Python (lenguaje de programación)",url:"https://es.wikipedia.org/wiki/Python",dominio:"es.wikipedia.org",resumen:"Lenguaje de programación de alto nivel, interpretado y con una sintaxis muy legible."},
       {titulo:"Welcome to Python.org",url:"https://www.python.org/",dominio:"python.org",resumen:"La web oficial del lenguaje: descargas, documentación y noticias."},
       {titulo:"El tutorial de Python",url:"https://docs.python.org/es/3/tutorial/",dominio:"docs.python.org",resumen:"Tutorial oficial en español, desde lo más básico hasta clases y módulos."}]}); }, 500); }); },
-  leer_web:function(u){ return Promise.resolve({ok:true,titulo:"Python (lenguaje de programación)",url:u,dominio:"es.wikipedia.org",codigos:0,
+  leer_web:function(u){ return Promise.resolve({ok:true,titulo:"Python (lenguaje de programación)",url:u,dominio:"es.wikipedia.org",codigos:0,imagenes:1,
       via:"Buscado desde mi máquina virtual (por su puerta, sin ver tu casa)",
       texto:"(ejemplo) Aquí sale el texto de la página, limpio: sin anuncios, sin menús y sin nada que se ejecute.\n\nPulsa «Resúmelo» y te lo resumo con mi voz, o «Guárdalo en mi baúl» y lo aprendo.",
       total_enlaces:3,enlaces:[{url:"https://docs.python.org/es/3/tutorial/introduction.html",texto:"Una introducción informal a Python",tema:true},
@@ -979,6 +979,7 @@ function leerUrl(url, dom){
       b.innerHTML='<div class="botones">'+atras+'<button class="b prin" id="busResume">Resúmelo</button>'+
         '<button class="b" id="busGuarda">Guárdalo en mi baúl</button>'+
         '<button class="b" id="busInstala">⤓ Descargar e instalar</button>'+
+        (p.imagenes?'<button class="b" id="busImagen">Leer la imagen</button>':'')+
         ((p.enlaces||[]).length?'<button class="b" id="busEnlaces">Estúdiala entera (todos sus enlaces)</button>':'')+'</div>'+
         '<div id="busInstResult" class="texto" style="margin:8px 0;color:var(--cian);display:none"></div>'+
         '<div class="lectura"><h3>'+esc(p.titulo)+'</h3><div class="dom">'+esc(p.url)+' · '+esc(p.via)+
@@ -990,6 +991,7 @@ function leerUrl(url, dom){
         this.disabled=true;
         llama("instalar_web", p.url).then(function(msg){ if(r) r.textContent=msg||"Listo."; refrescaBarra(); })
           .catch(function(e){ if(r) r.textContent="No pude instalarla: "+e; }); };
+      if($("busImagen")) $("busImagen").onclick=function(){ enviar("lee la imagen de esta página: "+p.url); };
       if($("busEnlaces")) $("busEnlaces").onclick=function(){ enviar("estudia esta página y sus enlaces: "+p.url); };
       [].forEach.call(b.querySelectorAll(".enl"), function(e){ e.onclick=function(){
         busq.pila=busq.pila||[]; busq.pila.push([p.url, p.dominio]); leerUrl(e.dataset.u, ""); }; });

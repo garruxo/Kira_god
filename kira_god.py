@@ -1687,12 +1687,81 @@ class KiraGodCore:
         except Exception:
             return False, "Eso solo funciona en el móvil."
 
+    def texto_de_imagen(self, pag, tema=""):
+        """v3.33: baja la imagen más relevante del artículo y LEE su texto con OCR (Tesseract). Devuelve el texto (o '').
+        HONESTO: lee las LETRAS de la imagen (capturas, código, tablas, figuras con texto); no describe una foto/escena
+        (para eso harían falta los «ojos»). La imagen se BORRA tras leerla (privacidad)."""
+        import internet_kira as ik_
+        url = ik_.elegir_imagen(pag, tema)
+        if not url or not self._lector_listo():
+            return ""
+        try:
+            datos = self.internet.traer_imagen(url)
+        except Exception:                                     # noqa: BLE001 - sin internet / no es imagen
+            return ""
+        import os as _os
+        import tempfile
+        ext = _os.path.splitext(url.split("?")[0])[1].lower()
+        ruta = _os.path.join(tempfile.gettempdir(),
+                             "kira_img_%d%s" % (abs(hash(url)) % 10 ** 9, ext if ext in ik_._IMG_EXT else ".png"))
+        try:
+            with open(ruta, "wb") as f:
+                f.write(datos)
+            txt = self.lector.leer(ruta) or ""
+        except Exception:                                     # noqa: BLE001
+            txt = ""
+        finally:
+            try:
+                _os.remove(ruta)                              # se borra tras leerla
+            except OSError:
+                pass
+        return " ".join(str(txt).split())[:3000]
+
+    def leer_imagen_pagina(self, url=None):
+        """«lee la imagen de esta página»: lee con OCR la imagen del artículo (la última leída, o `url`) y GUARDA su
+        texto en el baúl, para que quede para instalar/implementar/mejorar. Devuelve un texto para enseñar."""
+        import internet_kira as ik_
+        pag = None
+        if url:
+            try:
+                pag = self.internet.leer(url)
+            except Exception as e:                            # noqa: BLE001
+                return f"[x] No pude abrir la página: {e}"
+        else:
+            pag = getattr(self.internet, "pagina", None)
+        if not pag:
+            return "Primero abre una página (o un resultado del Buscador) y dime «lee la imagen de esta página»."
+        if not pag.get("imagenes"):
+            return ("No veo ninguna imagen de contenido en esa página (solo iconos/adornos, o las monta con "
+                    "JavaScript y no las alcanzo).")
+        if not self._lector_listo():
+            return ("Para leer imágenes necesito el lector (Tesseract). En KiraOS suele estar; en el móvil, "
+                    "descárgalo una vez en «Capturas».")
+        t = self.texto_de_imagen(pag)
+        if len(t) < 3:
+            return "Miré la imagen pero no encontré texto que leer (puede ser una foto sin letras)."
+        rec = getattr(self, "recuerdos", None)
+        if rec is not None:
+            rec.guardar("Texto de una imagen de " + pag.get("url", "") + ": " + t,
+                        tema=(pag.get("titulo") or "imagen")[:80], fuente=pag.get("url", "internet"))
+        return "Lo que pone la imagen del artículo (lo guardo para lo que haga falta):\n\n" + t
+
     def resumir_pagina(self, pag, tema=""):
         """Resumen de una página con el cerebro que haya (Kira o Claude). Sin cerebro: el principio del texto.
         Devuelve (texto, con_cerebro)."""
         import cerebro_ia_kira
+        import internet_kira as ik_
         clave = self._clave_para("general")
         texto = pag.get("texto", "")
+        try:                                                  # v3.33: si el artículo remite a una imagen, la LEE y
+            if pag.get("imagenes") and ik_.MENCIONA_IMAGEN.search(texto[:4000]) and not pag.get("_img_vista"):
+                t_img = self.texto_de_imagen(pag, tema)       # su texto entra en lo que aprende/guarda
+                pag["_img_vista"] = True
+                if len(t_img) > 10:
+                    texto = texto + "\n\n[Texto leído en la imagen del artículo: " + t_img + "]"
+                    pag["texto"] = texto
+        except Exception:                                     # noqa: BLE001 - leer la imagen nunca rompe la lectura
+            pass
         if clave:
             tope = 3000 if clave == cerebro_ia_kira.LOCAL else 12000
             try:
@@ -4095,6 +4164,9 @@ class KiraGodCore:
             return self._orden_pensar(cmd_lower)
         elif __import__("video_kira").es_orden(command):                     # aprende de un vídeo de YouTube
             return self.aprender_de_video(command)
+        elif getattr(self, "internet", None) is not None and __import__("internet_kira").es_orden_leer_imagen(command):
+            oli = __import__("internet_kira").es_orden_leer_imagen(command)   # v3.33: lee la imagen de la página
+            return self.leer_imagen_pagina(oli if isinstance(oli, str) else None)
         elif getattr(self, "internet", None) is not None and self.internet.es_orden(command):
             return self._orden_internet(command)
         elif re.match(r"^(?:estudia|aprende sola|deja de aprender|plan de estudio|qu[eé] has aprendido|estudio)\b", cmd_lower):

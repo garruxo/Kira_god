@@ -661,7 +661,7 @@ class EscritorioMixin:
         return {"ok": True, "titulo": pag.get("titulo", ""), "url": pag.get("url", url), "dominio": ik.dominio(url),
                 "texto": str(pag.get("texto", ""))[:30000], "codigos": len(pag.get("codigos") or []),
                 "tipo": pag.get("tipo", "web"), "via": self._via(), "enlaces": enlaces,
-                "total_enlaces": len(todos)}
+                "total_enlaces": len(todos), "imagenes": len(pag.get("imagenes") or [])}      # v3.33
 
     # ---------- las demás ventanas (texto + botones) ----------
     def app(self, nombre):

@@ -189,8 +189,16 @@ class _HtmlATexto(HTMLParser):
         self.partes, self.codigos, self.titulo = [], [], ""
         self._fuera, self._pre, self._en_titulo, self._codigo = 0, 0, False, []
         self.enlaces, self._enlace = [], None               # v3.01: [(href, texto)] del CONTENIDO (no menús)
+        self.imagenes = []                                  # v3.33: [(src, alt)] de las imágenes del CONTENIDO
 
     def handle_starttag(self, tag, attrs):
+        if tag == "img" and not self._fuera and len(self.imagenes) < 60:   # v3.33: una imagen del artículo
+            d = dict(attrs)
+            src = (d.get("src") or d.get("data-src") or d.get("data-original") or d.get("data-lazy-src") or "").strip()
+            if not src and d.get("srcset"):
+                src = d["srcset"].split(",")[0].strip().split(" ")[0]
+            if src:
+                self.imagenes.append((src, d.get("alt") or ""))
         if tag == "a" and not self._fuera and len(self.enlaces) < MAX_ENLACES_CRUDOS:
             href = dict(attrs).get("href") or ""
             if href:
@@ -377,6 +385,83 @@ def enlaces_de(crudos, base):
         if len(salida) >= MAX_ENLACES:
             break
     return salida
+
+
+# ---------- IMÁGENES de una página (v3.33): para VER y LEER la imagen de un artículo ----------
+_IMG_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
+_IMG_NO = re.compile(r"(?:^|[/._-])(?:logo|icono?|favicon|sprite|avatar|emoji|badge|boton|button|btn|banner|anuncio|"
+                     r"ad|ads|advert|pixel|spacer|blank|loading|spinner|flecha|arrow|bullet|placeholder|1x1|"
+                     r"transparent|share|social|rss|feed)(?:[/._-]|$)", re.I)
+
+
+def imagenes_de(crudos, base):
+    """Las imágenes de CONTENIDO de una página: [{'url','alt'}], absolutas y sin repetir, saltando iconos, logos,
+    anuncios y píxeles de seguimiento (queremos fotos, capturas y figuras, no adornos). Sin .svg (suelen ser iconos)."""
+    vistos, salida = set(), []
+    for src, alt in crudos:
+        src = str(src or "").strip()
+        if not src or src.startswith("data:"):
+            continue
+        try:
+            url = urllib.parse.urldefrag(urllib.parse.urljoin(base, src))[0]
+            p = urllib.parse.urlsplit(url)
+        except ValueError:
+            continue
+        if p.scheme not in ("http", "https") or not p.netloc:
+            continue
+        ruta = p.path.lower()
+        if not ruta.endswith(_IMG_EXT) or _IMG_NO.search(ruta):
+            continue
+        if url in vistos:
+            continue
+        vistos.add(url)
+        salida.append({"url": url, "alt": " ".join(str(alt or "").split())[:200]})
+        if len(salida) >= 30:
+            break
+    return salida
+
+
+def elegir_imagen(pag, tema=""):
+    """La imagen más relevante del artículo para leer con OCR: la que su texto (alt) o su nombre de archivo tiene más
+    que ver con el tema; si no hay tema, la que tiene descripción (alt). Devuelve la URL, o None."""
+    imgs = pag.get("imagenes") or []
+    if not imgs:
+        return None
+    claves = set(_palabras(tema)) or set(_palabras(pag.get("titulo", "")))
+
+    def punt(im):
+        pal = set(_palabras(im.get("alt", "") + " " + urllib.parse.unquote(urllib.parse.urlsplit(im["url"]).path)
+                            .replace("-", " ").replace("_", " ").replace("/", " ")))
+        return len(claves & pal) * 3 + (1 if im.get("alt") else 0)
+
+    mejor = max(imgs, key=punt)
+    return mejor["url"]
+
+
+MENCIONA_IMAGEN = re.compile(r"\b(?:en\s+la\s+imagen|la\s+imagen\s+(?:de\s+)?(?:arriba|abajo|siguiente|anterior)|"
+                             r"la\s+figura|figura\s+\d|captura(?:\s+de\s+pantalla)?|screenshot|como\s+se\s+(?:ve|muestra|aprecia)|"
+                             r"mira\s+la\s+(?:imagen|foto)|en\s+la\s+foto|imagen\s+adjunta|tal\s+como\s+(?:aparece|se\s+ve))\b",
+                             re.I)
+
+
+def es_orden_leer_imagen(texto):
+    """¿«lee/analiza la imagen (de esta página/web/artículo)», «qué pone en la imagen», «lee la foto del artículo»?
+    Devuelve la URL si viene en la orden, True si no, o None. NO se mete con «lee la pantalla / la última captura»
+    (eso son los sentidos del portátil)."""
+    t = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", str(texto or ""), flags=re.I).strip()
+    low = t.lower()
+    if "pantalla" in low:
+        return None
+    verbo = re.search(r"\b(lee|leer|l[eé]eme|analiza|describe|interpreta|qu[eé]\s+pone|qu[eé]\s+dice)\b", low)
+    cosa = re.search(r"\b(im[aá]gen(?:es)?|foto|fotos|figura|captura)\b", low)
+    if not (verbo and cosa):
+        return None
+    ctx = re.search(r"\b(?:de\s+)?(?:esta\s+|esa\s+|la\s+)?(?:p[aá]gina|web|art[ií]culo|not[ií]cia|entrada|aqu[ií])\b", low)
+    directo = re.search(r"\b(?:la|esta|esa)\s+(?:im[aá]gen|foto|figura)\b", low)
+    if not (ctx or directo):
+        return None
+    m = re.search(r"https?://\S+", t)
+    return m.group(0) if m else True
 
 
 def elegir_enlaces(pag, tema="", n=3, ya=(), todos=False):
@@ -731,6 +816,17 @@ class Internet:
             return ("https://raw.githubusercontent.com/" + "/".join([trozos[0], trozos[1]] + trozos[3:]), {})
         return None
 
+    def traer_imagen(self, url, maximo=6_000_000):
+        """Baja los BYTES de una imagen (por el mismo camino que las páginas: en KiraOS, por la máquina, sin ver tu
+        casa). Lanza InternetError si no parece una imagen. Para LEERLA con OCR."""
+        crudo, tipo, _f = self._pedir(url, maximo=maximo)
+        magia = crudo[:4]
+        es_img = ("image" in (tipo or "")) or magia[:3] == b"\xff\xd8\xff" or magia[:4] == b"\x89PNG" or \
+            magia[:3] == b"GIF" or (magia[:4] == b"RIFF" and b"WEBP" in crudo[:16]) or magia[:2] == b"BM"
+        if not es_img:
+            raise InternetError("Eso no parece una imagen.")
+        return crudo
+
     def leer(self, url):
         """{'url', 'titulo', 'texto', 'codigos', 'tipo'} de una página (o PDF, o código)."""
         if not re.match(r"^https?://", str(url or "")):
@@ -760,7 +856,8 @@ class Internet:
             if len(texto) < 30 and not codigos:
                 raise InternetError("Esa página no tiene texto que pueda leer (puede que necesite el navegador).")
             pag = {"url": url, "titulo": titulo or dominio(url), "texto": texto, "codigos": codigos, "tipo": "web",
-                   "enlaces": enlaces_de(partes.enlaces, final or url)}
+                   "enlaces": enlaces_de(partes.enlaces, final or url),
+                   "imagenes": imagenes_de(partes.imagenes, final or url)}        # v3.33: fotos/capturas del artículo
         elif tipo.startswith(("text/", "application/json", "application/javascript")) or gh or \
                 ext in (".py", ".js", ".md", ".txt", ".json", ".c", ".java", ".kt", ".sh", ".css"):
             texto = self._texto(crudo, tipo)[:MAX_TEXTO]

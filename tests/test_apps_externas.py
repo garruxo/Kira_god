@@ -71,9 +71,13 @@ def bajar_falso(url, destino):
 r2 = aex.instalar("https://x.com/Krita.AppImage", base=BASE, bajar=bajar_falso)
 ok(r2["ok"] and r2["lanzar"] == [os.path.join(r2["carpeta"], "Krita.AppImage")], "descarga un AppImage y lo deja ejecutable")
 
-r3 = aex.instalar("gimp", base=BASE)
+def _sin_admin(args, cwd=None, timeout=0):          # v3.33: fuerza «sin permiso de admin» para esta prueba
+    return (1, "") if args[:3] == ["sudo", "-n", "true"] else (0, "")
+
+
+r3 = aex.instalar("gimp", base=BASE, correr=_sin_admin)
 ok(not r3["ok"] and r3["admin"] and "contraseña" in r3["mensaje"].lower() and "apt" in r3["mensaje"].lower(),
-   "un programa del sistema: NO lo instala sola, pide la Terminal con tu contraseña")
+   "un programa del sistema: sin permiso, NO lo instala sola, pide la Terminal con tu contraseña")
 
 # lanzar (con un «correr» de mentira)
 lanzado = []

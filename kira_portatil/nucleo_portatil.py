@@ -477,6 +477,10 @@ def ejecutar(core, orden, paso):
     if wk.orden_wifi(o) is not None:              # v2.88: la WiFi del portátil (la clave, solo en el portátil)
         paso(0.2, "Miro la WiFi del portátil…")
         return {"texto": wk.responder(o)}
+    oli = net.es_orden_leer_imagen(o)             # v3.33: «lee la imagen de esta página» (OCR de la imagen del artículo)
+    if oli:
+        paso(0.3, "Leo la imagen del artículo…")
+        return {"texto": core.leer_imagen_pagina(oli if isinstance(oli, str) else None)}
     so = sp.es_orden(o)                           # v2.93: los SENTIDOS del portátil (cámara y pantalla, con OCR)
     if so:
         tipo, describir = so
