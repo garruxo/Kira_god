@@ -797,8 +797,21 @@ class KiraGodCore:
         usuario = f"Módulos ya instalados: {existentes}\nMejora pedida: {pedido}" + (f"\n{extra}" if extra else "") + \
             (f"\n\n{saber}" if saber else "")
         import ventanas_kira as vk                       # v3.19: si pide una ventana/botón/sección, el ejemplo bueno
-        sistema = (mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA) + \
-            vk.ejemplo_para_cerebro(pedido.split("\n\n")[0])
+        ejv = vk.ejemplo_para_cerebro(pedido.split("\n\n")[0])
+        # v3.30: si es CAMBIAR un módulo que ya existe, pide un PARCHE (no reescribir todo; más rápido y se corta menos)
+        import parche_kira as pk_
+        pc = pk_.codigo_de_pedido(pedido)
+        if pc is not None:
+            nombre0, codigo_actual = pc
+            texto_p = self._llamar_api(clave, pk_.sistema_parche(local) + ejv, f"Mejora pedida: {pedido}", codigo=True)
+            nuevo = pk_.aplicar_seguro(codigo_actual, texto_p)
+            if nuevo and not mi.precomprobar(nuevo):     # el parche encajó y el resultado es un módulo válido
+                return (nombre0 or pk_.nombre_de(codigo_actual)), nuevo
+            try:                                          # ¿el cerebro escribió el módulo entero en vez del parche?
+                return mi.extraer_modulo(texto_p)
+            except ValueError:
+                pass                                      # ni parche ni módulo: reescribe entero (abajo)
+        sistema = (mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA) + ejv
         texto = self._llamar_api(clave, sistema, usuario, codigo=True)
         return mi.extraer_modulo(texto)
 
