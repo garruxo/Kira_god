@@ -24,7 +24,7 @@ for m in ("registrar_actividad", "reanudar_pensar", "pensar_sola", "procesar_ord
     ok(m in metodos, f"kira_god define {m}")
 
 # procesar_orden marca actividad del dueño (para pausar el pensar y atenderle)
-po = next(node for node in ast.walk(arb) if isinstance(node, ast.FunctionDef) and node.name == "procesar_orden")
+po = next(node for node in ast.walk(arb) if isinstance(node, ast.FunctionDef) and node.name == "_procesar_orden")
 cuerpo_po = ast.get_source_segment(src_g, po) or ""
 ok("registrar_actividad()" in cuerpo_po, "procesar_orden registra actividad al recibir una orden")
 

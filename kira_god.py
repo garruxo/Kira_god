@@ -33,6 +33,10 @@ logger = logging.getLogger("KiraGodCore")
 
 MODELO_POR_DEFECTO = "claude-sonnet-5-5"
 NOMBRE_OK = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
+# v3.27: lo que piensa/estudia cuando no tiene tareas, en el orden que pidió el dueño. Sobre esto se pregunta los 10
+# tipos (cómo funciona, para qué, qué puedo mejorar, cómo incorporarlo a mi sistema, cómo programarlo en Python/Kivy…).
+SISTEMAS_PROPIOS = ["mi entorno", "mi propio sistema (KiraOS)", "el sistema Xubuntu (Linux)",
+                    "Android y Kivy", "el lenguaje Python"]
 
 
 def _dir_datos():
@@ -2451,8 +2455,13 @@ class KiraGodCore:
                         temas.append(t)
             except Exception:
                 temas = []
+        # v3.27: cuando no tiene tareas, sus pensamientos son sobre SUS SISTEMAS, en el orden que pidió el dueño:
+        # su entorno, su propio sistema (KiraOS), Xubuntu, Android/Kivy y Python. Van PRIMERO.
+        sis = [s for s in SISTEMAS_PROPIOS if s.lower() not in vistos]
+        for s in sis:
+            vistos.add(s.lower())
         base = [s for s in pn.SEMILLAS if s.lower() not in vistos]
-        return (temas + base) if temas else list(pn.SEMILLAS)
+        return sis + temas + base
 
     def pensar_una(self, estudiar=True):
         """Un pensamiento: se hace una pregunta nueva (sobre lo que ha ESTUDIADO si tiene baúl), se responde (estudia
@@ -2620,7 +2629,10 @@ class KiraGodCore:
             return
         try:
             import investigar_kira as iv
-            iv.anadir(self.dir, f"experimenta con {tema} y prográmame una mejora o una función nueva para Kira")
+            # «programa» (no «app»): experimenta → lo que funcione queda en Soluciones y TÚ eliges destino (App móvil/
+            # portátil, mejora de KiraOS o de Kira móvil). Así no fabrica nada solo.
+            iv.anadir(self.dir, f"experimenta con {tema} y prográmame una mejora o una función nueva para KiraOS o para "
+                                "Kira móvil")
         except Exception:
             pass
         # NO arranco el hilo de pensar aquí: lo coge el pensar que ya está en marcha (estudiar_a_fondo lo enciende, y la
@@ -3232,7 +3244,37 @@ class KiraGodCore:
 
     def registrar_actividad(self):
         """El dueño ha dado una orden: Kira le ATIENDE. Pausa el pensar un rato (vuelve sola tras `_inactivo_seg`)."""
+        # v3.27: ¿estaba pensando sola CUANDO llegó tu orden? (para retomar enseguida al acabar, solo si ya pensaba).
+        self._pensaba_al_ordenar = bool(getattr(self, "_pensar_on", False))
         self._ultima_actividad = time.time()
+
+    def reanudar_pensar_ya(self):
+        """v3.27: si estaba pensando sola, que RETOME el pensar JUSTO al acabar tu orden (sin esperar los 5 min de
+        inactividad). Solo si YA pensaba cuando llegó la orden (no si la propia orden encendió el pensar, p. ej.
+        «estudia X»). Si mandas otra orden enseguida, `registrar_actividad` vuelve a pausarla para atenderte."""
+        if getattr(self, "_pensar_on", False) and getattr(self, "_pensaba_al_ordenar", False):
+            self._ultima_actividad = 0
+
+    def _orden_superadmin(self, cmd_lower):
+        """v3.27: el dueño eligió «superadministrador SOLO cuando yo lo pida». Si pide que Kira sea administrador/root,
+        se lo explica con claridad en vez de intentar darse permisos sola. Devuelve el texto, o None si no es eso."""
+        import re as _re
+        sin = "".join(c for c in __import__("unicodedata").normalize("NFD", cmd_lower) if _re.match(r"[^̀-ͯ]", c))
+        pide = (_re.search(r"\b(super\s*admin\w*|superusuari\w*)\b", sin)
+                or _re.search(r"\b(root|sudo)\b", sin)
+                or _re.search(r"(modo|permisos?|poderes?|control)\s+(de\s+)?(admin\w*|root)", sin)
+                or _re.search(r"\b(se|ser|seas|hazte|ponte|eres|conviertete|actua)\b.*\badmin\w*\b", sin))
+        if not pide:
+            return None
+        if getattr(self, "es_kiraos", False):
+            return ("Entendido: seré administrador del portátil SOLO cuando tú me lo pidas. Mientras pienso o "
+                    "experimento sola NUNCA toco el sistema (así, si mi cerebro se equivoca, no puede estropear "
+                    "Xubuntu). Para algo que necesite administrador (instalar un programa, cambiar algo del sistema), "
+                    "ábreme la Terminal y escríbemelo: cuando haga falta, Xubuntu te pedirá TU contraseña y la escribes "
+                    "tú. Y meter cosas en mi código sigue como siempre: laboratorio + tus dos toques.")
+        return ("Eso es del portátil (KiraOS), no del móvil: aquí Android no me da permisos de administrador. En el "
+                "portátil seré administrador solo cuando tú me lo pidas, en la Terminal y con tu contraseña; sola nunca "
+                "toco el sistema.")
 
     def reanudar_pensar(self):
         """Al abrir la app: si el dueño dejó el pensar encendido, lo reanuda (suave: espera el rato de inactividad,
@@ -3832,7 +3874,16 @@ class KiraGodCore:
 
     # ---------- núcleo ----------
     def procesar_orden(self, command: str) -> str:
-        """Núcleo universal de ejecución rápida y control."""
+        """Núcleo universal. v3.27: al TERMINAR tu orden, si estaba pensando sola, retoma el pensar enseguida."""
+        try:
+            return self._procesar_orden(command)
+        finally:
+            try:
+                self.reanudar_pensar_ya()
+            except Exception:
+                pass
+
+    def _procesar_orden(self, command: str) -> str:
         self.registrar_actividad()      # has dado una orden: te atiendo y pauso el pensar (vuelve solo tras 5 min)
         cmd_lower = command.lower().strip()
 
@@ -3863,6 +3914,9 @@ class KiraGodCore:
             _qi = None
         if _qi:                                        # v3.20: «implementa la receta X» / «usa la solución X en Kira»
             return self._orden_implementar(_qi, command)
+        r = self._orden_superadmin(cmd_lower)          # v3.27: «sé superadministrador / modo root»
+        if r is not None:
+            return r
         # La clave de API nunca pasa por el búfer ni por el log
         if cmd_lower.startswith("config clave:"):
             clave = command.split(":", 1)[1].strip()

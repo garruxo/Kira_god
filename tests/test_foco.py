@@ -56,7 +56,7 @@ ok("self.enfocar(" in cuerpo_op, "voz: enfocar un tema concreto")
 ok("self.dejar_foco()" in cuerpo_op, "voz: déjalo para otro día")
 ok("self.retomar_foco(" in cuerpo_op, "voz: retomar el foco")
 # y el dispatch de procesar_orden deja pasar esas frases hacia _orden_pensar
-po = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "procesar_orden")
+po = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "_procesar_orden")
 cuerpo_po = ast.get_source_segment(src_g, po) or ""
 for palabra in ("enf[oó]cate", "resu[eé]lveme", "d[eé]jalo", "retoma"):
     ok(palabra in cuerpo_po, f"el dispatch deja pasar «{palabra}»")

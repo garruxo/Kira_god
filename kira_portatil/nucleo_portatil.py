@@ -526,8 +526,9 @@ class Trabajos:
     ENCOLAR varias: un solo obrero las va sacando de una en una. TUS órdenes van DELANTE de las de fondo. Se puede
     PAUSAR (deja de sacar nuevas; la de ahora sigue hasta que la PARES con cancelar) y SEGUIR."""
 
-    def __init__(self, hacer, guardar=20):
+    def __init__(self, hacer, guardar=20, al_libre=None):
         self._hacer = hacer            # hacer(orden, paso) -> dict
+        self._al_libre = al_libre      # v3.27: se llama cuando la cola se queda vacía (para retomar el pensar)
         self._lock = threading.Lock()
         self._hay = threading.Condition(self._lock)
         self.tareas = {}
@@ -633,6 +634,13 @@ class Trabajos:
                     self.actual = None
                 if t.get("borrar_al_acabar"):
                     self.tareas.pop(tid, None)
+                libre = not self.pausada and not any(
+                    not self.tareas.get(c, {}).get("retenida") for c in self.cola)
+            if libre and self._al_libre:          # v3.27: cola vacía → retoma el pensar enseguida
+                try:
+                    self._al_libre()
+                except Exception:
+                    pass
 
     @staticmethod
     def _cerrar(t):
@@ -729,8 +737,15 @@ class Nucleo:
         self.con_maquina = con_maquina
         self.core = self._crear()
         self._enganchar()
-        self.trabajos = Trabajos(self._hacer)
+        self.trabajos = Trabajos(self._hacer, al_libre=self._al_quedar_libre)
         self._lock_sinc = threading.Lock()
+
+    def _al_quedar_libre(self):
+        """v3.27: al acabar tu orden y quedar la cola vacía, si estaba pensando sola, que retome el pensar enseguida."""
+        try:
+            self.core.reanudar_pensar_ya()
+        except Exception:
+            pass
 
     def _hacer(self, orden, paso):
         try:
