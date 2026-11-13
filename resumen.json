@@ -1,0 +1,319 @@
+{
+ "pintor": {
+  "descarga_rapido": {
+   "ok": true,
+   "segundos": 2.0,
+   "bytes": 682847200,
+   "sha_ok": true
+  },
+  "descarga_realista": {
+   "ok": true,
+   "segundos": 27.4,
+   "bytes": 1838924448,
+   "sha_ok": true
+  },
+  "descarga_ampliador": {
+   "ok": true,
+   "segundos": 0.4,
+   "bytes": 67040989
+  },
+  "pintar_0_rapido_cuadrada": {
+   "ok": true,
+   "segundos": 19.7,
+   "prompt": "a lighthouse on a rocky island at sunset, realistic photo, natural light",
+   "imagen": "0_rapido_cuadrada.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 39
+  },
+  "pintar_1_realista_cuadrada": {
+   "ok": true,
+   "segundos": 74.1,
+   "prompt": "a lighthouse on a rocky island at sunset, realistic photo, natural light",
+   "imagen": "1_realista_cuadrada.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 48
+  },
+  "pintar_2_realista_vertical": {
+   "ok": true,
+   "segundos": 79.6,
+   "prompt": "cat black sleeping in sofá red, realistic photo, natural light, sharp focus, high detail, 35mm photograph",
+   "imagen": "2_realista_vertical.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 48
+  },
+  "pintar_3_rapido_horizontal": {
+   "ok": true,
+   "segundos": 18.2,
+   "prompt": "acuarela of velero in sea, watercolor painting, soft colors, paper texture",
+   "imagen": "3_rapido_horizontal.png",
+   "progreso": [
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.04 Cargando el pincel en la memoria…",
+    "0.98 Dando los últimos toques…",
+    "0.98 Entendiendo lo que me pides…",
+    "0.99 Guardando…",
+    "1.00 ¡Lista!"
+   ],
+   "pasos_vistos": 39
+  },
+  "log_final": "ng in eps-prediction mode\n[INFO   ] image.cpp:814  - generate_image 640x448\n[INFO   ] denoiser.hpp:1129 - get_sigmas with discrete scheduler\n[INFO   ] request.cpp:420  - sampling using Euler A method\n[INFO   ] ggml_graph_cut.cpp:1032 - clip build cached graph cut plan done (taking 1 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 73 tensors in 1 files (158.44 MB), taking 0.00s\n\r  |#                                                 | 3/196 - 0.00MB/s\u001b[K\r  |##################################################| 196/196 - 1.63MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n[INFO   ] image.cpp:529  - get_learned_condition completed, taking 0.39s\n[INFO   ] image.cpp:866  - generating image: 1/1 - seed 42\n[INFO   ] ggml_graph_cut.cpp:1032 - unet build cached graph cut plan done (taking 1 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 115 tensors in 1 files (487.40 MB), taking 0.00s\n\r  |##                                                | 11/280 - 0.00MB/s\u001b[K\r  |##################################################| 280/280 - 1.60MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n\r  |==================================================| 1/1 - 7.42s/it\u001b[K\n[INFO   ] image.cpp:899  - sampling completed, taking 7.43s\n[INFO   ] image.cpp:911  - generating 1 latent images completed, taking 7.43s\n[INFO   ] image.cpp:554  - decoding 1 latents\n[INFO   ] ggml_graph_cut.cpp:1032 - taesd build cached graph cut plan done (taking 0 ms)\n[INFO   ] model_loader.cpp:1023 - memory-mapped 35 tensors in 1 files (2.33 MB), taking 0.00s\n\r  |###############                                   | 19/67 - 0.00MB/s\u001b[K\r  |##################################################| 67/67 - 0.02MB/s\u001b[K\n[INFO   ] model_loader.cpp:1378 - loading tensors completed, taking 0.20s (read: 0.00s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n\r  |======>                                           | 1/8 - 1.49s/it\u001b[K\r  |============>                                     | 2/8 - 1.24s/it\u001b[K\r  |==================>                               | 3/8 - 1.24s/it\u001b[K\r  |=========================>                        | 4/8 - 1.24s/it\u001b[K\r  |===============================>                  | 5/8 - 1.24s/it\u001b[K\r  |=====================================>            | 6/8 - 1.24s/it\u001b[K\r  |===========================================>      | 7/8 - 1.25s/it\u001b[K\r  |==================================================| 8/8 - 1.23s/it\u001b[K\n[INFO   ] image.cpp:620  - latent 1 decoded, taking 10.16s\n[INFO   ] image.cpp:624  - decode_first_stage completed, taking 10.16s\n[INFO   ] image.cpp:1050 - generate_image completed in 17.99s\n[INFO   ] main.cpp:497  - save result image 0 to '/home/runner/work/Kira_god/Kira_god/.pruebas_datos/imagenes/kira_20261113_151324_0042.png' (success)\n[INFO   ] main.cpp:573  - 1/1 images saved\n",
+  "juego_fondo": {
+   "ok": true,
+   "segundos": 79.8,
+   "nota": "escenario",
+   "prompt": "castle, empty scene with no characters, wide view, realistic photo, natural light, highly detailed, game background"
+  },
+  "juego_jugador": {
+   "ok": true,
+   "segundos": 74.2,
+   "nota": "fondo quitado (72 %)",
+   "prompt": "a knight, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "juego_enemigo": {
+   "ok": true,
+   "segundos": 74.0,
+   "nota": "fondo quitado (36 %)",
+   "prompt": "a dragon, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "juego_premio": {
+   "ok": true,
+   "segundos": 73.9,
+   "nota": "fondo quitado (17 %)",
+   "prompt": "a coin, only one, alone, full body, centered, isolated on a pure white background, no shadow, realistic photo, highly detailed, no text"
+  },
+  "ampliar": {
+   "ok": true,
+   "segundos": 600.1
+  }
+ },
+ "internet": {
+  "web": {
+   "ok": true,
+   "n": 8,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "Guía definitiva para plantar tomates en maceta: técnicas, cuidados y ...",
+     "url": "https://www.jardineriaon.com/como-plantar-tomates-en-maceta.html",
+     "resumen": "Descubre cómo plantar tomates en maceta con éxito: variedades, riego, sustrato, cuidados avanzados y soluciones a problemas. ¡Cosecha tomates perfectos!",
+     "fuente": "jardineriaon.com"
+    },
+    {
+     "titulo": "Cómo cultivar tomates en maceta paso a paso (guía completa 2026)",
+     "url": "https://www.jardinesvivos.com/articulos/cultivar-tomates-en-maceta.html",
+     "resumen": "Aprende a cultivar tomates en maceta desde cero. Qué variedad elegir, tamaño de maceta, riego, abono, tutores y cómo conseguir una cosecha abundante.",
+     "fuente": "jardinesvivos.com"
+    },
+    {
+     "titulo": "Historia de la jardinería (Wikipedia)",
+     "fuente": "es.wikipedia.org",
+     "url": "https://es.wikipedia.org/wiki/Historia_de_la_jardiner%C3%ADa",
+     "resumen": "II mandó plantar unos quinientos jardines en honor a Amón. Por otro lado, existen evidencias de que se importaban plantas de otros países, como Siria, Arabia"
+    },
+    {
+     "titulo": "Guía definitiva para plantar tomates en maceta y huerto en casa",
+     "url": "https://www.jardineriaon.com/como-plantar-tomates.html",
+     "resumen": "Aprende cómo plantar tomates en maceta y huerto paso a paso. Consejos de sustrato, riego, variedades y cuidados para una cosecha abundante y sabrosa.",
+     "fuente": "jardineriaon.com"
+    },
+    {
+     "titulo": "¿Cómo plantar tomateras en maceta con éxito? - picaronablog.com",
+     "url": "https://www.picaronablog.com/hortalizas-plantas/tomate/tomate-como-plantar-maceta/",
+     "resumen": "Descubre cómo plantar tomates en maceta fácilmente. Guía paso a paso con consejos sobre sus cuidados esenciales. ¡Empieza tu huerto en casa!",
+     "fuente": "picaronablog.com"
+    },
+    {
+     "titulo": "Cómo cultivar Tomate en maceta y sus cuidados",
+     "url": "https://www.ecojardinmagico.com/como-cultivar-tomate-en-maceta-y-sus-cuidados/",
+     "resumen": "Si quieres plantar tomates pero no tienes el espacio, puedes hacerlo en macetas. Aprende cómo cultivar tomates en macetas y sus cuidados",
+     "fuente": "ecojardinmagico.com"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://www.jardineriaon.com/como-plantar-tomates-en-maceta.html",
+     "tipo": "web",
+     "titulo": "Guía definitiva para plantar tomates en maceta: técnicas, cuidados y trucos avanzados para una cosecha abundante y sabrosa",
+     "letras": 17900,
+     "codigos": 0,
+     "principio": "El cultivo de tomates en maceta es una práctica cada vez más extendida en huertos urbanos, balcones y terrazas, permitiendo a cualquier persona disfrutar del sabor y la frescura de los tomates recién cosechados. A pesar de que el tomate es uno de los cultivos más emblemáticos del huerto, su éxito en"
+    },
+    {
+     "url": "https://www.jardinesvivos.com/articulos/cultivar-tomates-en-maceta.html",
+     "tipo": "web",
+     "titulo": "Cómo Cultivar Tomates en Maceta Paso a Paso (Guía Completa 2026) | Jardines Vivos",
+     "letras": 13086,
+     "codigos": 0,
+     "principio": "🍅\n\nEl tomate es la verdura más cultivada en huertos domésticos — y por buenas razones. Un tomate recién cogido de tu propia planta tiene un sabor completamente diferente al del supermercado. Y la buena noticia es que no necesitas jardín para cultivarlos: en una maceta grande en un balcón soleado pue"
+    },
+    {
+     "url": "https://es.wikipedia.org/wiki/Historia_de_la_jardiner%C3%ADa",
+     "tipo": "web",
+     "titulo": "Historia de la jardinería - Wikipedia, la enciclopedia libre",
+     "letras": 40000,
+     "codigos": 0,
+     "principio": "## Historia de la jardinería\n\nLa historia de la jardinería ha reflejado a lo largo del tiempo el afán del ser humano por modificar la naturaleza acorde a unos patrones estéticos basados en la belleza y la armonía, con el objetivo de conseguir lugares de descanso y sosiego, de retirarse de los proble"
+    }
+   ]
+  },
+  "codigo": {
+   "ok": true,
+   "n": 7,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "lufegue/leecsvconpython (GitHub)",
+     "url": "https://github.com/lufegue/leecsvconpython",
+     "fuente": "github.com",
+     "resumen": "Programa para leer un archivo csv con python y crear un excel · ★ 1 · Python"
+    },
+    {
+     "titulo": "gianmarco-holm/CovidAnalysis_Python_DataAnalyst (GitHub)",
+     "url": "https://github.com/gianmarco-holm/CovidAnalysis_Python_DataAnalyst",
+     "fuente": "github.com",
+     "resumen": "Es un análisis de un data set de las muertes que provoco el COVID, contiene modulo para hacer gráficos y leer archivos CSV. · ★ 1 · Python"
+    },
+    {
+     "titulo": "iamdanielgomez/Lectura_archivos_csv_xlsx_y_json (GitHub)",
+     "url": "https://github.com/iamdanielgomez/Lectura_archivos_csv_xlsx_y_json",
+     "fuente": "github.com",
+     "resumen": "En este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y json. · ★ 0 · Python"
+    },
+    {
+     "titulo": "csv — CSV file reading and writing — documentación de Python - 3.15.2",
+     "url": "https://docs.python.org/es/3/library/csv.html",
+     "resumen": "The csv module implements classes to read and write tabular data in CSV format. It allows programmers to say, «write this data in the format preferred by Excel,» or «read data from this file which was generated by Excel,» without knowing the precise details of the CSV format used by Excel.",
+     "fuente": "docs.python.org"
+    },
+    {
+     "titulo": "Cómo leer un archivo CSV en Python (Módulo, Ejemplos de Pandas) - Guru99",
+     "url": "https://www.guru99.com/es/python-csv.html",
+     "resumen": "En este Python tutorial, aprenderá cómo leer y escribir archivos CSV usando Module & Pandas, Python Módulo CSV y descargue el archivo CSV de muestra para Python.",
+     "fuente": "guru99.com"
+    },
+    {
+     "titulo": "Leer y escribir CSV en Python — Guía práctica con csv y pandas",
+     "url": "https://elpythonista.com/leer-escribir-csv-python",
+     "resumen": "Esta entrada es la guía práctica para leer y escribir CSV en Python sin sufrir. Con la librería estándar csv (cuando quieres control total) y con pandas (cuando quieres velocidad y no reinventar la rueda).",
+     "fuente": "elpythonista.com"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://github.com/lufegue/leecsvconpython",
+     "tipo": "web",
+     "titulo": "GitHub - lufegue/leecsvconpython: Programa para leer un archivo csv con python y crear un excel · GitHub",
+     "letras": 691,
+     "codigos": 0,
+     "principio": "Skip to content\n\nYou signed in with another tab or window. Reload to refresh your session.\nYou signed out in another tab or window. Reload to refresh your session.\nYou switched accounts on another tab or window. Reload to refresh your session.\n\nDismiss alert\n\nBranchesTags\n\nOpen more actions menu\n\n##"
+    },
+    {
+     "url": "https://github.com/gianmarco-holm/CovidAnalysis_Python_DataAnalyst",
+     "tipo": "web",
+     "titulo": "GitHub - gianmarco-holm/CovidAnalysis_Python_DataAnalyst: Es un análisis de un data set de las muertes que provoco el COVID, contiene modulo para hacer gráficos y leer archivos CSV. · GitHub",
+     "letras": 1005,
+     "codigos": 0,
+     "principio": "Skip to content\n\nYou signed in with another tab or window. Reload to refresh your session.\nYou signed out in another tab or window. Reload to refresh your session.\nYou switched accounts on another tab or window. Reload to refresh your session.\n\nDismiss alert\n\nBranchesTags\n\nOpen more actions menu\n\n##"
+    },
+    {
+     "url": "https://github.com/iamdanielgomez/Lectura_archivos_csv_xlsx_y_json",
+     "tipo": "texto",
+     "titulo": "Lectura_archivos_csv_xlsx_y_json",
+     "letras": 584,
+     "codigos": 0,
+     "principio": "# Lectura_archivos_csv_xlsx_y_json\nEn este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y json.\nEn este proyecto se desarrollo un codigo para poder leer archivos que estan dentro de un proyecto de python, ya sea: csv, xlsx y j"
+    }
+   ]
+  },
+  "docs": {
+   "ok": true,
+   "n": 8,
+   "avisos": [],
+   "resultados": [
+    {
+     "titulo": "PDF Tema 6. La fotosíntesis - selectivitat.io",
+     "url": "https://selectivitat.io/wp-content/uploads/2021/04/Tema-6.-La-fotosintesis.pdf",
+     "resumen": "Las plantas realizan la fotosíntesis con el objeto de almacenar la energía solar en compuestos orgánicos altamente energéticos; por el contrario la fotorrespiración consume esa energía. La causa de este proceso de fotorrespiración es la acción de una enzima que poseen las plantas.",
+     "fuente": "selectivitat.io"
+    },
+    {
+     "titulo": "Apuntes de Fotosíntesis | Apuntes PreUniversitarios | uDocz",
+     "url": "https://www.udocz.com/apuntes/1531496/apuntes-de-fotosintesis",
+     "resumen": "¡Descarga gratis el PDF Apuntes de Fotosíntesis! Encuentra los mejores documentos en uDocz y ayuda a miles cómo tú. Subido por Apuntes PreUniversitarios.",
+     "fuente": "udocz.com"
+    },
+    {
+     "titulo": "La fotosíntesis resumenes y apuntes, Apuntes de Biología",
+     "url": "https://www.docsity.com/es/la-fotosintesis-resumenes-y-apuntes/11285207/",
+     "resumen": "¡Descarga La fotosíntesis resumenes y apuntes y más Apuntes en PDF de Biología solo en Docsity!",
+     "fuente": "docsity.com"
+    },
+    {
+     "titulo": "Apuntes Completos Fotosintesis | PDF | Fotosíntesis | Electrón",
+     "url": "https://es.scribd.com/document/1054620692/Apuntes-Completos-Fotosintesis",
+     "resumen": "ASPECTOS ENERGÉTICOS La fotosíntesis es, sin lugar a dudas, el proceso bioenergético más importante de la Tierra. A través de este mecanismo termodinámico, los organismos autótrofos (plantas, algas y ciertas bacterias fotosintéticas) logran capturar la energía radiante del Sol y transformarla de man",
+     "fuente": "es.scribd.com"
+    },
+    {
+     "titulo": "Fotosíntesis Apuntes | PDF | Fotosíntesis | Trifosfato de adenosina",
+     "url": "https://es.scribd.com/document/1034790913/FOTOSI-NTESIS-APUNTES",
+     "resumen": "La fotosíntesis es un proceso en el que las plantas convierten luz y materia inorgánica en compuestos orgánicos, ocurriendo en los cloroplastos.",
+     "fuente": "es.scribd.com"
+    },
+    {
+     "titulo": "La-Fotosintesis-apunte.pdf - wuolah.com",
+     "url": "https://wuolah.com/apuntes/ciencias-y-tecnologia-biologia/fotosintesis-apunte-pdf-10253351",
+     "resumen": "Descarga el documento La-Fotosintesis-apunte.pdf para aprobar Ciencias y Tecnología. Biología",
+     "fuente": "wuolah.com"
+    }
+   ],
+   "lecturas": [
+    {
+     "url": "https://selectivitat.io/wp-content/uploads/2021/04/Tema-6.-La-fotosintesis.pdf",
+     "tipo": "pdf",
+     "titulo": "Tema-6.-La-fotosintesis.pdf",
+     "letras": 16302,
+     "codigos": 0,
+     "principio": "\u001b\u0013\u000e\u000b \b\n\u000e\u0016!,3641,%\u001d\u0014\f\u0005\u0002\u0000\u0000\u0001\u0005\u000e\u001e3HXadebZK6 \u000f\u0006\u0002\u0001\u0002\u0007\u0012%<P]cefebP?-\u001d\u0012\u000b\b\u0007\b\f\u0014#5HW`ded`WF0\u001c\r\u0005\u0004\u0006\n\u0011\u001b+?P]ceeaYJ7%\u0018\u0011\r\n\b\u0006\u0007\u000e\u001c/DT_cdc^SC1 \u0014\f\b\u0007\b\f\u0013\u001f0BR]cdbZM:%\u0013 \u0006\f\u001a.DU`ddb[N>,\u001e\u0014\u000f\u000b \b\n\r\u0014\u001e*2652-'\u001f\u0016\u000e\u0007\u0002\u0001\u0000\u0002\u0007\u0012%<P]ced`UD-\u0019\u000b\u0004\u0003\b\u0014'>Q^cec^SC1\"\u0017\u0010\f\n\b \f\u0012\u001b&0563.\n,00/+%\u001d\u0016\u000f\f\u000f\u0016\u001e\"%$\"\u001b\u0012\n\u0004\u0001\u0001\u0002\u0006\f\u0015\u001e%+/00-'\u001e\u0014\n\u0004\u0001\u0001\u0002\u0004\n\u0011\u0019!(-00.\n\nTema 6. La \nfotosínt"
+    },
+    {
+     "url": "https://www.udocz.com/apuntes/1531496/apuntes-de-fotosintesis",
+     "tipo": "web",
+     "titulo": "Apuntes de Fotosíntesis | Apuntes PreUniversitarios | uDocz",
+     "letras": 941,
+     "codigos": 0,
+     "principio": "##\nApuntes de Fotosíntesis\n\nApuntes PreUniversitarios\n\nContribuidor\n1.0k vistas\n\nUC\n\nIngeniería Civil\n\nuDocz es gratuito gracias a estos anuncios.\n\n¿Quieres eliminarlos?\n\nuDocz es gratuito gracias a estos anuncios.\n\n\nAcercar\n\nAlejar\n\n/  1\n\nEl documento tiene 1 páginas\n\nComentarios\n\nPantalla completa"
+    },
+    {
+     "url": "https://www.docsity.com/es/la-fotosintesis-resumenes-y-apuntes/11285207/",
+     "error": "La web respondió 403."
+    }
+   ]
+  }
+ }
+}
