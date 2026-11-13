@@ -72,6 +72,24 @@ def es_orden_instalar_esto(texto):
                           r"(?:estoy\s+viendo|veo|hay|sale|pone)|aqu[ií]|lo\s+de\s+aqu[ií])\b", t))
 
 
+def es_orden_dependencias(texto):
+    """v3.32: «descarga/instala las dependencias de X», «descarga lo que necesita X», «baja lo que le falta a X»,
+    «consigue las librerías de X». Devuelve el nombre de la app, o None. (El dueño CONFIRMA así la descarga: nunca sola.)"""
+    t = _sin_kira(texto).strip()
+    low = t.lower()
+    if not re.search(r"\b(descarg\w*|instal\w*|baj[ae]\w*|b[aá]jate|consigue|pon|busca)\b", low):
+        return None
+    if not re.search(r"\b(dependencias?|librer[ií]as?|lo\s+que\s+(?:necesita|le\s+falta|le\s+hace\s+falta|le\s+haga\s+falta))", low):
+        return None
+    m = re.search(r"(?:dependencias?|librer[ií]as?)\s+(?:de\s+|para\s+)?(?:la\s+app\s+|la\s+aplicaci[oó]n\s+|el\s+programa\s+)?(.+)$", t, re.I)
+    if not m:
+        m = re.search(r"\b(?:necesita|le\s+falta|le\s+hace\s+falta|le\s+haga\s+falta)\s+(?:a\s+|la\s+app\s+|el\s+programa\s+)?(.+)$", t, re.I)
+    nombre = (m.group(1) if m else "").strip()
+    nombre = re.sub(r"^(?:la\s+|el\s+)?(?:app|aplicaci[oó]n|programa)\s+", "", nombre, flags=re.I)
+    nombre = re.sub(r"\s+(?:para|y|por\s+favor)\b.*$", "", nombre, flags=re.I).strip(" .:\"'")
+    return nombre or None
+
+
 def es_orden_usar(texto):
     """«usa X» / «abre X» / «lanza X» / «ejecuta la app X» / «arranca X». Devuelve el nombre, o None. (No se mete con
     «abre la sala…» ni «abre el buscador», que son pantallas de Kira, ni con «abre el mapa/cuaderno…».)"""
@@ -439,6 +457,132 @@ def quiere_forzar(texto):
                            str(texto or ""), _re.I))
 
 
+# ---------------- lo que una app NECESITA para funcionar (v3.32) ----------------
+def _lee(ruta):
+    try:
+        with open(ruta, encoding="utf-8", errors="ignore") as f:
+            return f.read(200000)
+    except OSError:
+        return ""
+
+
+def _pip_de_requirements(txt):
+    libs = []
+    for linea in str(txt or "").splitlines():
+        l = linea.strip()
+        if not l or l.startswith(("#", "-", "git+", "http")):
+            continue
+        m = re.match(r"^([A-Za-z0-9_.][A-Za-z0-9_.\-]*)", l)
+        if m:
+            libs.append(m.group(1))
+    return libs
+
+
+def dependencias(carpeta):
+    """Mira qué le hace falta a la app para funcionar, SIN instalar nada: paquetes de Python (requirements.txt,
+    pyproject.toml, setup.py) y de JavaScript (package.json). Devuelve {pip:[...], archivo_req, npm:bool, tiene:bool,
+    resumen:str}. PURO."""
+    pip, archivo_req, npm = [], None, False
+    for raiz, dirs, fich in os.walk(carpeta):
+        if raiz[len(carpeta):].count(os.sep) > 2 or "/node_modules" in raiz.replace("\\", "/"):
+            dirs[:] = []
+            continue
+        for f in fich:
+            fl = f.lower()
+            ruta = os.path.join(raiz, f)
+            if fl == "requirements.txt" and not archivo_req:
+                archivo_req = ruta
+                pip += _pip_de_requirements(_lee(ruta))
+            elif fl == "pyproject.toml" and not pip:
+                m = re.search(r"dependencies\s*=\s*\[(.*?)\]", _lee(ruta), re.S)
+                if m:
+                    pip += [re.match(r"[A-Za-z0-9_.\-]+", x).group(0)
+                            for x in re.findall(r'["\']([A-Za-z0-9_.][^"\']*)', m.group(1))]
+            elif fl == "setup.py" and not pip:
+                m = re.search(r"install_requires\s*=\s*\[(.*?)\]", _lee(ruta), re.S)
+                if m:
+                    pip += [re.match(r"[A-Za-z0-9_.\-]+", x).group(0)
+                            for x in re.findall(r'["\']([A-Za-z0-9_.][^"\']*)', m.group(1))]
+            elif fl == "package.json" and not npm and '"dependencies"' in _lee(ruta):
+                npm = True
+    pip = sorted(dict.fromkeys(p for p in pip if p.lower() not in ("python", "python3", "pip")))
+    partes = []
+    if pip:
+        partes.append("paquetes de Python: " + ", ".join(pip[:8]) + ("…" if len(pip) > 8 else ""))
+    if npm:
+        partes.append("paquetes de JavaScript (npm)")
+    return {"pip": pip, "archivo_req": archivo_req, "npm": npm, "tiene": bool(pip or npm),
+            "resumen": "; ".join(partes)}
+
+
+def instalar_dependencias(carpeta, correr=None, al_paso=None, con_npm=True):
+    """Descarga e instala lo que la app necesita, SIN administrador (pip --user, npm en su carpeta). Se llama SOLO
+    cuando el dueño lo confirma. Devuelve {ok, mensaje}. Lo que necesite administrador (una librería del sistema)
+    se lo dice al dueño (Terminal + su contraseña)."""
+    correr = correr or _correr_defecto
+    paso = al_paso or (lambda _t: None)
+    dep = dependencias(carpeta)
+    if not dep["tiene"]:
+        return {"ok": True, "mensaje": "No le veo dependencias que descargar; debería funcionar tal cual."}
+    hechos, avisos = [], []
+    if dep["pip"]:
+        paso("Descargando los paquetes de Python…")
+        args = (["pip3", "install", "--user", "-r", dep["archivo_req"]] if dep["archivo_req"]
+                else ["pip3", "install", "--user"] + dep["pip"])
+        try:
+            rc, salida = correr(args, cwd=carpeta, timeout=900)
+        except Exception as e:                        # noqa: BLE001
+            rc, salida = 127, str(e)
+        if rc == 0:
+            hechos.append("los paquetes de Python (" + ", ".join(dep["pip"][:6]) + ")")
+        elif rc == 127 or "No module named pip" in salida or "not found" in salida.lower():
+            avisos.append("no tengo pip para Python; en la Terminal:  sudo apt install python3-pip")
+        else:
+            falta = faltan_por_error(salida)
+            extra = (" Parece que necesita una librería del sistema: " + falta["consejo"]) if falta and falta["tipo"] == "sistema" else ""
+            avisos.append("algún paquete de Python no se pudo bajar solo." + extra + " (" + salida[-160:].strip() + ")")
+    if dep["npm"] and con_npm:
+        paso("Descargando los paquetes de JavaScript (npm)…")
+        try:
+            rc, salida = correr(["npm", "install"], cwd=carpeta, timeout=900)
+        except Exception as e:                        # noqa: BLE001
+            rc, salida = 127, str(e)
+        if rc == 0:
+            hechos.append("los paquetes de JavaScript (npm)")
+        else:
+            avisos.append("npm no pudo instalar (¿está node/npm? en la Terminal:  sudo apt install npm)")
+    msg = ("Descargué " + " y ".join(hechos) + " (sin tocar el sistema). " if hechos else "")
+    if avisos:
+        msg += "Ojo: " + "; ".join(avisos) + "."
+    return {"ok": bool(hechos) or not avisos, "mensaje": msg or "No necesité descargar nada."}
+
+
+def faltan_por_error(salida):
+    """De un error al arrancar/instalar, saca qué falta: un módulo de Python (→ pip), una librería del sistema o una
+    orden (→ apt, con contraseña). Devuelve {tipo:'pip'|'sistema', que, consejo} o None."""
+    t = str(salida or "")
+    m = re.search(r"No module named ['\"]?([A-Za-z0-9_.]+)", t)
+    if m:
+        lib = m.group(1).split(".")[0]
+        return {"tipo": "pip", "que": lib, "consejo": "pip3 install --user " + lib}
+    m = re.search(r"error while loading shared libraries:\s*([\w.+-]+\.so[\w.]*)", t)
+    if m:
+        return {"tipo": "sistema", "que": m.group(1),
+                "consejo": "en la Terminal, instala la librería del sistema que la trae:  sudo apt install …"}
+    m = re.search(r"([\w.+-]+): (?:command not found|not found)", t)
+    if m:
+        return {"tipo": "sistema", "que": m.group(1), "consejo": "en la Terminal:  sudo apt install " + m.group(1)}
+    return None
+
+
+def aviso_dependencias(dep, nombre):
+    """El aviso que se le añade al mensaje de instalar: qué necesita y cómo pedir que lo descargue (con tu permiso)."""
+    if not dep or not dep.get("tiene"):
+        return ""
+    return (f" Además, para funcionar necesita {dep['resumen']}. ¿Quieres que lo descargue (sin administrador)? "
+            f"Dime «descarga las dependencias de {nombre}».")
+
+
 # ---------------- instalar ----------------
 def _correr_defecto(args, cwd=None, timeout=600):
     p = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout)
@@ -514,13 +658,16 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
             shutil.rmtree(carpeta, ignore_errors=True)
             return bloqueo
         an = analizar(carpeta)
+        dep = dependencias(carpeta)                   # v3.32: qué le hace falta para funcionar (no se instala aún)
         lanzar = como_arrancar(carpeta)
         nota = " (" + an["resumen"] + ")" if an["nivel"] != "ok" else ""
         if not lanzar:
             return {"ok": True, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta, "analisis": an,
+                    "dependencias": dep,
                     "mensaje": (f"He descargado {nombre} en tu carpeta de apps, pero no veo claro cómo arrancarla "
                                 "(mira su README). La dejo en el escritorio igualmente." + nota)}
         return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta, "analisis": an,
+                "dependencias": dep,
                 "mensaje": f"{nombre} instalada (de GitHub, revisada, sin tocar el sistema). La tienes en el escritorio." + nota}
 
     # appimage / descarga directa (AppImage, binario, script, comprimido, .deb) — v3.31: «sea lo que sea»
@@ -602,16 +749,19 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
             shutil.rmtree(carpeta, ignore_errors=True)
             return bloqueo
         an = analizar(raiz)
+        dep = dependencias(raiz)                       # v3.32: qué le hace falta para funcionar (no se instala aún)
         lanzar = buscar_lanzador(raiz)
         nota = " (" + an["resumen"] + ")" if an["nivel"] != "ok" else ""
         if not lanzar:
             manual = ("  Para instalarlo del todo, en la Terminal:  sudo dpkg -i " + destino if tipo == "deb" else "")
             return {"ok": True, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta, "analisis": an,
+                    "dependencias": dep,
                     "mensaje": (f"Descargué y extraje {nombre}, pero no veo claro cómo arrancarlo (mira su README)." +
                                 manual + " Lo dejo en el escritorio igualmente." + nota)}
         como = ("(.deb extraído en tu carpeta, sin administrador; alguna app así puede fallar por librerías del "
                 "sistema)" if tipo == "deb" else "(comprimido, revisado, sin tocar el sistema)")
         return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta, "analisis": an,
+                "dependencias": dep,
                 "mensaje": f"{nombre} instalada {como}. La tienes en el escritorio." + nota}
 
     return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",

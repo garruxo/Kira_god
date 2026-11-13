@@ -235,8 +235,9 @@ class EscritorioMixin:
         self._app_bloqueada = ""
         iid = ak.anadir_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
         extra = "" if iid else " (ya la tenías)"
+        dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
         return (r.get("mensaje", "Instalada.") + extra + " Ya está su icono en el escritorio: púlsalo para abrirla, "
-                "clic derecho para desinstalarla.")
+                "clic derecho para desinstalarla." + dep_aviso)
 
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
     def aspecto(self):

@@ -409,8 +409,27 @@ def _instalar_app(core, fuente, paso, forzar=False):
                 "ok": bool(suave)}
     iid = ak.anadir_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
     extra = "" if iid else " (ya la tenías)"
+    dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
     return {"texto": r.get("mensaje", "Instalada.") + extra +
-            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla."}
+            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." + dep_aviso}
+
+
+def _dependencias_app(core, nombre, paso):
+    """v3.32: «descarga las dependencias de X» → busca y descarga lo que la app necesita (pip --user / npm, SIN
+    administrador). Lo pide el dueño (no se hace sola). Lo del sistema (apt) necesita su contraseña, aparte."""
+    import apps_externas_kira as aex
+    a = _buscar_app(core, nombre)
+    if not a:
+        return {"texto": f"No tengo instalada ninguna app «{nombre}». Dime «instala {nombre}» y la pongo.", "ok": False}
+    carpeta = a.get("carpeta") or ""
+    if not carpeta:
+        return {"texto": f"No encuentro la carpeta de «{a.get('titulo', nombre)}».", "ok": False}
+    dep = aex.dependencias(carpeta)
+    if not dep["tiene"]:
+        return {"texto": f"«{a.get('titulo', nombre)}» no parece necesitar nada que descargar; debería funcionar tal cual."}
+    paso(0.0, f"Descargo lo que necesita {a.get('titulo', nombre)}…")
+    r = aex.instalar_dependencias(carpeta, al_paso=lambda t: paso(None, t))
+    return {"texto": r.get("mensaje", "Hecho."), **({} if r.get("ok") else {"ok": False})}
 
 
 def _usar_app(core, nombre):
@@ -467,6 +486,9 @@ def ejecutar(core, orden, paso):
     if ek.es_orden(o):
         return {"texto": ek.texto()}
     import apps_externas_kira as aex              # v3.28: instalar/usar apps que el dueño pide (GitHub, AppImage…)
+    nd = aex.es_orden_dependencias(o)             # v3.32: «descarga las dependencias de X» (tú lo confirmas así)
+    if nd:
+        return _dependencias_app(core, nd, paso)
     oi = aex.es_orden_instalar(o)
     forzar = aex.quiere_forzar(o)
     if not oi and forzar and getattr(core, "_app_bloqueada", ""):   # «instálala igualmente» (la última que avisé)
