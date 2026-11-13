@@ -48,7 +48,7 @@ PROG_A = ("# Hipótesis: con distancia mínima los árboles se reparten mejor\ni
 PROG_B = "# Hipótesis: rejilla\nprint('celdas', 9)\n"
 respuestas = [PROG_MAL, PROG_A, PROG_B, PROG_B]
 pedidos = []
-def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     pedidos.append((system, usuario))
     return f"NOMBRE: exp\n```python\n{respuestas.pop(0) if respuestas else PROG_B}```"
 core._leer_clave = lambda *a: ci.LOCAL

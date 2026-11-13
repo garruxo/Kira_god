@@ -88,7 +88,7 @@ core2.reparto = lambda tarea: ("local", None)
 core2._leer_clave = lambda *a: ci.LOCAL
 espera = {"lento": True}
 pedidos = []
-def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     pedidos.append(usuario)
     if "LENTO" in usuario:
         t0 = time.time()

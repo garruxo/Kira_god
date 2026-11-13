@@ -51,7 +51,7 @@ respuestas = ["lo siento, no puedo",                                           #
 pedidos, sistemas = [], []
 core._leer_clave = lambda tarea="general": ci.LOCAL
 core.cerebro_ia.local_disponible = lambda forzar=False: True
-def api(clave, system, usuario, max_tokens=4000, mensajes=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, codigo=False):
     pedidos.append(usuario); sistemas.append(system); return respuestas[len(pedidos) - 1]
 core._llamar_api = api
 class Pend:

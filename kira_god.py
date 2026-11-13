@@ -697,12 +697,13 @@ class KiraGodCore:
         if self.cancelado():
             raise cerebro_ia_kira.Cancelada("Cancelado: lo has parado tú.")
 
-    def _llamar_api(self, clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+    def _llamar_api(self, clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
         import cerebro_ia_kira
         self.comprobar_cancelado()
         if clave == cerebro_ia_kira.LOCAL:                      # modelo local (cerebro propio, o en casa)
             return self.cerebro_ia.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens,
-                                              al_trozo=self._con_pizarra(al_trozo, True), parar=self.cancelado)
+                                              al_trozo=self._con_pizarra(al_trozo, True), parar=self.cancelado,
+                                              codigo=codigo)
         ruta_modelo = os.path.join(self.dir, "modelo.txt")
         modelo = MODELO_POR_DEFECTO
         if os.path.exists(ruta_modelo):
@@ -731,12 +732,12 @@ class KiraGodCore:
         except cerebro_ia_kira.Cancelada:
             raise
         except urllib.error.HTTPError as e:
-            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo)
+            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo, codigo)
             if fb is not None:
                 return fb
             raise RuntimeError(f"La API respondió {e.code} (revisa clave y modelo)")
         except Exception as e:
-            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo)
+            fb = self._fallback_local(system, usuario, max_tokens, mensajes, al_trozo, codigo)
             if fb is not None:
                 return fb
             raise RuntimeError(f"No se pudo contactar con la API: {e}")
@@ -760,7 +761,7 @@ class KiraGodCore:
                 return al_trozo(t)
         return trozo
 
-    def _fallback_local(self, system, usuario, max_tokens, mensajes, al_trozo):
+    def _fallback_local(self, system, usuario, max_tokens, mensajes, al_trozo, codigo=False):
         """Plan B: si el cerebro de Claude (API) falla y Kira tiene su cerebro PROPIO listo (o el de casa), responde
         con él en vez de quedarse sin pensar. Devuelve el texto, o None si no hay cerebro local con el que tirar."""
         import cerebro_ia_kira
@@ -769,7 +770,7 @@ class KiraGodCore:
             if cer is None or not cer.local_disponible():
                 return None
             return cer.chat_local(system, mensajes or [{"role": "user", "content": usuario}], max_tokens,
-                                  al_trozo=al_trozo, parar=self.cancelado)
+                                  al_trozo=al_trozo, parar=self.cancelado, codigo=codigo)
         except cerebro_ia_kira.Cancelada:
             raise
         except Exception:
@@ -794,7 +795,7 @@ class KiraGodCore:
         import ventanas_kira as vk                       # v3.19: si pide una ventana/botón/sección, el ejemplo bueno
         sistema = (mi.sistema_local(pedido.split("\n\n")[0]) if local else mi.SISTEMA_MEJORA) + \
             vk.ejemplo_para_cerebro(pedido.split("\n\n")[0])
-        texto = self._llamar_api(clave, sistema, usuario)
+        texto = self._llamar_api(clave, sistema, usuario, codigo=True)
         return mi.extraer_modulo(texto)
 
     # ---------- trabajar en EQUIPO: Kira (cerebro del móvil) + Claude ----------
@@ -868,7 +869,7 @@ class KiraGodCore:
         extra = self.texto_librerias_para_programar()
         usuario = f"Programa pedido: {pedido}" + (f"\n{extra}" if extra else "") + (f"\n\n{saber}" if saber else "")
         texto = self._llamar_api(clave, pk.SISTEMA_PROGRAMA_LOCAL if local else pk.SISTEMA_PROGRAMA, usuario,
-                                 max_tokens=1200 if local else 3000, al_trozo=al_trozo)
+                                 max_tokens=1200 if local else 3000, al_trozo=al_trozo, codigo=True)
         return pk.extraer_programa(texto)
 
     @_con_trabajo("programa")

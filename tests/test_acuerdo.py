@@ -111,7 +111,7 @@ KIRA_MOD = 'def registrar():\n    def f(texto):\n        return "hola " + texto\
 CLAUDE_MOD = ('def registrar():\n    def f(texto):\n        nombre = texto.strip()\n        if not nombre:\n'
               '            raise ValueError("Dime a quién saludo.")\n        return f"¡Hola, {nombre}!"\n    return {"saluda": f}\n')
 llamadas = []
-def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     quien = "kira" if clave == ci.LOCAL else "claude"
     llamadas.append((quien, system[:40], usuario))
     if system in (mi.SISTEMA_MEJORA_LOCAL, mi.SISTEMA_MEJORA_LOCAL_CORTO):
@@ -140,7 +140,7 @@ ok(core.procesar_orden("saluda Ana") == "¡Hola, Ana!", "y funciona")
 ok(core.recuerdos.buscar("saluda", n=3) and any("Sé hacer algo nuevo" in x["texto"] for x in core.recuerdos.buscar("habilidad saluda", n=3)),
    "Kira apunta su habilidad nueva en el baúl")
 vistos = []
-core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None: (vistos.append(system), "Vale.")[1]
+core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False: (vistos.append(system), "Vale.")[1]
 core.conversar("qué sabes hacer")
 ok("«saluda»" in vistos[-1], "y en la charla sabe que tiene esa orden nueva")
 ok("Termux" not in vistos[-1] and "aprende a" in vistos[-1], "sabe cómo se le piden mejoras, programas y diseños")
@@ -148,7 +148,7 @@ ok("Termux" not in vistos[-1] and "aprende a" in vistos[-1], "sabe cómo se le p
 # ---------- programa para el editor, acordado ----------
 PROG_K = "notas = [7, 8.5, 6]\nprint(sum(notas) / len(notas))\n"
 llamadas.clear()
-def api2(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api2(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     quien = "kira" if clave == ci.LOCAL else "claude"
     llamadas.append((quien, system[:30], usuario))
     import programar_kira as pk
@@ -162,7 +162,7 @@ r = core.programa_acordado("programa que calcule la media de mis notas")
 ok(r["ok"] and r["acuerdo"] is True and r["codigo"] == PROG_K and r["nombre"] == "media", "programa probado y acordado")
 ok("7.1666" in llamadas[1][2], "Claude ve lo que mostró el programa en la prueba")
 ok("ACUERDO" in r["texto"], "texto para enseñar")
-def api3(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api3(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     return "NOMBRE: roto\n```python\nimport os\nprint(1)\n```"
 core._llamar_api = api3
 r = core.programa_acordado("programa que borre cosas")
@@ -171,7 +171,7 @@ ok(not r["ok"] and r["texto"].startswith("[x]"), "si nunca pasa el modo seguro, 
 # ---------- diseño: con lo estudiado y repasado por Claude ----------
 core.recuerdos.guardar("Las tapas de la Barceloneta son famosas por las bombas de patata.", tema="tapas Barceloneta")
 pet = []
-def api4(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api4(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     pet.append(("kira" if clave == ci.LOCAL else "claude", usuario))
     if clave == ci.LOCAL:
         return json.dumps({"titulo": "Bar", "secciones": [{"titulo": "A", "texto": "B"}]})

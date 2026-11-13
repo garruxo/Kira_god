@@ -37,6 +37,11 @@ _VACIAS = {"una", "uno", "unos", "unas", "que", "con", "los", "las", "del", "por
            "muy", "pero", "sus", "este", "esta", "esto", "ese", "esa", "eso", "hay", "son", "ser", "les", "nos",
            "mis", "tus", "quiero", "hazme", "dame", "necesito", "puedes", "algo", "cosa", "the", "and", "for"}
 
+# v3.24: raíces GENÉRICAS de programar (no dicen de qué va). Si lo único en común con una receta es una de estas, la
+# receta no viene a cuento: con el cerebro pequeño se le da solo la IDEA, no el código, para que no copie siempre igual.
+_GENERICAS = {"juego", "juega", "progr", "codig", "aplic", "app", "funci", "crear", "crea", "hacer", "haz",
+              "scrip", "modul", "progl"}
+
 
 def _raices(texto):
     """Raíces de las palabras (5 primeras letras): «partículas» y «partícula» coinciden. «2d» y «3d» también cuentan."""
@@ -93,12 +98,18 @@ def contexto_para(pedido, recuerdos=None, local=False, para_editor=False):
     if propia is not None and len(propia["codigo"]) <= tope_codigo:
         partes.append(f"Una mejora tuya que el dueño APROBÓ y funciona («{propia['titulo']}»). Úsala de modelo "
                       f"(estilo y forma) si encaja:\n```python\n{propia['codigo'].strip()}\n```")
+    p_ped = _raices(pedido)
     for _p, r in buscar(pedido, 1 if local else 2):
         codigo = (programa(r) if para_editor and r.get("prueba") else r["codigo"]).strip()
         if para_editor and "def registrar" in codigo:
             codigo = "# (receta en forma de MÓDULO de Kira: en el editor, un juego es una clase que hereda de Juego)\n" + codigo
         coste = f" Coste: {r['complejidad']}." if r.get("complejidad") else ""
-        if len(codigo) > tope_codigo:
+        # v3.24: con el cerebro pequeño, el código completo solo si el parecido es ESPECÍFICO (coincide en una palabra que
+        # dice de qué va, no solo en «juego»/«programa»). Si solo coincide en algo genérico, va la IDEA: así no COPIA una
+        # receta que no viene a cuento y los programas salen variados. El cerebro grande (PC) recibe el código igual.
+        comun = p_ped & _raices(r["temas"] + " " + r["titulo"] + " " + r["id"].replace("_", " "))
+        especifico = bool(comun - _GENERICAS)
+        if len(codigo) > tope_codigo or (local and not especifico):
             partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}{coste}")
             continue
         partes.append(f"Técnica ya probada que se parece a lo pedido («{r['titulo']}»). Idea: {r['idea']}{coste}\n"

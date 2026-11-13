@@ -38,6 +38,10 @@ _NO_ES_WEB = re.compile(
     r"tus\s+recetas|tu\s+receta|recetas?\s+de\s+(?:ingenier|grafo|programaci|ciberseg|dise[nñ]|cadena|compresi|"
     r"compilador|sistemas|redes\s+neuronales))", re.I)
 
+# v3.24: la terminal DE VERDAD de Xubuntu (xfce4-terminal), y poder abrir más de una. Se prueba cada programa por orden.
+TERMINALES = ("xfce4-terminal", "x-terminal-emulator", "gnome-terminal", "mate-terminal",
+              "lxterminal", "qterminal", "konsole", "xterm")
+
 ICONOS = [
     {"id": "hablar", "titulo": "Hablar con Kira", "sub": "la conversación entera"},
     {"id": "buscador", "titulo": "Buscador", "sub": "internet, como Google"},
@@ -251,6 +255,24 @@ class EscritorioMixin:
             t.cerrar()
         self._terminal = None
         return self.terminal_abrir()
+
+    def terminal_externa(self):
+        """v3.24: abre la terminal DE VERDAD de Xubuntu (xfce4-terminal) en una VENTANA APARTE. Se puede llamar varias
+        veces para abrir más de una. Devuelve {"ok", "cual"} o {"ok": False, "motivo"} si no hay ninguna instalada."""
+        import shutil
+        env = dict(os.environ)
+        env.setdefault("DISPLAY", ":0")
+        for prog in TERMINALES:
+            ruta = shutil.which(prog)
+            if not ruta:
+                continue
+            try:
+                subprocess.Popen([ruta], env=env, start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                return {"ok": False, "motivo": str(e)}
+            return {"ok": True, "cual": prog}
+        return {"ok": False, "motivo": "no hay ninguna terminal de Xubuntu instalada"}
 
     # ---------- HABLAR CON KIRA (desde cualquier sitio) ----------
     def hablar(self, texto):

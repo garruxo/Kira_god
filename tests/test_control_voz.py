@@ -34,7 +34,7 @@ ok(ci.leer_sse(Flujo(2), lambda d: d["choices"][0]["delta"]["content"], lambda t
 
 import kira_god
 core = kira_god.KiraGodCore()
-core.cerebro_ia.chat_local = lambda system, mensajes, max_tokens=512, al_trozo=None, parar=None: (
+core.cerebro_ia.chat_local = lambda system, mensajes, max_tokens=512, al_trozo=None, parar=None, codigo=False: (
     (_ for _ in ()).throw(ci.Cancelada("Cancelado.")) if parar and parar() else "respuesta")
 ok(core._llamar_api(ci.LOCAL, "s", "u") == "respuesta", "sin cancelar, responde")
 ok("cancelo" in core.cancelar().lower() and core.cancelado(), "«cancela» marca lo que está en marcha")
@@ -67,7 +67,7 @@ for f in ("sigue con lo que hacías", "Kira, continúa con lo que estabas hacien
 ok(not ck.pide_seguir("sigue la serie de fibonacci"), "otra cosa no")
 # el núcleo lo apunta mientras programa (y lo borra al acabar)
 vio = {}
-def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     vio["fichero"] = os.path.isfile(os.path.join(core.dir, "trabajo_en_curso.json"))
     return "NOMBRE: media\n```python\nprint(7)\n```"
 core._leer_clave = lambda *a: ci.LOCAL

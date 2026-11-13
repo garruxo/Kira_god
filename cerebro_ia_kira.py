@@ -269,9 +269,10 @@ class Cerebro:
     # ---- hablar con el modelo local (formato OpenAI de llama-server) ----
     _turno = threading.Lock()                        # un solo pedido cada vez al cerebro del móvil (-np 1)
 
-    def chat_local(self, system, mensajes, max_tokens=512, timeout=ESPERA_LOCAL, al_trozo=None, parar=None):
+    def chat_local(self, system, mensajes, max_tokens=512, timeout=ESPERA_LOCAL, al_trozo=None, parar=None, codigo=False):
         """Respuesta del modelo local. Con al_trozo(texto_hasta_ahora) la respuesta va llegando palabra a palabra.
-        parar() -> True la corta a mitad («cancela»): lanza Cancelada."""
+        parar() -> True la corta a mitad («cancela»): lanza Cancelada.
+        codigo=True: muestreo más suave, para PROGRAMAR (v3.24)."""
         if parar is not None and al_trozo is None:
             al_trozo = lambda _t: None                                  # a trozos, para poder cortarla
         if parar is not None and parar():
@@ -280,7 +281,7 @@ class Cerebro:
             c = self.casa()
             try:
                 return c.chat(system, mensajes, grande=max_tokens >= 800, max_tokens=max_tokens,
-                              timeout=max(timeout, 900), al_trozo=al_trozo, parar=parar)
+                              timeout=max(timeout, 900), al_trozo=al_trozo, parar=parar, codigo=codigo)
             except Cancelada:
                 raise
             except __import__("casa_kira").Cancelada:
@@ -300,18 +301,25 @@ class Cerebro:
             if time.time() - inicio > timeout:
                 raise CerebroError("Mi cerebro lleva demasiado rato ocupado con otra cosa. Inténtalo en un momento.")
         try:
-            return self._chat_local(msgs, max_tokens, timeout, al_trozo, parar)
+            return self._chat_local(msgs, max_tokens, timeout, al_trozo, parar, codigo)
         finally:
             Cerebro._turno.release()
 
-    def _chat_local(self, msgs, max_tokens, timeout, al_trozo, parar):
+    def _chat_local(self, msgs, max_tokens, timeout, al_trozo, parar, codigo=False):
+        # v3.24: al PROGRAMAR, muestreo más suave. Las penalizaciones por repetir (frequency/presence, puestas en la
+        # v2.55 para que no se quedara en bucle al RESUMIR) castigan lo que el código repite de forma normal (def, self,
+        # return, la sangría, los corchetes): salía código raro o cortado. Al programar se quitan y se sube un pelín la
+        # temperatura, para que no haga casi siempre lo mismo. Al resumir/charlar se quedan como estaban.
+        if codigo:
+            afinado = {"temperature": 0.78, "top_p": 0.95, "repeat_penalty": 1.08, "repeat_last_n": 128}
+        else:
+            afinado = {"temperature": 0.6, "repeat_penalty": 1.18, "repeat_last_n": 256,
+                       "frequency_penalty": 0.4, "presence_penalty": 0.2}
         cuerpo = json.dumps({"messages": msgs, "max_tokens": int(max_tokens),
-                             "temperature": 0.6, "stream": bool(al_trozo),
+                             "stream": bool(al_trozo),
                              "cache_prompt": True,                               # reutiliza lo ya leído: responde antes
-                             "repeat_penalty": 1.18, "repeat_last_n": 256,       # que no se quede repitiendo la misma frase
-                             "frequency_penalty": 0.4, "presence_penalty": 0.2,  # (sobre todo al resumir textos largos)
-                             "chat_template_kwargs": {"enable_thinking": False}  # sin «pensar en voz baja» (Qwen)
-                             }).encode("utf-8")
+                             "chat_template_kwargs": {"enable_thinking": False}, # sin «pensar en voz baja» (Qwen)
+                             **afinado}).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
                                      headers={"Content-Type": "application/json"})
         try:

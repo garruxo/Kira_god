@@ -188,7 +188,7 @@ class Casa:
             return None
 
     # ---- hablar con el cerebro de casa (mismo formato que llama-server, con token y «kira_cerebro») ----
-    def chat(self, system, mensajes, grande=False, max_tokens=1024, timeout=600, al_trozo=None, parar=None):
+    def chat(self, system, mensajes, grande=False, max_tokens=1024, timeout=600, al_trozo=None, parar=None, codigo=False):
         import cerebro_ia_kira as ci
         if parar is not None and al_trozo is None:
             al_trozo = lambda _t: None
@@ -197,10 +197,11 @@ class Casa:
         msgs = ([{"role": "system", "content": str(system)}] if system else []) + [
             {"role": m["role"], "content": m["content"] if isinstance(m["content"], list) else str(m["content"])}
             for m in mensajes]
-        cuerpo = json.dumps({"messages": msgs, "max_tokens": int(max_tokens), "temperature": 0.6,
+        afinado = ({"temperature": 0.78, "top_p": 0.95} if codigo else {"temperature": 0.6})  # v3.24: programar, más suave
+        cuerpo = json.dumps({"messages": msgs, "max_tokens": int(max_tokens),
                              "stream": bool(al_trozo), "cache_prompt": True,
                              "kira_cerebro": "grande" if grande else "rapido",
-                             "chat_template_kwargs": {"enable_thinking": False}}).encode("utf-8")
+                             "chat_template_kwargs": {"enable_thinking": False}, **afinado}).encode("utf-8")
         req = urllib.request.Request(self.url + "/v1/chat/completions", data=cuerpo, method="POST",
                                      headers={"Content-Type": "application/json", "X-Kira-Token": self.token})
         vigia = None

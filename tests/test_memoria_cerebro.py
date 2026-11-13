@@ -32,7 +32,7 @@ core = kira_god.KiraGodCore()
 core.procesar_orden("estudia ingeniería")
 vio = []
 core._leer_clave = lambda *a: ci.LOCAL
-def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None):
+def api(clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False):
     vio.append((system, usuario))
     return "NOMBRE: x\n```python\ndef registrar():\n    return {'xx': lambda t: t}\n```"
 core._llamar_api = api

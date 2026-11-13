@@ -418,6 +418,7 @@ var FAKE = {
   terminal_tecla:function(n){ FAKE._tt+="^C\npapi@kiraos:~$ "; return Promise.resolve(true); },
   terminal_limpiar:function(){ FAKE._tt=""; return Promise.resolve(true); },
   terminal_nueva:function(){ FAKE._tt="papi@kiraos:~$ "; return FAKE.terminal_abrir(); },
+  terminal_externa:function(){ return Promise.resolve(FAKE._termext||{ok:true,cual:"xfce4-terminal"}); },
   terminal_completar:function(l){ return Promise.resolve({linea:l.replace(/Desc$/,"Descargas/"),opciones:[]}); },
   app:function(n){ var T={
       red:{titulo:"Mi red",texto:"Miro tu red de casa SOLO para defenderla (nunca fuera de ella). Pulsa «Buscar aparatos».",
@@ -730,7 +731,23 @@ function accion(id, acc){
 var term={pos:0, reloj:null, hist:[], h:-1, clave:false};
 function paraTerm(){ if(term.reloj){ clearTimeout(term.reloj); term.reloj=null; } }
 var TECLAS=[".",":","/","|","~","-","_","*",">","&",";","=","$","'","\"","\\"];
-function pintaTerminal(){
+function pintaTerminal(){                            // v3.24: abre la terminal DE VERDAD de Xubuntu (y puedes abrir más)
+  var c=$("vcuerpo");
+  c.innerHTML='<div class="texto">Abriendo la terminal de Xubuntu…</div>';
+  llama("terminal_externa").then(function(d){
+    if(!d||!d.ok){ pintaTerminalIntegrada(); return; }
+    c.innerHTML='<div class="term"><div class="texto" style="margin:0 0 10px">He abierto la <b>terminal de Xubuntu</b> ('+esc(d.cual||"terminal")+') en una ventana aparte. '+
+      'Puedes abrir todas las que quieras.</div>'+
+      '<div class="teclas"><button class="acc" data-x="otra">Abrir otra terminal</button>'+
+      '<button class="acc" data-x="dentro">Terminal dentro de Kira</button></div>'+
+      '<div class="nota">La terminal de Xubuntu es la de verdad del sistema: ahí ves bien nano, top y los programas a pantalla completa. '+
+      'Si prefieres no salir de esta ventana, usa «Terminal dentro de Kira».</div></div>';
+    c.querySelector('[data-x="otra"]').onclick=function(){ llama("terminal_externa").then(function(r){
+      var n=c.querySelector(".nota"); if(n) n.textContent=(r&&r.ok)?"Abierta otra terminal de Xubuntu.":"No he podido abrir otra: "+((r&&r.motivo)||"?"); }); };
+    c.querySelector('[data-x="dentro"]').onclick=function(){ pintaTerminalIntegrada(); };
+  }).catch(function(){ pintaTerminalIntegrada(); });
+}
+function pintaTerminalIntegrada(){                   // la terminal embebida (v3.17), de reserva o a elección
   var c=$("vcuerpo");
   c.innerHTML='<div class="term"><pre id="termSal"></pre>'+
     '<div class="linea"><span id="termPrompt">$</span><input id="termIn" autocomplete="off" spellcheck="false" placeholder="escribe una orden de Linux y pulsa Intro"></div>'+

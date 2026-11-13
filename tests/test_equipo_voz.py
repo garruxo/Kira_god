@@ -72,7 +72,7 @@ PROG = "notas = [7, 8.5, 6]\nprint('Tu media es', round(sum(notas) / len(notas),
 pedidos = []
 core.cerebro_para_codigo = lambda: "local"
 core._leer_clave = lambda *a: ci.LOCAL
-core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None: (
+core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False: (
     pedidos.append((system, usuario)), f"NOMBRE: media\n```python\n{PROG}```")[1]
 decir_a_kira("Kira, escríbeme un programa que calcule la media de mis notas")
 ok(correr(5, lambda: sm.current == "editor_codigo"), "abre el editor con el programa: " + sm.current)
@@ -84,7 +84,7 @@ ok(not os.path.isdir(os.path.join(T, "modulos")) or not os.listdir(os.path.join(
 
 # un programa que nunca funciona: no abre nada roto
 pedidos.clear(); sm.ir("inicio")
-core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None: (
+core._llamar_api = lambda clave, system, usuario, max_tokens=4000, mensajes=None, al_trozo=None, codigo=False: (
     pedidos.append(1), "NOMBRE: roto\n```python\nimport os\nprint(os.listdir())\n```")[1]
 decir_a_kira("Kira, escríbeme un programa que liste mis archivos")
 ok(correr(6, lambda: "No he conseguido un programa" in burbuja()), "si no pasa el modo seguro, lo dice")
