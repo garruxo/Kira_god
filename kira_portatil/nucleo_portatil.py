@@ -391,13 +391,97 @@ def _buscar_app(core, nombre):
     return None
 
 
-def _instalar_app(core, fuente, paso, forzar=False):
+def _ayuda_ias(core):
+    """v3.35: ayuda(tarea, codigo, error, probar, system, formato, al_paso) = preguntar a OTRAS IA (solo tras dos
+    fallos; lo decide quien llama). Lo recomendado se apunta en el baúl."""
+    import ayuda_ias_kira as ai
+    rec = getattr(core, "recuerdos", None)
+    guardar = (lambda tema, texto: rec.guardar(texto, tema=tema, fuente="otras IA")) if rec else None
+
+    def ayuda(**kw):
+        return ai.ayuda(core.dir, guardar=guardar, parar=getattr(core, "cancelado", None), **kw)
+    return ayuda
+
+
+def _preguntar_cerebro(core):
+    """v3.35: preguntar(system, usuario) con el cerebro que toque para escribir código (para el taller de kernel)."""
+    def preguntar(system, usuario):
+        import cerebro_ia_kira as cia
+        clave = core._clave_para("codigo")
+        if not clave:
+            raise RuntimeError(core._sin_cerebro())
+        local = clave == cia.LOCAL
+        return core._llamar_api(clave, system, usuario, max_tokens=1400 if local else 3000, codigo=True)
+    return preguntar
+
+
+def _versiones_de(fuente, paso):
+    """v3.35: si de lo que se quiere instalar hay VARIAS versiones, la lista (de GitHub o de los enlaces de la
+    página). [] si no hay donde elegir."""
+    import apps_externas_kira as aex
+    import versiones_kira as vk
+    if aex.metodo(fuente) == "github":
+        paso(None, "Miro qué versiones ha publicado en GitHub…")
+        return vk.de_github(fuente)
+    if aex.metodo(fuente) == "descarga" and aex.tipo_archivo(fuente) == "":
+        paso(None, "Miro qué descargas hay en esa página…")
+        try:
+            html = aex._traer_texto(fuente)
+        except Exception:                                 # noqa: BLE001
+            return []
+        return vk.opciones_de_urls(aex.enlaces_descarga(html, fuente))
+    return []
+
+
+def _preguntar_version(core, fuente, ops):
+    """Apunta la pregunta y devuelve el texto con las versiones."""
+    import apps_externas_kira as aex
+    import versiones_kira as vk
+    con_codigo = aex.metodo(fuente) == "github"
+    nombre = (vk.repo_github(fuente) or "").split("/")[-1] if con_codigo else ""
+    nombre = nombre or vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"])
+    vk.guardar_pendiente(nombre, fuente, ops)
+    return {"texto": vk.texto_opciones(nombre, ops, con_codigo=con_codigo)}
+
+
+def _elegir_version(core, texto, pend, paso):
+    """v3.35: el dueño contesta a «¿qué versión quieres?»."""
+    import versiones_kira as vk
+    e = vk.eleccion(texto, pend["opciones"])
+    vk.borrar_pendiente()
+    if e == "cancelar":
+        return {"texto": f"Vale, no descargo ninguna versión de {pend.get('nombre', 'eso')}."}
+    if e == "clonar":
+        return _instalar_app(core, pend["fuente"], paso, sin_versiones=True)
+    r = _instalar_app(core, e["url"], paso, sin_versiones=True, nombre=pend.get("nombre"))
+    if r.get("ok") is not False:
+        r["texto"] = f"Versión {e.get('version') or 'elegida'} ({e.get('forma', '')}). " + r["texto"]
+    return r
+
+
+def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=None):
     """v3.28/v3.29: instala la app que el dueño pidió (sin administrador), la ANALIZA antes y la deja como icono en el
-    escritorio. Si el análisis la marca peligrosa (y no la fuerza), no la instala y recuerda cuál era (para «igualmente»)."""
+    escritorio. Si el análisis la marca peligrosa (y no la fuerza), no la instala y recuerda cuál era (para «igualmente»).
+    v3.35: si hay varias versiones, pregunta cuál antes de bajar nada."""
     import apps_externas_kira as aex
     import accesos_kira as ak
-    paso(0.0, f"Instalo {fuente}…")
-    r = aex.instalar(fuente, al_paso=lambda t: paso(None, t), forzar=forzar)
+    if not sin_versiones and not forzar:
+        ops = _versiones_de(fuente, paso)
+        if len(ops) >= 2:
+            return _preguntar_version(core, fuente, ops)
+        if len(ops) == 1:                              # una sola versión con archivo: esa (mejor que el código)
+            import versiones_kira as vk
+            nombre = nombre or ((vk.repo_github(fuente) or "").split("/")[-1] or
+                                vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"]))
+            r1 = _instalar_app(core, ops[0]["url"], paso, forzar=forzar, sin_versiones=True, nombre=nombre)
+            if r1.get("ok") is not False:
+                r1["texto"] = (f"Solo hay una versión publicada ({ops[0].get('version') or 'sin número'}): la "
+                               "instalo. " + r1["texto"] + (" Si prefieres el código fuente, dime «instala " + fuente +
+                                                            "» y luego «clónalo»." if aex.metodo(fuente) == "github"
+                                                            else ""))
+            return r1
+    paso(0.0, f"Instalo {nombre or fuente}…")
+    r = aex.instalar(fuente, al_paso=lambda t: paso(None, t), forzar=forzar, nombre=nombre)
     if r.get("peligro"):                          # v3.29: la analizó y no se fía → recuerda cuál era
         core._app_bloqueada = fuente
     elif getattr(core, "_app_bloqueada", "") == fuente:
@@ -407,11 +491,13 @@ def _instalar_app(core, fuente, paso, forzar=False):
         suave = r.get("admin") or r.get("peligro")
         return {"texto": ("" if suave else "[x] ") + r.get("mensaje", "No pude instalarla."),
                 "ok": bool(suave)}
-    iid = ak.anadir_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
-    extra = "" if iid else " (ya la tenías)"
+    iid, nueva = ak.poner_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+    extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
     dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
+    import manejo_apps_kira as ma
     return {"texto": r.get("mensaje", "Instalada.") + extra +
-            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." + dep_aviso}
+            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." + ma.breve(r["nombre"]) +
+            dep_aviso}
 
 
 def _dependencias_app(core, nombre, paso):
@@ -432,14 +518,27 @@ def _dependencias_app(core, nombre, paso):
     return {"texto": r.get("mensaje", "Hecho."), **({} if r.get("ok") else {"ok": False})}
 
 
+def _manejo(core):
+    """v3.35: el que maneja las apps (las que instaló Kira + las del menú de Xubuntu)."""
+    import accesos_kira as ak
+    import manejo_apps_kira as ma
+    try:
+        accesos = ak.listar(core.dir)
+    except Exception:                                 # noqa: BLE001
+        accesos = []
+    return ma.Manejo(accesos=accesos)
+
+
 def _usar_app(core, nombre):
-    """v3.28: «usa/abre X» → lanza la app externa instalada."""
-    import apps_externas_kira as aex
+    """v3.28: «usa/abre X» → lanza la app externa instalada (v3.35: apuntando su proceso, para poder cerrarla)."""
     a = _buscar_app(core, nombre)
     if not a:
         return {"texto": f"No tengo instalada ninguna app «{nombre}». Dime «instala {nombre}» y la pongo.", "ok": False}
-    r = aex.lanzar(a)
-    return {"texto": r.get("mensaje", ""), **({} if r.get("ok") else {"ok": False})}
+    m = _manejo(core)
+    app = m.buscar(a.get("titulo", nombre)) or {"titulo": a.get("titulo", nombre), "lanzar": a.get("lanzar") or [],
+                                                 "carpeta": a.get("carpeta") or ""}
+    r = m.abrir(app)
+    return {"texto": r.get("texto", ""), **({} if r.get("ok") else {"ok": False})}
 
 
 def ejecutar(core, orden, paso):
@@ -486,6 +585,12 @@ def ejecutar(core, orden, paso):
         tipo, describir = so
         paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
         return {"texto": sp.hacer(tipo, describir)}
+    import taller_kernel_kira as tk_              # v3.35: el TALLER DE KERNEL (programa un SO de verdad, lo prueba en QEMU)
+    o_k = tk_.orden(o)
+    if o_k:
+        paso(0.0, "Mi kernel…")
+        return tk_.hacer(tk_.Taller(), o_k[0], o_k[1], preguntar=_preguntar_cerebro(core), al_paso=paso,
+                         parar=getattr(core, "cancelado", None), ayuda=_ayuda_ias(core))
     import entorno_kira as ek                     # v3.29: que CONOZCA su entorno (solo lectura: dónde está, qué tiene)
     if ek.es_orden(o):
         return {"texto": ek.texto()}
@@ -493,6 +598,10 @@ def ejecutar(core, orden, paso):
     nd = aex.es_orden_dependencias(o)             # v3.32: «descarga las dependencias de X» (tú lo confirmas así)
     if nd:
         return _dependencias_app(core, nd, paso)
+    import versiones_kira as vk_                   # v3.35: ¿contesta a «qué versión quieres?»?
+    pend_v = vk_.pendiente()
+    if pend_v and vk_.es_respuesta(o, pend_v["opciones"]):
+        return _elegir_version(core, o, pend_v, paso)
     oi = aex.es_orden_instalar(o)
     forzar = aex.quiere_forzar(o)
     if not oi and forzar and getattr(core, "_app_bloqueada", ""):   # «instálala igualmente» (la última que avisé)
@@ -500,8 +609,14 @@ def ejecutar(core, orden, paso):
     if oi:
         return _instalar_app(core, oi, paso, forzar=forzar)
     ou = aex.es_orden_usar(o)
-    if ou and _buscar_app(core, ou):             # solo si TIENE esa app instalada (si no, que siga el reparto normal)
+    if ou and _buscar_app(core, ou) and not re.search(r"\s+con\s+\S", ou):   # «abre X con <archivo>» va abajo
         return _usar_app(core, ou)
+    import manejo_apps_kira as ma_                # v3.35: abrir/cerrar/estado/órdenes/herramientas de CUALQUIER app
+    o_m = ma_.orden(o)
+    if o_m:
+        r_m = ma_.hacer(_manejo(core), *o_m)
+        if r_m is not None:                       # None = no es una app que conozca: sigue el reparto normal
+            return r_m
     om = mq.orden_maquina(o)                      # v2.85: su MÁQUINA VIRTUAL (Linux ligero)
     if om:
         accion, carga = om
@@ -591,7 +706,7 @@ def ejecutar(core, orden, paso):
         maquina().ultimo_codigo = r.get("codigo")
         core.ultimo_codigo = r.get("codigo")
         _crear_acceso(core, r.get("nombre") or prog, r.get("codigo"))      # v3.26: icono en el escritorio
-        texto = "Programa escrito y probado en modo seguro en el portátil."
+        texto = (r.get("texto") if r.get("de_ia") else "Programa escrito y probado en modo seguro en el portátil.")
         if en_maquina:
             try:
                 c, salida = maquina().probar_python(r.get("codigo") or "")

@@ -30,6 +30,7 @@ INTERVALO = 10 * 60             # segundos entre temas cuando aprende sola
 FUENTE_INGENIERIA = "saber de ingeniería de Kira"   # fichas propias (recetas_ingenieria_kira), sin internet
 FUENTE_AVANZADO = "saber de programación y diseño de Kira"   # fichas propias (saber_avanzado_kira), sin internet
 FUENTE_CIBER = "saber de ciberseguridad de Kira"             # fichas propias (saber_ciberseguridad_kira), sin internet
+FUENTE_SO = "saber de sistemas operativos de Kira"            # v3.35: fichas propias (saber_so_kira), sin internet
 
 PLAN = [
     "Programación", "Python", "Algoritmo", "Estructura de datos", "Programación orientada a objetos",
@@ -55,7 +56,11 @@ MODULOS_PYTHON = [
 # especiales SIEMPRE (con o sin dos puntos): van a sus fichas propias, no al estudio general
 _ESPECIAL_SIEMPRE = re.compile(
     r"^(?:la\s+|el\s+|las\s+|los\s+)?(?:ingenieria|algoritmos|informatica|ciberseguridad|seguridad|"
-    r"diseno|programacion\s+avanzada|en\s+internet)\b")
+    r"diseno|programacion\s+avanzada|en\s+internet)\b"
+    # v3.35: cómo se programa un SO por dentro (fichas propias); «estudia sistemas operativos» a secas sigue al general
+    r"|^(?:los\s+|el\s+|un\s+)?(?:sistemas?\s+operativos?\s+por\s+dentro|kernels?|el\s+kernel|osdev|"
+    r"desarrollo\s+de\s+(?:sistemas\s+operativos|kernels?)|como\s+se\s+(?:hace|programa|crea)\s+un\s+"
+    r"(?:sistema\s+operativo|kernel)|a\s+programar\s+(?:un\s+)?(?:sistemas?\s+operativos?|kernels?))\b")
 # especiales de IA: SOLO sin dos puntos («estudia redes» = fichas propias; «estudia: redes» = estudio general)
 _ESPECIAL_IA = re.compile(
     r"^(?:la\s+)?(?:redes|deep|aprendizaje|inteligencia|machine|lenguaje|procesamiento|pln|nlp|rag|fine|ajuste)\b")
@@ -255,6 +260,18 @@ class Estudiante:
             self.aprendidos += nuevas
             self.ciberseguridad = len(fichas)
             self.ultimo = "ciberseguridad defensiva"
+            self._guardar()
+        return nuevas, len(fichas)
+
+    def estudiar_so(self):
+        """v3.35: guarda en el baúl las fichas de SISTEMAS OPERATIVOS POR DENTRO (saber_so_kira): arranque, GDT, IDT,
+        PIC, paginación, multitarea… Texto escrito a mano: no viene de internet. Devuelve (fichas nuevas, total)."""
+        import saber_so_kira as so
+        fichas = so.fichas()
+        nuevas = sum(self._ficha(tema, texto, fuente=FUENTE_SO) for tema, texto in fichas)
+        with self._lock:
+            self.aprendidos += nuevas
+            self.ultimo = "sistemas operativos por dentro"
             self._guardar()
         return nuevas, len(fichas)
 

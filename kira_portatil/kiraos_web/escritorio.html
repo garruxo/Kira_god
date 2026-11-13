@@ -510,12 +510,19 @@ function menuAcceso(id, x, y){                      // v3.26: menú contextual d
   var iid=String(id).slice(7), a=null;
   for(var k=0;k<ACCESOS.length;k++){ if(ACCESOS[k].id===iid) a=ACCESOS[k]; }
   var m=document.createElement("div"); m.id="menuAcceso"; m.className="ctxmenu";
+  var ext=a && a.tipo==="externa";                  // v3.35: una app instalada también se cierra y dice sus órdenes
   m.innerHTML='<div class="ctxtit">'+esc(a?a.titulo:"Programa")+'</div>'+
-    '<button data-a="abrir">Abrir</button><button data-a="desinstalar" class="peligro">Desinstalar</button>';
+    '<button data-a="abrir">Abrir</button>'+
+    (ext?'<button data-a="cerrar">Cerrar</button><button data-a="ordenes">Órdenes para manejarla</button>':'')+
+    '<button data-a="desinstalar" class="peligro">Desinstalar</button>';
   document.body.appendChild(m);
-  var mw=190, mh=96, px=Math.min(x, window.innerWidth-mw-8), py=Math.min(y, window.innerHeight-mh-8);
+  var mw=210, mh=ext?160:96, px=Math.min(x, window.innerWidth-mw-8), py=Math.min(y, window.innerHeight-mh-8);
   m.style.left=px+"px"; m.style.top=py+"px";
   m.querySelector('[data-a="abrir"]').onclick=function(){ cierraMenuAcceso(); abrir(id); };
+  if(ext){
+    m.querySelector('[data-a="cerrar"]').onclick=function(){ cierraMenuAcceso(); hablarCon("cierra "+a.titulo); };
+    m.querySelector('[data-a="ordenes"]').onclick=function(){ cierraMenuAcceso(); hablarCon("órdenes de "+a.titulo); };
+  }
   m.querySelector('[data-a="desinstalar"]').onclick=function(){ cierraMenuAcceso(); desinstalaAcceso(iid, a?a.titulo:""); };
 }
 function cierraMenuAcceso(){ var m=$("menuAcceso"); if(m) m.parentNode.removeChild(m); }

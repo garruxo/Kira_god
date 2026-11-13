@@ -631,7 +631,7 @@ def _revisar(carpeta, nombre, fuente, forzar, met):
     return None
 
 
-def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=False):
+def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=False, nombre=None):
     """Instala la app de `fuente` (SIN administrador). ANTES de dejarla, la ANALIZA (v3.29): si encuentra algo peligroso
     y no se fuerza, no la instala. Devuelve {ok, nombre, lanzar, carpeta, mensaje, admin, analisis}.
     `admin=True` = hace falta la Terminal con la contraseña del dueño (no se hace sola)."""
@@ -640,7 +640,7 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
     bajar = bajar or _bajar_defecto
     paso = al_paso or (lambda _t: None)
     met = metodo(fuente)
-    nombre = _nombre_de(fuente)
+    nombre = str(nombre or "").strip()[:60] or _nombre_de(fuente)   # v3.35: el nombre de la app (sin la versión)
     carpeta = os.path.join(base, _carpeta_id(nombre))
 
     if met == "nombre":

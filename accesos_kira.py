@@ -117,6 +117,25 @@ def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
     return iid
 
 
+def poner_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
+    """v3.35: como anadir_externa, pero si ya estaba (otra versión de la misma app) ACTUALIZA cómo se lanza.
+    Devuelve (id, nueva: bool)."""
+    iid = anadir_externa(dir_, titulo, lanzar, carpeta, icono)
+    if iid:
+        return iid, True
+    t = str(titulo or "").strip()[:60].lower()
+    lista = _leer(dir_)
+    for a in lista:
+        if str(a.get("titulo", "")).strip().lower() == t:
+            if a.get("tipo") == "externa":
+                a["lanzar"] = list(lanzar or a.get("lanzar") or [])
+                a["carpeta"] = str(carpeta or a.get("carpeta") or "")
+                a["cuando"] = int(time.time())
+                _guardar(dir_, lista)
+            return a.get("id"), False
+    return None, False
+
+
 def uno(dir_, iid):
     for a in _leer(dir_):
         if a.get("id") == iid:

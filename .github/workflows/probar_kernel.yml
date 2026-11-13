@@ -1,0 +1,32 @@
+name: Probar el kernel de Kira (QEMU de verdad)
+on:
+  push:
+    branches: [kernel-prueba]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar gcc, nasm y QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential nasm qemu-system-x86 >/dev/null
+      - name: Las 5 etapas compilan y arrancan en QEMU
+        run: python3 kira_portatil/taller_kernel_kira.py --probar-etapas --base /tmp/kernel --informe informe_kernel.txt
+      - name: El taller con un cerebro de mentira (arreglar un fallo de verdad)
+        if: always()
+        run: python3 tests/test_taller_kernel.py --qemu-real
+      - name: Guardar el informe en la rama (para poder leerlo)
+        if: always() && github.ref == 'refs/heads/kernel-prueba'
+        run: |
+          git config user.name "kira-kernel"
+          git config user.email "kira-kernel@users.noreply.github.com"
+          git add -f informe_kernel.txt || true
+          git commit -m "Informe del kernel en QEMU" || true
+          git push || true

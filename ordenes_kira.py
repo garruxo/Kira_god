@@ -48,6 +48,11 @@ def ocultar_claves(texto):
     texto = str(texto or "")
     # v3.14: «config github: …» / «config clave: …» y las claves con forma conocida (GitHub, Anthropic…) tampoco
     texto = re.sub(r"(\bconfig\s+(?:github|clave|api|token)\s*:\s*)\S+", r"\1••••", texto, flags=re.I)
+    # v3.35: las claves de las OTRAS IA («config gemini AIza…», «mi clave de chatgpt es sk-…»)
+    texto = re.sub(r"(\bconfig(?:ura)?\s+(?:chat\s?gpt|openai|gpt|g[eé]minis?|google|deep\s?seek|mistral|groq|"
+                   r"open\s?router|grok|xai)\s*:?\s*)(?!modelo\b)\S+", r"\1••••", texto, flags=re.I)
+    texto = re.sub(r"\b(?:AIza[0-9A-Za-z_\-]{20,}|gsk_[A-Za-z0-9]{20,}|xai-[A-Za-z0-9]{20,}|sk-or-[A-Za-z0-9\-]{20,})",
+                   "••••", texto)
     texto = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|sk-ant-[A-Za-z0-9_\-]{8,}|"
                    r"sk-[A-Za-z0-9]{20,})", "••••", texto)
     return re.sub(r"(\b(?:clave|contrase(?:ñ|n)a|password|pass)\b\s*(?:es|:|=)?\s*)\S+", r"\1••••", texto, flags=re.I)

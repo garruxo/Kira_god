@@ -176,6 +176,9 @@ if [ "$PRUEBA" = "0" ]; then
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils \
     openssh-client tigervnc-viewer >/dev/null 2>&1 || \
     echo "  (no pude instalar QEMU ahora; la máquina de Kira esperará a la próxima vez)"
+  # v3.35: el TALLER DE KERNEL (Kira programa un sistema operativo y lo arranca en QEMU): nasm + gcc/ld.
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq nasm build-essential >/dev/null 2>&1 || \
+    echo "  (no pude instalar nasm ahora; el taller de kernel te dirá cómo cuando lo uses)"
   if getent group kvm >/dev/null; then
     $SUDO usermod -aG kvm "$USER" || true                # para que vaya rápida (KVM) sin ser administrador
   fi

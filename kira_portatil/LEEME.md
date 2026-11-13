@@ -158,3 +158,18 @@ Para que al encender NO se vea Xubuntu (ni su logo al arrancar ni su escritorio)
 - Para ir al escritorio de Xubuntu: menú K ▸ «Ir a Xubuntu» (o Alt+F4).
 - Si Kira se cierra por un fallo, se vuelve a abrir sola; si falla 3 veces seguidas, abre Xubuntu.
 - Para dejarlo como antes: `bash solo_kira.sh --deshacer`.
+
+## v3.35: el taller de kernel, las versiones, tus apps y otras IA
+
+- **Programar un sistema operativo:** «etapas del kernel», «pon la etapa 2 del kernel», «programa el kernel: …»,
+  «prueba el kernel», «enséñame el kernel funcionando» (se abre en una ventana de QEMU), «deshaz el último cambio del
+  kernel». Necesita `nasm` (si falta, Kira te dice cómo ponerlo). Antes: «estudia sistemas operativos por dentro».
+- **Varias versiones al descargar:** «instala <página o GitHub>» o «descarga e instala esto» → Kira te enseña las
+  versiones y contestas «instala la 2», «la estable», «la más nueva», «la 2 en .deb» o «ninguna».
+- **Manejar tus apps** (las de Kira y las de Xubuntu): «abre X», «abre X con <archivo>», «cierra X», «reinicia X»,
+  «¿está abierta X?», «qué apps tengo», «órdenes de X» (te dice todas sus herramientas), «en X, <herramienta>».
+  Clic derecho en el icono de una app: Cerrar / Órdenes para manejarla.
+- **Otras IA cuando no sabe:** pon la clave de las que quieras («config gemini <clave>», «config chatgpt <clave>»,
+  «config deepseek <clave>»…). Si Kira falla dos veces seguidas con un código, les pregunta, prueba lo que dicen
+  (el kernel en QEMU, los programas en su máquina virtual) y se queda con lo que funciona. «qué IA tengo»,
+  «desactiva la ayuda de otras IA».

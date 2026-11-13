@@ -928,7 +928,11 @@ class KiraGodCore:
 
         r = ak.negociar(proponer, probar, revisar if revisor else None, autor=autor, revisor=revisor,
                         intentos=4 if autor == "local" else 3)
+        if not r["ok"] and int(r.get("intentos") or 0) >= 2 and not self.cancelado():
+            r = self._programa_con_otras_ias(pedido, r, paso, al_codigo) or r   # v3.35: no sabe → pregunta a otras IA
         hist = ak.texto_historial(r)
+        if r.get("de_ia"):
+            return r
         if r["ok"]:
             d = r["dato"] or {}
             r["texto"] = ("Programa listo y probado en modo seguro." + (" Avisos: " + "; ".join(d.get("avisos", []))
@@ -937,6 +941,50 @@ class KiraGodCore:
             r["texto"] = ("[x] No he conseguido un programa que funcione. " + (r.get("error") or "")).strip() + \
                 (f"\n{hist}" if hist else "")
         return r
+
+    def _programa_con_otras_ias(self, pedido, r, paso, al_codigo=None):
+        """v3.35: tras fallar dos veces seguidas (o más), pregunta a OTRAS IA (las que el dueño configuró), PRUEBA cada
+        propuesta (en KiraOS dentro de su máquina virtual; si no, en el modo seguro) y se queda con la primera que
+        funciona. None si no hay IA configurada o ninguna lo logra (entonces se dice el fallo de siempre)."""
+        import ayuda_ias_kira as ai
+        import programar_kira as pk
+        if not ai.activa(self.dir) or not ai.configuradas(self.dir):
+            return None
+        bueno = {}
+
+        def probar(texto):
+            try:
+                nombre, codigo = pk.extraer_programa(texto)
+            except Exception as e:                    # noqa: BLE001
+                return False, f"no trajo un programa en un bloque ```python ({e})"
+            ok, motivo, dato = self._probar_experimento(codigo)
+            if al_codigo:
+                try:
+                    al_codigo(codigo, ok, motivo)
+                except Exception:                     # noqa: BLE001
+                    pass
+            if ok:
+                bueno.update(nombre=nombre, codigo=codigo, dato=dato)
+                return True, "funciona al probarlo" + (" en mi máquina virtual" if getattr(self, "es_kiraos", False) else "")
+            return False, str(motivo or "falló")[:600]
+
+        rec = getattr(self, "recuerdos", None)
+        guardar = (lambda tema, texto: rec.guardar(texto, tema=tema, fuente="otras IA")) if rec else None
+        paso("No me sale sola: pregunto a otras IA…")
+        res = ai.ayuda(self.dir, pedido, r.get("codigo") or "", r.get("error") or "", probar,
+                       pk.SISTEMA_PROGRAMA, formato="python", al_paso=paso, parar=self.cancelado, guardar=guardar)
+        if not res.get("ok"):
+            if res.get("historial"):
+                r["error"] = (str(r.get("error") or "") + " Pregunté también a otras IA: " +
+                              ai.texto_historial(res["historial"]) + ".").strip()
+            return None
+        donde = "en mi máquina virtual" if getattr(self, "es_kiraos", False) else "en modo seguro"
+        return {"ok": True, "nombre": bueno["nombre"], "codigo": bueno["codigo"], "dato": bueno.get("dato") or {},
+                "de": res["ia"], "de_ia": res["ia"], "acuerdo": None, "historial": r.get("historial") or [],
+                "intentos": r.get("intentos"),
+                "texto": (f"Programa listo. No me salía sola ({r.get('intentos')} intentos), así que pregunté a otras "
+                          f"IA: lo de {res['ia']} funciona al probarlo {donde} y me lo quedo. Lo que me recomendó "
+                          f"queda en mi baúl para aprenderlo. ({ai.texto_historial(res['historial'])})")}
 
     def recordar_correccion(self, pedido, correccion, malo=False):
         """Guarda en el baúl lo que el dueño CORRIGE (o descarta) de un intento, para mejorar la próxima vez que pida
@@ -3841,6 +3889,23 @@ class KiraGodCore:
                     "algoritmos, estructuras de datos, sistemas operativos, redes, bases de datos, compiladores, "
                     "seguridad defensiva, IA…). Pregúntame, por ejemplo, «qué es el teorema CAP» o «cómo funciona "
                     "Dijkstra». Mis técnicas con código: «recetas de ingeniería».")
+        if re.match(r"^estudia\s*:?\s*(?:los\s+|el\s+|un\s+)?(?:sistemas?\s+operativos?\s+por\s+dentro|kernels?|"
+                    r"el\s+kernel|osdev|desarrollo\s+de\s+(?:sistemas\s+operativos|kernels?)|c[oó]mo\s+se\s+"
+                    r"(?:hace|programa|crea)\s+un\s+(?:sistema\s+operativo|kernel)|a\s+programar\s+(?:un\s+)?"
+                    r"(?:sistemas?\s+operativos?|kernels?))\s*$", cmd_lower):
+            try:                                       # v3.35: cómo se programa un SO por dentro (fichas propias)
+                nuevas, total = est.estudiar_so()
+            except (ImportError, OSError) as e:
+                return f"[x] No pude guardar mi saber de sistemas operativos: {e}"
+            extra = (" En KiraOS tengo además mi TALLER DE KERNEL: «etapas del kernel», «programa el kernel: …», "
+                     "«prueba el kernel» y «enséñame el kernel funcionando»." if getattr(self, "es_kiraos", False)
+                     else " Para programarlo de verdad, pídeselo a KiraOS: «programa el kernel: …».")
+            return (f"[OK] He estudiado cómo se programa un sistema operativo por dentro: {nuevas} ficha(s) nuevas "
+                    f"(tengo {total}: arranque y Multiboot, GDT, IDT y excepciones, PIC, temporizador, teclado, "
+                    "memoria física, paginación, heap, multitarea, modo usuario y llamadas al sistema, sistema de "
+                    "archivos y cómo depurar un triple fallo). Pregúntame «qué es la GDT» o «qué es la paginación». "
+                    "Para seguir con la documentación oficial: «haz un estudio completo de esta página "
+                    "https://wiki.osdev.org/Bare_Bones»." + extra)
         if re.match(r"^estudia\s*:?\s*(?:la\s+|el\s+)?(?:ciberseguridad|seguridad(?:\s+inform[aá]tica|\s+defensiva)?)\s*$",
                     cmd_lower):
             return self.estudiar_ciberseguridad(con_internet=False)
@@ -3996,6 +4061,15 @@ class KiraGodCore:
             _qi = None
         if _qi:                                        # v3.20: «implementa la receta X» / «usa la solución X en Kira»
             return self._orden_implementar(_qi, command)
+        try:
+            import ayuda_ias_kira as _ai
+            _qai = _ai.orden(command)
+        except ImportError:
+            _qai = None
+        if _qai:                                       # v3.35: las OTRAS IA (claves, «pregunta a las IA: …»)
+            rec = getattr(self, "recuerdos", None)
+            guardar = (lambda tema, texto: rec.guardar(texto, tema=tema, fuente="otras IA")) if rec else None
+            return _ai.hacer(self.dir, _qai[0], _qai[1], _qai[2], guardar=guardar)
         r = self._orden_superadmin(cmd_lower)          # v3.27: «sé superadministrador / modo root»
         if r is not None:
             return r

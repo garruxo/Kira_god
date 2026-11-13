@@ -115,7 +115,8 @@ aex.instalar = lambda fuente, **k: {"ok": True, "admin": False, "nombre": "Pepe"
 r = npmod._instalar_app(Core(), "foo/pepe", lambda *a, **k: None)
 ok("instalada" in r["texto"].lower() and npmod._buscar_app(Core(), "pepe"), "el núcleo instala y deja el icono")
 lan2 = []
-aex.lanzar = lambda a, correr=None: (lan2.append(a.get("titulo")), {"ok": True, "mensaje": "Abriendo Pepe…"})[1]
+import manejo_apps_kira as _ma   # v3.35: «usa X» abre con el manejo de apps (apunta el proceso para «cierra X»)
+_ma.Manejo.abrir = lambda self, a, archivo="": (lan2.append(a.get("titulo")), {"ok": True, "texto": "Abriendo Pepe…"})[1]
 r = npmod._usar_app(Core(), "pepe")
 ok("abriendo" in r["texto"].lower() and lan2, "«usa Pepe» la lanza")
 

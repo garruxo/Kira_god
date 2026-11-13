@@ -27,7 +27,7 @@ ARCHIVOS = (
 )
 CARPETAS = ("recuerdos", "modulos", "apps", "entrenamiento", "pdf", "datos_modulos")
 # Lo que NUNCA viaja aunque esté dentro de una carpeta que sí
-NUNCA = ("api_key.txt", "github_token.txt", "pasarela.json", "token_lab.txt")
+NUNCA = ("api_key.txt", "github_token.txt", "pasarela.json", "token_lab.txt", "ias_claves.json")
 EXT_NUNCA = (".gguf", ".bin.part", ".parte", ".log", ".pid", ".tmp")
 MAX_ARCHIVO = 60 * 1024 * 1024          # un PDF enorme no se lleva (avisa)
 MAX_TOTAL = 400 * 1024 * 1024

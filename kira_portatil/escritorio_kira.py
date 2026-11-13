@@ -183,9 +183,12 @@ class EscritorioMixin:
             import accesos_kira as ak
             a = ak.uno(DATOS_NUCLEO, iid) or {}
             if a.get("tipo") == "externa":
-                try:
-                    import apps_externas_kira as aex
-                    r = aex.lanzar(a)
+                try:                                      # v3.35: apuntando su proceso (para «cierra X»)
+                    import manejo_apps_kira as ma
+                    r0 = ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)).abrir(
+                        {"titulo": a.get("titulo", "App"), "lanzar": a.get("lanzar") or [],
+                         "carpeta": a.get("carpeta") or ""})
+                    r = {"ok": r0.get("ok"), "mensaje": r0.get("texto", "")}
                 except Exception as e:                    # noqa: BLE001
                     r = {"ok": False, "mensaje": str(e)}
                 return {"titulo": a.get("titulo", "App"), "externa": True,
@@ -202,7 +205,24 @@ class EscritorioMixin:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    def instalar_web(self, url=None, forzar=False):
+    def elegir_version(self, texto):
+        """v3.35: el dueño contesta a «¿qué versión quieres?» desde la barra de Kira."""
+        import versiones_kira as vk
+        pend = vk.pendiente()
+        if not pend:
+            return "No te había preguntado por ninguna versión."
+        e = vk.eleccion(texto, pend["opciones"])
+        vk.borrar_pendiente()
+        if e == "cancelar":
+            return f"Vale, no descargo ninguna versión de {pend.get('nombre', 'eso')}."
+        if e == "clonar":
+            return self.instalar_web(url=pend["fuente"], sin_versiones=True)
+        if not isinstance(e, dict):
+            return "No he entendido qué versión quieres."
+        return (f"Versión {e.get('version') or 'elegida'} ({e.get('forma', '')}). " +
+                self.instalar_web(url=e["url"], sin_versiones=True, nombre=pend.get("nombre")))
+
+    def instalar_web(self, url=None, forzar=False, sin_versiones=False, nombre=None):
         """v3.31: descarga e INSTALA lo que el dueño está viendo en el Buscador (o la URL que se pasa), sea lo que sea
         (AppImage, .deb, comprimido…), y deja su ICONO en el escritorio. Si la URL es una página, busca en ella el
         enlace de descarga. Devuelve el texto para enseñar. Solo con la orden del dueño; sin administrador por defecto."""
@@ -216,28 +236,46 @@ class EscritorioMixin:
                 return ("No sé qué instalar: abre antes en el Buscador la página del programa que quieres y dime "
                         "«descarga e instala esto».")
             fuente = url
-            if not aex.es_descargable(url) and aex.metodo(url) != "github":   # es una página: busco el archivo en ella
+            import versiones_kira as vk
+            if not sin_versiones and aex.metodo(url) == "github":            # v3.35: sus versiones publicadas
+                ops = vk.de_github(url)
+                if len(ops) >= 2:
+                    nom = (vk.repo_github(url) or "app").split("/")[-1]
+                    vk.guardar_pendiente(nom, url, ops)
+                    return vk.texto_opciones(nom, ops, con_codigo=True)
+                if len(ops) == 1:
+                    fuente, nombre = ops[0]["url"], nombre or (vk.repo_github(url) or "app").split("/")[-1]
+            elif not aex.es_descargable(url) and aex.metodo(url) != "github":   # es una página: busco el archivo en ella
                 try:
                     html = aex._traer_texto(url)
                 except Exception as e:                # noqa: BLE001
                     return f"No pude abrir «{url}» para buscar la descarga: {e}"
-                mejor = aex.elegir_descarga(aex.enlaces_descarga(html, url))
+                enlaces = aex.enlaces_descarga(html, url)
+                ops = [] if sin_versiones else vk.opciones_de_urls(enlaces)
+                if len(ops) >= 2:                     # v3.35: varias versiones → pregunto cuál
+                    nom = vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"])
+                    vk.guardar_pendiente(nom, url, ops)
+                    return vk.texto_opciones(nom, ops)
+                if len(ops) == 1:
+                    nombre = nombre or vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"])
+                mejor = aex.elegir_descarga(enlaces)
                 if not mejor:
                     return ("No encontré en esta página un archivo que sepa instalar (AppImage, .deb, .tar.gz, .zip…). "
                             "Entra en su página de descargas y dímelo ahí, o pégame el enlace directo del archivo.")
                 fuente = mejor
-        r = aex.instalar(fuente, forzar=forzar)
+        r = aex.instalar(fuente, forzar=forzar, nombre=nombre)
         if r.get("peligro"):
             self._app_bloqueada = fuente              # para «instálalo igualmente»
             return r.get("mensaje", "No la instalo.")
         if not r.get("ok"):
             return r.get("mensaje", "No pude instalarla.")
         self._app_bloqueada = ""
-        iid = ak.anadir_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
-        extra = "" if iid else " (ya la tenías)"
+        iid, nueva = ak.poner_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+        extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
         dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
+        import manejo_apps_kira as ma
         return (r.get("mensaje", "Instalada.") + extra + " Ya está su icono en el escritorio: púlsalo para abrirla, "
-                "clic derecho para desinstalarla." + dep_aviso)
+                "clic derecho para desinstalarla." + ma.breve(r["nombre"]) + dep_aviso)
 
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
     def aspecto(self):
@@ -373,6 +411,13 @@ class EscritorioMixin:
             except Exception:
                 o_s = None
             inst_esto = False                                      # v3.31: «descarga e instala esto» (lo que ve en el Buscador)
+            elige_v = False                                        # v3.35: contesta a «¿qué versión quieres?»
+            try:
+                import versiones_kira as _vk
+                _pv = _vk.pendiente()
+                elige_v = bool(_pv and _vk.es_respuesta(texto, _pv["opciones"]))
+            except Exception:
+                elige_v = False
             try:
                 import apps_externas_kira as _aex
                 inst_esto = bool(_aex.es_orden_instalar_esto(texto) or
@@ -389,6 +434,10 @@ class EscritorioMixin:
                 t["aspecto"] = True                                # la pantalla se vuelve a pintar
                 if o_s[0] == "salva_ver":
                     t["salvapantallas"] = True
+            elif elige_v:
+                t["estado"] = "hablando"
+                t["respuesta"] = self.elegir_version(texto)
+                t["barra"] = True
             elif inst_esto:
                 t["estado"] = "hablando"
                 t["respuesta"] = self.instalar_web(forzar=_aex.quiere_forzar(texto))
