@@ -53,6 +53,9 @@ def es_orden_instalar(texto):
     resto = re.sub(r"^(?:la\s+|el\s+)?(?:app|aplicaci[oó]n|programa|herramienta)\s+", "", resto, flags=re.I)
     resto = re.sub(r"^(?:este\s+github|de\s+github|desde\s+github|el\s+github)\b\s*:?\s*", "", resto, flags=re.I)
     resto = re.sub(r"^(?:de|desde)\s+", "", resto, flags=re.I)
+    # quita el «igualmente / de todas formas» del final (es para FORZAR, no parte del nombre; v3.29)
+    resto = re.sub(r"\s+(?:igualmente|igual|de\s+todas\s+(?:formas|maneras)|f[oó]rzal[ao]|aunque\s+sea\s+peligros\w*)\s*$",
+                   "", resto, flags=re.I)
     return resto.strip(" .:\"'") or None
 
 
@@ -130,6 +133,104 @@ def como_arrancar(carpeta):
     return None
 
 
+# ---------------- analizar ANTES de instalar (defensa) ----------------
+_PELIGRO = [
+    (r"rm\s+-rf\s+(/|~|\$home|\*|/\*)", "borra archivos en bloque (rm -rf)"),
+    (r"(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z)?sh\b", "descarga y ejecuta directo de internet (curl|bash)"),
+    (r"/dev/tcp/|\bnc\s+-e\b|bash\s+-i\s*>\s*&", "parece una puerta trasera / shell inversa"),
+    (r"stratum\+tcp|xmrig|minerd|cryptonight", "parece minar criptomonedas"),
+    (r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "bomba de forks"),
+    (r"id_rsa|authorized_keys|\.ssh/", "toca las llaves SSH"),
+    (r"(exec|eval)\s*\(\s*(requests|urllib|urlopen|__import__)", "ejecuta código bajado de internet"),
+    (r"\bmkfs\b|dd\s+if=.*of=/dev/", "escribe sobre el disco entero"),
+]
+_OJO = [
+    (r"\bsudo\b", "usa sudo (administrador)"),
+    (r"os\.system\(|subprocess\.|Popen\(", "ejecuta comandos del sistema"),
+    (r"(^|[^\w])/etc/|/boot/|/usr/s?bin", "toca carpetas del sistema"),
+    (r"chmod\s+(777|\+x)|chown\b", "cambia permisos"),
+    (r"crontab|systemctl|/etc/cron|\.bashrc|autostart", "se engancha al arranque / tareas programadas"),
+    (r"base64\s+-d|b64decode", "tiene algo codificado en base64"),
+    (r"pip\s+install|npm\s+install|apt(-get)?\s+install", "quiere instalar más cosas"),
+]
+_TEXTO_EXT = (".py", ".sh", ".bash", ".js", ".ts", ".json", ".txt", ".md", ".cfg", ".ini", ".yml", ".yaml",
+              ".toml", ".c", ".cpp", ".h", ".rb", ".pl", ".php", ".go", ".rs", ".java", ".bat", ".ps1", ".mk", "")
+
+
+def _es_texto(ruta):
+    if os.path.splitext(ruta)[1].lower() not in _TEXTO_EXT:
+        return False
+    try:
+        if os.path.getsize(ruta) > 200000:
+            return False
+        with open(ruta, "rb") as f:
+            cacho = f.read(4096)
+        return b"\x00" not in cacho
+    except OSError:
+        return False
+
+
+def analizar(carpeta, max_archivos=500):
+    """v3.29: revisa lo descargado ANTES de dejarlo instalado, buscando señales feas (curl|bash, rm -rf, shell inversa,
+    minería, tocar las llaves SSH, código bajado y ejecutado…). Devuelve {nivel: ok|ojo|peligro, hallazgos, binarios,
+    archivos, resumen}. HONESTO: pilla lo obvio, NO es garantía (el malware bien hecho se esconde)."""
+    import re as _re
+    hallazgos, binarios, archivos = [], 0, 0
+    nivel = "ok"
+    for raiz, _dirs, ficheros in os.walk(carpeta):
+        if "/.git" in raiz.replace("\\", "/"):
+            continue
+        for f in ficheros:
+            ruta = os.path.join(raiz, f)
+            archivos += 1
+            if archivos > max_archivos:
+                break
+            if not _es_texto(ruta):
+                if os.path.isfile(ruta) and os.access(ruta, os.X_OK):
+                    binarios += 1
+                continue
+            try:
+                with open(ruta, encoding="utf-8", errors="ignore") as fh:
+                    txt = fh.read()
+            except OSError:
+                continue
+            low = txt.lower()
+            rel = os.path.relpath(ruta, carpeta)
+            for patron, motivo in _PELIGRO:
+                if _re.search(patron, low):
+                    hallazgos.append(("peligro", rel, motivo))
+                    nivel = "peligro"
+            for patron, motivo in _OJO:
+                if _re.search(patron, low):
+                    hallazgos.append(("ojo", rel, motivo))
+    if nivel != "peligro" and (binarios or any(h[0] == "ojo" for h in hallazgos)):
+        nivel = "ojo"
+    # resumen corto, sin repetir motivos
+    motivos_p = []
+    for sev, _rel, mot in hallazgos:
+        if sev == "peligro" and mot not in motivos_p:
+            motivos_p.append(mot)
+    motivos_o = []
+    for sev, _rel, mot in hallazgos:
+        if sev == "ojo" and mot not in motivos_o:
+            motivos_o.append(mot)
+    if nivel == "peligro":
+        resumen = "⚠ Encontré cosas PELIGROSAS: " + "; ".join(motivos_p[:5]) + "."
+    elif nivel == "ojo":
+        extra = (f" y {binarios} archivo(s) que no puedo mirar por dentro (binarios)" if binarios else "")
+        resumen = "Ojo: " + "; ".join((motivos_o or ["nada grave"])[:4]) + extra + "."
+    else:
+        resumen = "No vi nada raro (pero un análisis así no es garantía)."
+    return {"nivel": nivel, "hallazgos": hallazgos, "binarios": binarios, "archivos": archivos, "resumen": resumen}
+
+
+def quiere_forzar(texto):
+    """¿El dueño dice que la instale AUNQUE haya avisado? («igualmente», «de todas formas», «fórzala»…)."""
+    import re as _re
+    return bool(_re.search(r"\b(igualmente|de\s+todas\s+(formas|maneras)|f[oó]rzal[ao]|forzar|aunque\s+sea\s+peligros)\b",
+                           str(texto or ""), _re.I))
+
+
 # ---------------- instalar ----------------
 def _correr_defecto(args, cwd=None, timeout=600):
     p = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout)
@@ -147,9 +248,23 @@ def _bajar_defecto(url, destino):
     return os.path.getsize(destino)
 
 
-def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None):
-    """Instala la app de `fuente` (SIN administrador). Devuelve {ok, nombre, lanzar, carpeta, mensaje, admin}.
-    `admin=True` significa que hace falta la Terminal con la contraseña del dueño (no se hace sola)."""
+def _revisar(carpeta, nombre, fuente, forzar, met):
+    """v3.29: analiza lo descargado ANTES de dejarlo instalado. Si es PELIGROSO y no se fuerza, devuelve el aviso (para
+    borrarlo y no instalarlo); si no, devuelve None y se sigue. Un AppImage/binario no se puede mirar por dentro: avisa
+    pero no bloquea (es cosa del dueño fiarse de la fuente)."""
+    an = analizar(carpeta)
+    if an["nivel"] == "peligro" and not forzar:
+        return {"ok": False, "admin": False, "peligro": True, "analisis": an, "nombre": nombre, "lanzar": None,
+                "carpeta": "", "mensaje": (f"He mirado «{nombre}» antes de instalarla y NO me fío: {an['resumen']} "
+                                           f"Por tu seguridad no la instalo. Si aun así la quieres, dime: «instala "
+                                           f"{fuente} igualmente».")}
+    return None
+
+
+def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=False):
+    """Instala la app de `fuente` (SIN administrador). ANTES de dejarla, la ANALIZA (v3.29): si encuentra algo peligroso
+    y no se fuerza, no la instala. Devuelve {ok, nombre, lanzar, carpeta, mensaje, admin, analisis}.
+    `admin=True` = hace falta la Terminal con la contraseña del dueño (no se hace sola)."""
     base = base or BASE_POR_DEFECTO
     correr = correr or _correr_defecto
     bajar = bajar or _bajar_defecto
@@ -184,13 +299,21 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None):
         if rc != 0:
             return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
                     "mensaje": f"No pude clonar {nombre} de GitHub (¿existe el repo? ¿hay internet?). {salida[-200:]}"}
+        paso("La reviso antes de instalarla…")
+        bloqueo = _revisar(carpeta, nombre, fuente, forzar, "github")   # v3.29: analiza ANTES de dejarla
+        if bloqueo:
+            import shutil
+            shutil.rmtree(carpeta, ignore_errors=True)
+            return bloqueo
+        an = analizar(carpeta)
         lanzar = como_arrancar(carpeta)
+        nota = " (" + an["resumen"] + ")" if an["nivel"] != "ok" else ""
         if not lanzar:
-            return {"ok": True, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta,
+            return {"ok": True, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta, "analisis": an,
                     "mensaje": (f"He descargado {nombre} en tu carpeta de apps, pero no veo claro cómo arrancarla "
-                                "(mira su README). La dejo en el escritorio igualmente.")}
-        return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta,
-                "mensaje": f"{nombre} instalada (de GitHub, sin tocar el sistema). La tienes en el escritorio."}
+                                "(mira su README). La dejo en el escritorio igualmente." + nota)}
+        return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta, "analisis": an,
+                "mensaje": f"{nombre} instalada (de GitHub, revisada, sin tocar el sistema). La tienes en el escritorio." + nota}
 
     # appimage / descarga directa
     if met in ("appimage", "descarga"):
@@ -208,7 +331,9 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None):
         except OSError:
             pass
         return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [destino], "carpeta": carpeta,
-                "mensaje": f"{nombre} descargada (sin tocar el sistema). La tienes en el escritorio."}
+                "analisis": {"nivel": "ojo", "resumen": "es un binario y no puedo mirarlo por dentro"},
+                "mensaje": (f"{nombre} descargada (sin tocar el sistema). La tienes en el escritorio. Ojo: es un AppImage "
+                            "(un binario) y no puedo revisarlo por dentro como un repo; fíate de quién te lo dio.")}
 
     return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
             "mensaje": f"No sé instalar «{fuente}»."}

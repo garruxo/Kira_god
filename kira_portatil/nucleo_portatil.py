@@ -391,16 +391,22 @@ def _buscar_app(core, nombre):
     return None
 
 
-def _instalar_app(core, fuente, paso):
-    """v3.28: instala la app que el dueño pidió (sin administrador) y la deja como icono en el escritorio."""
+def _instalar_app(core, fuente, paso, forzar=False):
+    """v3.28/v3.29: instala la app que el dueño pidió (sin administrador), la ANALIZA antes y la deja como icono en el
+    escritorio. Si el análisis la marca peligrosa (y no la fuerza), no la instala y recuerda cuál era (para «igualmente»)."""
     import apps_externas_kira as aex
     import accesos_kira as ak
     paso(0.0, f"Instalo {fuente}…")
-    r = aex.instalar(fuente, al_paso=lambda t: paso(None, t))
+    r = aex.instalar(fuente, al_paso=lambda t: paso(None, t), forzar=forzar)
+    if r.get("peligro"):                          # v3.29: la analizó y no se fía → recuerda cuál era
+        core._app_bloqueada = fuente
+    elif getattr(core, "_app_bloqueada", "") == fuente:
+        core._app_bloqueada = ""
     if not r.get("ok"):
-        # «admin» no es un error: es que necesita la Terminal con tu contraseña (no lo hago sola)
-        return {"texto": ("" if r.get("admin") else "[x] ") + r.get("mensaje", "No pude instalarla."),
-                "ok": bool(r.get("admin"))}
+        # «admin»/«peligro» no son un error de Kira: necesitan tu contraseña o tu «igualmente» (no lo hace sola)
+        suave = r.get("admin") or r.get("peligro")
+        return {"texto": ("" if suave else "[x] ") + r.get("mensaje", "No pude instalarla."),
+                "ok": bool(suave)}
     iid = ak.anadir_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
     extra = "" if iid else " (ya la tenías)"
     return {"texto": r.get("mensaje", "Instalada.") + extra +
@@ -457,10 +463,16 @@ def ejecutar(core, orden, paso):
         tipo, describir = so
         paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
         return {"texto": sp.hacer(tipo, describir)}
+    import entorno_kira as ek                     # v3.29: que CONOZCA su entorno (solo lectura: dónde está, qué tiene)
+    if ek.es_orden(o):
+        return {"texto": ek.texto()}
     import apps_externas_kira as aex              # v3.28: instalar/usar apps que el dueño pide (GitHub, AppImage…)
     oi = aex.es_orden_instalar(o)
+    forzar = aex.quiere_forzar(o)
+    if not oi and forzar and getattr(core, "_app_bloqueada", ""):   # «instálala igualmente» (la última que avisé)
+        oi = core._app_bloqueada
     if oi:
-        return _instalar_app(core, oi, paso)
+        return _instalar_app(core, oi, paso, forzar=forzar)
     ou = aex.es_orden_usar(o)
     if ou and _buscar_app(core, ou):             # solo si TIENE esa app instalada (si no, que siga el reparto normal)
         return _usar_app(core, ou)
