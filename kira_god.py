@@ -1837,6 +1837,10 @@ class KiraGodCore:
         finally:
             self._estudiando = False
         try:
+            self._tras_estudiar(tema)                       # v3.25: y lo EXPERIMENTO para sacar una mejora/función/app
+        except Exception:
+            pass
+        try:
             self.pensar_sola(True, ya=False)                # cuando no esté estudiando, que siga pensando
         except Exception:
             pass
@@ -1849,9 +1853,9 @@ class KiraGodCore:
         if not trozos:
             return (f"He intentado estudiar «{tema}» pero no pude leer webs, vídeos ni Wikipedia (¿hay internet?). Lo "
                     "intento otra vez cuando haya conexión.")
-        return (f"[OK] He estudiado «{tema}» de verdad: {', '.join(trozos)}. Lo he guardado en mi baúl. Y me lo pienso: "
-                "cuando no esté estudiando sigo pensando sobre ello (cómo funciona, para qué sirve, qué puedo hacer, "
-                "cómo mejorarlo, cómo programarlo…). Pregúntame cuando quieras.")
+        return (f"[OK] He estudiado «{tema}» de verdad: {', '.join(trozos)}. Lo he guardado en mi baúl. Y ahora EXPERIMENTO "
+                "con lo aprendido para sacarte una mejora, una función nueva o una app (cuando no esté ocupada); lo que me "
+                "funcione quedará en Soluciones para que elijas App, Web o meterlo en Kira. Pregúntame cuando quieras.")
 
     def seguir_enlaces(self, pag, tema="", por_pagina=2, maximo=4, profundidad=1, vistas=None, al_paso=None):
         """v3.01: tras leer una página, abre los ENLACES que tratan del tema (o siguen el curso: capítulo, lección,
@@ -1878,10 +1882,17 @@ class KiraGodCore:
                     hija = net.leer(e["url"])
                 except ik_.InternetError:
                     continue
+                # v3.25: ya abierto el enlace, ¿de verdad está lo que busca o puede seguir avanzando? Si no, NO lo
+                # estudio: vuelvo a la página de antes y sigo con el siguiente enlace (me centro en el tema pedido).
+                sigue = ik_.es_paginacion(e["url"], e.get("texto", "")) or ik_.trata_del_tema(hija.get("texto", ""), tema)
+                if tema and not sigue:
+                    if al_paso:
+                        al_paso("Ese enlace no trata de lo que busco: vuelvo y sigo con el siguiente.")
+                    continue
                 ok, _ = self.guardar_pagina(hija, tema)
                 leidas.append((hija.get("titulo") or e.get("texto") or e["url"], e["url"]))
                 guardadas += int(bool(ok))
-                cola.append((hija, nivel + 1))
+                cola.append((hija, nivel + 1))             # solo profundizo en los que SÍ siguen el tema
         return leidas, guardadas
 
     def estudiar_en_internet(self, consulta, paginas=3, al_paso=None, enlaces=4):
@@ -1941,12 +1952,14 @@ class KiraGodCore:
         except (OSError, ValueError):
             return {}
 
-    def estudiar_pagina(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False):
-        """v3.03 ESTUDIO COMPLETO de una web: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras
-        leer una). Lee la página y TODOS los enlaces de su contenido (no los menús, ni entrar/registrarse/comprar/redes,
-        ni descargas), en el orden de la página; y de cada uno, los que siguen el tema o el curso (2.º salto).
-        Lo lleva apuntado en disco: si le dices «para» o se cierra, «sigue estudiando la página» continúa donde lo dejó.
+    def estudiar_pagina(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False, orden=None):
+        """v3.03 ESTUDIO de una web: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras leer una).
+        Primero se CENTRA en la página principal y la estudia con el contenido pedido; luego mira sus enlaces y, al abrir
+        cada uno, solo SIGUE estudiándolo si de verdad trata del tema o continúa el curso; si no, vuelve y pasa al
+        siguiente (v3.25). `orden`: lo que se le mandó estudiar (si se da, filtra por eso; si no, estudio completo: todos
+        los enlaces). Lo lleva apuntado en disco: «para» o cerrar y «sigue estudiando la página» continúa donde lo dejó.
         Tope de seguridad: `maximo` páginas por vez. `al_avance(fraccion, texto)` mueve la barra."""
+        orden = str(orden or "").strip()
         import internet_kira as ik_
         net = self.internet
 
@@ -1983,12 +1996,14 @@ class KiraGodCore:
                 except ik_.InternetError as e:
                     return f"[x] {e}"
             tema = pag.get("titulo") or ik_.dominio(pag.get("url", ""))
-            paso(0.02, f"Estudiando «{tema[:50]}»…")
-            ok, _ = self.guardar_pagina(pag, tema)
-            todos = ik_.elegir_enlaces(pag, tema, n=ik_.MAX_ENLACES, todos=True)
-            rec = {"tema": tema, "url": pag.get("url", clave), "cuando": int(time.time()), "hechas": [],
-                   "fallidas": [], "guardadas": int(bool(ok)), "total": len(todos),
-                   "pendientes": [{"url": e["url"], "texto": e.get("texto", ""), "nivel": 1} for e in todos]}
+            paso(0.02, f"Me centro en «{tema[:50]}» y la estudio…")
+            ok, _ = self.guardar_pagina(pag, orden or tema)          # la PRINCIPAL siempre, con lo que se le ordenó
+            # v3.25: con un tema pedido, de la principal sigo solo los enlaces que parecen tratarlo; sin tema, todos.
+            tema_enl = orden or tema
+            enl = ik_.elegir_enlaces(pag, tema_enl, n=ik_.MAX_ENLACES, todos=not orden)
+            rec = {"tema": tema, "orden": orden, "url": pag.get("url", clave), "cuando": int(time.time()), "hechas": [],
+                   "fallidas": [], "saltadas": 0, "guardadas": int(bool(ok)), "total": len(enl),
+                   "pendientes": [{"url": e["url"], "texto": e.get("texto", ""), "nivel": 1} for e in enl]}
             reg[clave] = rec
             self._estudio_web(reg)
         tema = rec.get("tema") or "esta web"
@@ -2014,7 +2029,16 @@ class KiraGodCore:
                 rec["fallidas"].append(e["url"])
                 self._estudio_web(reg)
                 continue
-            ok, _ = self.guardar_pagina(hija, tema)
+            # v3.25: ya abierto, ¿está lo que busca o puede seguir avanzando? Si hay tema pedido y no trata de él (ni es
+            # la página siguiente del hilo), NO lo estudio: vuelvo y sigo con el siguiente enlace.
+            orden = rec.get("orden") or ""
+            sigue = ik_.es_paginacion(e["url"], e.get("texto", "")) or ik_.trata_del_tema(hija.get("texto", ""), orden)
+            if orden and not sigue:
+                rec["saltadas"] = rec.get("saltadas", 0) + 1
+                rec["cuando"] = int(time.time())
+                self._estudio_web(reg)
+                continue
+            ok, _ = self.guardar_pagina(hija, orden or tema)
             rec["hechas"].append(e["url"])
             rec["guardadas"] += int(bool(ok))
             leidas_ahora += 1
@@ -2026,7 +2050,7 @@ class KiraGodCore:
                     rec["pendientes"].insert(0, {"url": pg["url"], "texto": pg.get("texto", ""),
                                                  "nivel": e.get("nivel", 1)})
             if e.get("nivel", 1) < profundidad:                 # 2.º salto: solo lo que sigue el tema o el curso
-                for n2 in ik_.elegir_enlaces(hija, tema, n=4, ya=vistos):
+                for n2 in ik_.elegir_enlaces(hija, orden or tema, n=4, ya=vistos):
                     vistos.add(n2["url"].rstrip("/"))
                     rec["pendientes"].append({"url": n2["url"], "texto": n2.get("texto", ""),
                                               "nivel": e.get("nivel", 1) + 1})
@@ -2038,6 +2062,8 @@ class KiraGodCore:
         texto = (f"[OK] Estudio de «{tema}»: he leído {len(rec['hechas'])} página(s) de sus enlaces"
                  + (f" ({leidas_ahora} esta vez)" if leidas_ahora != len(rec["hechas"]) else "")
                  + f" y tengo {rec['guardadas']} ficha(s) nuevas en mi baúl.")
+        if rec.get("saltadas"):
+            texto += f" {rec['saltadas']} enlace(s) no trataban de lo pedido: volví y seguí con el siguiente."
         if rec["fallidas"]:
             texto += f" {len(rec['fallidas'])} no se pudieron abrir (piden cuenta, no existen o no son texto)."
         if quedan:
@@ -2045,7 +2071,9 @@ class KiraGodCore:
                                                         " (paro aquí por esta vez)")
                       + ": dime «sigue estudiando la página» y continúo donde lo dejé.")
         else:
-            texto += " ¡Estudio completo! Ya lo pienso cuando no esté haciendo otra cosa."
+            texto += " ¡Estudio completo!"
+            self._tras_estudiar(orden or tema)                  # v3.25: y lo EXPERIMENTO para sacar algo útil
+            texto += " Ahora experimento con lo aprendido para sacarte una mejora, una función o una app."
         return texto
 
     def estudiar_ciberseguridad(self, al_paso=None, con_internet=False):
@@ -2580,6 +2608,23 @@ class KiraGodCore:
     def investigar_listar(self):
         import investigar_kira as iv
         return iv.texto_listar(self.dir)
+
+    def _tras_estudiar(self, tema):
+        """v3.25: lo que acaba de APRENDER, que lo EXPERIMENTE para sacar algo útil —una mejora, una función nueva o una
+        app para Kira (móvil o portátil)—. No lo hace al vuelo: lo deja apuntado como encargo y, cuando piense (sin
+        estar ocupada), lo coge: experimenta en modo seguro / su máquina y, lo que funcione, queda en Soluciones para
+        que elijas App / Web / En Kira (o, con la auto-mejora, se prepara con el laboratorio + tus dos toques). Nada se
+        aplica ni se instala solo. Deduplicado: un encargo por tema estudiado."""
+        tema = str(tema or "").strip()
+        if len(tema) < 2:
+            return
+        try:
+            import investigar_kira as iv
+            iv.anadir(self.dir, f"experimenta con {tema} y prográmame una mejora o una función nueva para Kira")
+        except Exception:
+            pass
+        # NO arranco el hilo de pensar aquí: lo coge el pensar que ya está en marcha (estudiar_a_fondo lo enciende, y la
+        # app lo mantiene encendido). Así estudiar una página no lanza un hilo nuevo.
 
     def _investigar_reflexion(self, peticion):
         """Para ENTENDER algo: estudia (si puede), piensa y GUARDA la reflexión (cuaderno + baúl)."""

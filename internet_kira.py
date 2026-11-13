@@ -409,6 +409,20 @@ def elegir_enlaces(pag, tema="", n=3, ya=(), todos=False):
     return cand[:max(0, int(n))]
 
 
+def trata_del_tema(texto, tema, minimo=2):
+    """v3.25: ¿el CONTENIDO ya leído de un enlace trata de lo que se le ordenó estudiar? Compara las palabras clave del
+    tema con las del texto de la página. Sirve para decidir, DESPUÉS de abrir un enlace, si seguir estudiándolo (está lo
+    que busca / puede avanzar) o volver a la página anterior y pasar al siguiente. Determinista, sin internet ni cerebro.
+    Sin tema no filtra (True). Con el tema de una sola palabra basta con que aparezca."""
+    claves = set(_palabras(tema))
+    if not claves:
+        return True
+    comun = len(claves & set(_palabras(texto)))
+    if len(claves) <= 1:
+        return comun >= 1
+    return comun >= min(int(minimo), len(claves))
+
+
 # =====================================================================================
 #  PDF sencillo -> texto (sin librerías: solo los textos de los flujos comprimidos con zlib)
 # =====================================================================================
