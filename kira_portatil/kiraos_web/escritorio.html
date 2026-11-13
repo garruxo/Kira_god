@@ -472,7 +472,9 @@ var FAKE = {
       texto:"(ejemplo) Aquí sale el texto de la página, limpio: sin anuncios, sin menús y sin nada que se ejecute.\n\nPulsa «Resúmelo» y te lo resumo con mi voz, o «Guárdalo en mi baúl» y lo aprendo.",
       total_enlaces:3,enlaces:[{url:"https://docs.python.org/es/3/tutorial/introduction.html",texto:"Una introducción informal a Python",tema:true},
         {url:"https://docs.python.org/es/3/tutorial/controlflow.html",texto:"Más herramientas para control de flujo",tema:true},
-        {url:"https://www.python.org/downloads/",texto:"Descargas",tema:false}]}); }
+        {url:"https://www.python.org/downloads/",texto:"Descargas",tema:false}]}); },
+  instalar_web:function(u){ return new Promise(function(res){ setTimeout(function(){
+      res("(ejemplo) Descargada e instalada desde «"+u+"» (sin tocar el sistema). Ya está su icono en el escritorio: púlsalo para abrirla, clic derecho para desinstalarla."); }, 400); }); }
 };
 function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : FAKE; }
 function llama(m){ var a=[].slice.call(arguments,1); var o=api(); if(!o[m]) return Promise.reject("no hay "+m);
@@ -976,11 +978,18 @@ function leerUrl(url, dom){
     else {
       b.innerHTML='<div class="botones">'+atras+'<button class="b prin" id="busResume">Resúmelo</button>'+
         '<button class="b" id="busGuarda">Guárdalo en mi baúl</button>'+
+        '<button class="b" id="busInstala">⤓ Descargar e instalar</button>'+
         ((p.enlaces||[]).length?'<button class="b" id="busEnlaces">Estúdiala entera (todos sus enlaces)</button>':'')+'</div>'+
+        '<div id="busInstResult" class="texto" style="margin:8px 0;color:var(--cian);display:none"></div>'+
         '<div class="lectura"><h3>'+esc(p.titulo)+'</h3><div class="dom">'+esc(p.url)+' · '+esc(p.via)+
         (p.codigos?' · '+p.codigos+' bloque(s) de código':'')+'</div><div class="texto">'+esc(p.texto)+'</div></div>'+htmlEnlaces(p);
       $("busResume").onclick=function(){ enviar("resume "+p.url); };
       $("busGuarda").onclick=function(){ enviar("guarda "+p.url); };
+      $("busInstala").onclick=function(){
+        var r=$("busInstResult"); if(r){ r.style.display="block"; r.textContent="Descargando e instalando… (puede tardar un poco)"; }
+        this.disabled=true;
+        llama("instalar_web", p.url).then(function(msg){ if(r) r.textContent=msg||"Listo."; refrescaBarra(); })
+          .catch(function(e){ if(r) r.textContent="No pude instalarla: "+e; }); };
       if($("busEnlaces")) $("busEnlaces").onclick=function(){ enviar("estudia esta página y sus enlaces: "+p.url); };
       [].forEach.call(b.querySelectorAll(".enl"), function(e){ e.onclick=function(){
         busq.pila=busq.pila||[]; busq.pila.push([p.url, p.dominio]); leerUrl(e.dataset.u, ""); }; });

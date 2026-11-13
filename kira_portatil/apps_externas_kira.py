@@ -59,6 +59,19 @@ def es_orden_instalar(texto):
     return resto.strip(" .:\"'") or None
 
 
+def es_orden_instalar_esto(texto):
+    """v3.31: «descarga e instala esto», «instala esto», «instala lo que estoy viendo / veo», «descárgate esto y hazme
+    el icono», «instala esta app/página». Devuelve True = usa la página que el dueño está viendo en el Buscador. No se
+    mete con «instala las mejoras / la receta / la solución»."""
+    t = _sin_kira(texto).strip().lower()
+    if re.search(r"\b(mejora|actualizaci|receta|soluci[oó]n|librer[ií]a)\b", t):
+        return False
+    if not re.search(r"\b(inst[aá]la\w*|descarg\w*|baj[ae]\w*|b[aá]jate|desc[aá]rgate)\b", t):
+        return False
+    return bool(re.search(r"\b(esto|esta\s+(?:p[aá]gina|app|aplicaci[oó]n|web|cosa)|lo\s+que\s+"
+                          r"(?:estoy\s+viendo|veo|hay|sale|pone)|aqu[ií]|lo\s+de\s+aqu[ií])\b", t))
+
+
 def es_orden_usar(texto):
     """«usa X» / «abre X» / «lanza X» / «ejecuta la app X» / «arranca X». Devuelve el nombre, o None. (No se mete con
     «abre la sala…» ni «abre el buscador», que son pantallas de Kira, ni con «abre el mapa/cuaderno…».)"""
@@ -89,6 +102,89 @@ def metodo(fuente):
     return "nombre"               # un nombre suelto: seguramente del sistema (apt) → necesita administrador
 
 
+# ---------------- qué clase de archivo es (v3.31) ----------------
+_EXT_COMPRIMIDO = (".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tar", ".zip")
+
+
+def _nombre_fichero(url):
+    return str(url or "").split("?")[0].split("#")[0].rstrip("/").split("/")[-1].lower()
+
+
+def tipo_archivo(url_o_nombre):
+    """Qué sé hacer con el archivo al que apunta la URL: 'appimage' | 'deb' | 'comprimido' | 'script' | 'binario' |
+    'ajeno' (de Windows/Mac/otro) | '' (no parece un archivo: seguramente una página)."""
+    b = _nombre_fichero(url_o_nombre)
+    if b.endswith(".appimage"):
+        return "appimage"
+    if b.endswith(".deb"):
+        return "deb"
+    if b.endswith(_EXT_COMPRIMIDO):
+        return "comprimido"
+    if b.endswith((".sh", ".run")):
+        return "script"
+    if b.endswith((".bin", ".x86_64")):
+        return "binario"
+    if b.endswith((".rpm", ".exe", ".msi", ".dmg", ".pkg", ".apk", ".app")):
+        return "ajeno"
+    return ""
+
+
+def es_descargable(url):
+    """¿La URL apunta a un archivo que SÉ instalar (AppImage, .deb, comprimido, script, binario)?"""
+    return tipo_archivo(url) in ("appimage", "deb", "comprimido", "script", "binario")
+
+
+# ---------------- buscar el enlace de descarga en una página (v3.31) ----------------
+def enlaces_descarga(html, base_url):
+    """Saca de un HTML los enlaces que apuntan a un archivo descargable (AppImage, .deb, .tar.gz, .zip…), ya absolutos
+    y sin repetir. Así, cuando el dueño ve una página en el Buscador, Kira encuentra el archivo a bajar."""
+    import urllib.parse
+    fuera, vistos = [], set()
+    for m in re.finditer(r"""href\s*=\s*["']([^"'<>]+)["']""", str(html or ""), re.I):
+        href = m.group(1).strip()
+        if not href or href.startswith(("#", "mailto:", "javascript:", "tel:", "data:")):
+            continue
+        try:
+            url = urllib.parse.urldefrag(urllib.parse.urljoin(base_url, href))[0]
+        except ValueError:
+            continue
+        if not url.lower().startswith(("http://", "https://")):
+            continue
+        if (es_descargable(url) or tipo_archivo(url) == "ajeno") and url not in vistos:
+            vistos.add(url)
+            fuera.append(url)
+    return fuera
+
+
+def elegir_descarga(urls, texto=""):
+    """De varias URLs de descarga, la MEJOR para un Xubuntu de 64 bits: AppImage primero (sin administrador), luego
+    comprimido, luego .deb; evita Windows/Mac/ARM/32 bits/código fuente. None si ninguna sirve."""
+    def malo(u):
+        l = u.lower()
+        return any(x in l for x in ("win32", "win64", "windows", ".exe", ".msi", "-win", "_win", "macos", "mac-", "osx",
+                                    ".dmg", "darwin", "aarch64", "arm64", "armv", "armhf", "-arm", "i386", "i686",
+                                    "-386", "32bit", "32-bit", "x86.", "-x86-", "source", "-src", "src.", ".rpm",
+                                    ".apk", "android"))
+    def punt(u):
+        l = u.lower()
+        p = {"appimage": 100, "comprimido": 60, "deb": 40, "binario": 30, "script": 10}.get(tipo_archivo(u), 0)
+        if any(x in l for x in ("linux", "x86_64", "amd64", "x64", "ubuntu", "debian")):
+            p += 15
+        return p
+    buenas = [u for u in urls if not malo(u) and es_descargable(u)]
+    buenas.sort(key=punt, reverse=True)
+    return buenas[0] if buenas else None
+
+
+def _traer_texto(url, traer=None):
+    """Baja el HTML de una página como texto (para buscar en él el enlace de descarga). `traer` se inyecta en pruebas."""
+    if traer is not None:
+        return traer(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "KiraOS"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read(3_000_000).decode("utf-8", "ignore")
+
+
 def _url_github(fuente):
     f = str(fuente or "").strip()
     if re.match(r"^[\w.-]+/[\w.-]+$", f):
@@ -99,8 +195,10 @@ def _url_github(fuente):
 
 
 def _nombre_de(fuente):
-    f = str(fuente or "").strip().rstrip("/")
-    base = re.sub(r"\.git$|\.appimage$", "", f.split("/")[-1], flags=re.I) or "app"
+    f = str(fuente or "").strip().rstrip("/").split("?")[0].split("#")[0]
+    base = f.split("/")[-1] or "app"
+    base = re.sub(r"\.(?:git|appimage|deb|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2|tar|zip|run|sh|bin|x86_64)$", "",
+                  base, flags=re.I)
     return base.replace("_", " ").replace("-", " ").strip()[:60] or "app"
 
 
@@ -130,6 +228,116 @@ def como_arrancar(carpeta):
         p = os.path.join(carpeta, f)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return [p]
+    return None
+
+
+# ---------------- descomprimir con candado + buscar cómo arrancar (v3.31) ----------------
+def _dentro(destino, nombre):
+    """¿`nombre` (del archivo comprimido) se queda DENTRO de `destino`? (candado contra rutas con «..»)."""
+    d = os.path.realpath(destino)
+    r = os.path.realpath(os.path.join(destino, nombre))
+    return r == d or r.startswith(d + os.sep)
+
+
+def _extraer(archivo, destino):
+    """Descomprime .zip o .tar.* en `destino`, sin dejar que ningún archivo se salga de la carpeta. True si pudo."""
+    import tarfile
+    import zipfile
+    os.makedirs(destino, exist_ok=True)
+    try:
+        if archivo.lower().endswith(".zip"):
+            with zipfile.ZipFile(archivo) as z:
+                if any(not _dentro(destino, n) for n in z.namelist()):
+                    return False
+                z.extractall(destino)
+        else:
+            with tarfile.open(archivo) as tf:
+                for mi in tf.getmembers():
+                    if not _dentro(destino, mi.name):
+                        return False
+                    if (mi.issym() or mi.islnk()) and not _dentro(destino, os.path.join(os.path.dirname(mi.name),
+                                                                                         mi.linkname)):
+                        return False
+                try:
+                    tf.extractall(destino, filter="data")     # Python 3.12+: filtro de seguridad
+                except TypeError:
+                    tf.extractall(destino)
+        return True
+    except Exception:                                         # noqa: BLE001 - archivo dañado / formato raro
+        return False
+
+
+def _desktop_exec(carpeta):
+    """Lee un .desktop (p. ej. de un .deb en usr/share/applications) y busca el binario de su «Exec=» dentro de la
+    carpeta. Devuelve [ruta] o None."""
+    for raiz, _d, fich in os.walk(carpeta):
+        for f in fich:
+            if not f.lower().endswith(".desktop"):
+                continue
+            try:
+                txt = open(os.path.join(raiz, f), encoding="utf-8", errors="ignore").read()
+            except OSError:
+                continue
+            m = re.search(r"(?mi)^\s*Exec\s*=\s*(.+)$", txt)
+            if not m:
+                continue
+            cmd = m.group(1).split()
+            base = os.path.basename(cmd[0]) if cmd else ""
+            if not base or base in ("sh", "bash", "env", "python", "python3"):
+                base = os.path.basename(cmd[1]) if len(cmd) > 1 else base
+            if not base:
+                continue
+            for r2, _d2, f2 in os.walk(carpeta):
+                if base in f2:
+                    p = os.path.join(r2, base)
+                    if os.path.isfile(p):
+                        try:
+                            os.chmod(p, 0o755)
+                        except OSError:
+                            pass
+                        return [p]
+    return None
+
+
+def buscar_lanzador(carpeta):
+    """Cómo arrancar algo descomprimido/extraído (comprimido o .deb): un .desktop (Exec→binario), un .py conocido, un
+    AppImage, un binario en usr/bin|usr/games|opt|bin, o un .sh. Devuelve la lista de argumentos, o None."""
+    d = _desktop_exec(carpeta)
+    if d:
+        return d
+    binarios = []
+    for raiz, dirs, fich in os.walk(carpeta):
+        if raiz[len(carpeta):].count(os.sep) > 4:
+            dirs[:] = []
+            continue
+        for nombre in ARRANQUES:
+            if nombre in fich:
+                return ["python3", os.path.join(raiz, nombre)]
+        for f in fich:
+            if f.lower().endswith(".appimage"):
+                p = os.path.join(raiz, f)
+                try:
+                    os.chmod(p, 0o755)
+                except OSError:
+                    pass
+                return [p]
+        rel = raiz.replace("\\", "/").lower()
+        pri = 0
+        for i, clave in enumerate(("/usr/bin", "/usr/games", "/usr/local/bin", "/opt", "/bin")):
+            if clave in rel:
+                pri = 6 - i
+                break
+        for f in fich:
+            p = os.path.join(raiz, f)
+            if os.path.isfile(p) and os.access(p, os.X_OK) and not f.lower().endswith((".so", ".txt", ".md", ".desktop")):
+                binarios.append((pri, p))
+    if binarios:
+        binarios.sort(reverse=True)
+        return [binarios[0][1]]
+    for raiz, _d, fich in os.walk(carpeta):
+        for f in fich:
+            if f.lower().endswith(".sh"):
+                return ["bash", os.path.join(raiz, f)]
     return None
 
 
@@ -315,25 +523,96 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
         return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta, "analisis": an,
                 "mensaje": f"{nombre} instalada (de GitHub, revisada, sin tocar el sistema). La tienes en el escritorio." + nota}
 
-    # appimage / descarga directa
+    # appimage / descarga directa (AppImage, binario, script, comprimido, .deb) — v3.31: «sea lo que sea»
     if met in ("appimage", "descarga"):
+        tipo = tipo_archivo(fuente)
+        if tipo == "":                               # no parece un archivo: será una página
+            return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
+                    "mensaje": ("Eso parece una página web, no un archivo. Ábrela en el Buscador y, cuando veas el "
+                                "programa, dime «descarga e instala esto»; o pégame el enlace directo del archivo "
+                                "(.AppImage, .deb, .tar.gz, .zip…).")}
+        if tipo == "ajeno":
+            return {"ok": False, "admin": True, "nombre": nombre, "lanzar": None, "carpeta": "",
+                    "mensaje": (f"«{_nombre_fichero(fuente)}» no es un programa para Xubuntu (parece de Windows, Mac, "
+                                "Android u otro sistema). Busca la versión para Linux (AppImage, .deb o .tar.gz) y te "
+                                "la instalo.")}
         os.makedirs(carpeta, exist_ok=True)
-        nomfich = fuente.split("/")[-1] or (nombre + ".AppImage")
-        destino = os.path.join(carpeta, re.sub(r"[^\w.\-]", "_", nomfich))
+        crudo = str(fuente).split("?")[0].split("#")[0].rstrip("/").split("/")[-1]   # conserva mayúsculas del archivo
+        nomfich = re.sub(r"[^\w.\-]", "_", crudo or (nombre + ".bin"))
+        destino = os.path.join(carpeta, nomfich)
         paso(f"Descargando {nombre}…")
         try:
             bajar(fuente, destino)
         except Exception as e:                       # noqa: BLE001
+            import shutil
+            shutil.rmtree(carpeta, ignore_errors=True)
             return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
                     "mensaje": f"No pude descargar {nombre}: {e}"}
-        try:
-            os.chmod(destino, 0o755)
-        except OSError:
-            pass
-        return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [destino], "carpeta": carpeta,
-                "analisis": {"nivel": "ojo", "resumen": "es un binario y no puedo mirarlo por dentro"},
-                "mensaje": (f"{nombre} descargada (sin tocar el sistema). La tienes en el escritorio. Ojo: es un AppImage "
-                            "(un binario) y no puedo revisarlo por dentro como un repo; fíate de quién te lo dio.")}
+
+        if tipo in ("appimage", "binario"):
+            try:
+                os.chmod(destino, 0o755)
+            except OSError:
+                pass
+            comoes = "AppImage" if tipo == "appimage" else "binario"
+            return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [destino], "carpeta": carpeta,
+                    "analisis": {"nivel": "ojo", "resumen": "es un binario y no puedo mirarlo por dentro"},
+                    "mensaje": (f"{nombre} descargada (sin tocar el sistema). La tienes en el escritorio. Ojo: es un "
+                                f"{comoes} y no puedo revisarlo por dentro como un repo; fíate de quién te lo dio.")}
+
+        if tipo == "script":                         # un instalador .sh/.run (texto: lo puedo analizar)
+            bloqueo = _revisar(carpeta, nombre, fuente, forzar, "script")
+            if bloqueo:
+                import shutil
+                shutil.rmtree(carpeta, ignore_errors=True)
+                return bloqueo
+            an = analizar(carpeta)
+            try:
+                os.chmod(destino, 0o755)
+            except OSError:
+                pass
+            return {"ok": True, "admin": False, "nombre": nombre, "lanzar": ["bash", destino], "carpeta": carpeta,
+                    "analisis": an,
+                    "mensaje": (f"{nombre} descargada. Es un instalador (script): al pulsar su icono se ejecuta y "
+                                "puede pedirte TU contraseña si necesita administrador. "
+                                + (an["resumen"] if an["nivel"] != "ok" else ""))}
+
+        # comprimido o .deb → extraer a <carpeta>/contenido (sin administrador) y buscar cómo arrancarlo
+        raiz = os.path.join(carpeta, "contenido")
+        paso("Descomprimiendo…")
+        if tipo == "deb":
+            try:
+                rc, _salida = correr(["dpkg-deb", "-x", destino, raiz], timeout=300)
+            except Exception:                        # noqa: BLE001 - no está dpkg-deb
+                rc = 127
+            if rc != 0:
+                return {"ok": False, "admin": True, "nombre": nombre, "lanzar": None, "carpeta": carpeta,
+                        "mensaje": (f"Descargué {nombre} (.deb), pero para instalarlo del todo necesito administrador. "
+                                    "Ábreme la Terminal y escribe  sudo dpkg -i " + destino + "  (si se queja de "
+                                    "dependencias, luego  sudo apt -f install ). Te pedirá TU contraseña.")}
+        else:
+            if not _extraer(destino, raiz):
+                import shutil
+                shutil.rmtree(carpeta, ignore_errors=True)
+                return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
+                        "mensaje": f"No pude descomprimir {nombre} (¿archivo dañado o formato raro?)."}
+        bloqueo = _revisar(raiz, nombre, fuente, forzar, tipo)
+        if bloqueo:
+            import shutil
+            shutil.rmtree(carpeta, ignore_errors=True)
+            return bloqueo
+        an = analizar(raiz)
+        lanzar = buscar_lanzador(raiz)
+        nota = " (" + an["resumen"] + ")" if an["nivel"] != "ok" else ""
+        if not lanzar:
+            manual = ("  Para instalarlo del todo, en la Terminal:  sudo dpkg -i " + destino if tipo == "deb" else "")
+            return {"ok": True, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta, "analisis": an,
+                    "mensaje": (f"Descargué y extraje {nombre}, pero no veo claro cómo arrancarlo (mira su README)." +
+                                manual + " Lo dejo en el escritorio igualmente." + nota)}
+        como = ("(.deb extraído en tu carpeta, sin administrador; alguna app así puede fallar por librerías del "
+                "sistema)" if tipo == "deb" else "(comprimido, revisado, sin tocar el sistema)")
+        return {"ok": True, "admin": False, "nombre": nombre, "lanzar": lanzar, "carpeta": carpeta, "analisis": an,
+                "mensaje": f"{nombre} instalada {como}. La tienes en el escritorio." + nota}
 
     return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
             "mensaje": f"No sé instalar «{fuente}»."}

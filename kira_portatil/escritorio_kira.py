@@ -202,6 +202,42 @@ class EscritorioMixin:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def instalar_web(self, url=None, forzar=False):
+        """v3.31: descarga e INSTALA lo que el dueño está viendo en el Buscador (o la URL que se pasa), sea lo que sea
+        (AppImage, .deb, comprimido…), y deja su ICONO en el escritorio. Si la URL es una página, busca en ella el
+        enlace de descarga. Devuelve el texto para enseñar. Solo con la orden del dueño; sin administrador por defecto."""
+        import apps_externas_kira as aex
+        import accesos_kira as ak
+        if forzar and getattr(self, "_app_bloqueada", ""):   # «instálalo igualmente» tras un aviso
+            fuente = self._app_bloqueada
+        else:
+            url = str(url or getattr(self, "_pagina_vista", "") or "").strip()
+            if not url:
+                return ("No sé qué instalar: abre antes en el Buscador la página del programa que quieres y dime "
+                        "«descarga e instala esto».")
+            fuente = url
+            if not aex.es_descargable(url) and aex.metodo(url) != "github":   # es una página: busco el archivo en ella
+                try:
+                    html = aex._traer_texto(url)
+                except Exception as e:                # noqa: BLE001
+                    return f"No pude abrir «{url}» para buscar la descarga: {e}"
+                mejor = aex.elegir_descarga(aex.enlaces_descarga(html, url))
+                if not mejor:
+                    return ("No encontré en esta página un archivo que sepa instalar (AppImage, .deb, .tar.gz, .zip…). "
+                            "Entra en su página de descargas y dímelo ahí, o pégame el enlace directo del archivo.")
+                fuente = mejor
+        r = aex.instalar(fuente, forzar=forzar)
+        if r.get("peligro"):
+            self._app_bloqueada = fuente              # para «instálalo igualmente»
+            return r.get("mensaje", "No la instalo.")
+        if not r.get("ok"):
+            return r.get("mensaje", "No pude instalarla.")
+        self._app_bloqueada = ""
+        iid = ak.anadir_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+        extra = "" if iid else " (ya la tenías)"
+        return (r.get("mensaje", "Instalada.") + extra + " Ya está su icono en el escritorio: púlsalo para abrirla, "
+                "clic derecho para desinstalarla.")
+
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
     def aspecto(self):
         try:
@@ -335,6 +371,13 @@ class EscritorioMixin:
                 o_s = sistema_kira.orden(texto)
             except Exception:
                 o_s = None
+            inst_esto = False                                      # v3.31: «descarga e instala esto» (lo que ve en el Buscador)
+            try:
+                import apps_externas_kira as _aex
+                inst_esto = bool(_aex.es_orden_instalar_esto(texto) or
+                                 (_aex.quiere_forzar(texto) and getattr(self, "_app_bloqueada", "")))
+            except Exception:
+                inst_esto = False
             if o_s is not None:
                 try:
                     ex = [(v["id"], v["titulo"]) for v in self.ventanas_extra() if v.get("en") == "escritorio"]
@@ -345,6 +388,10 @@ class EscritorioMixin:
                 t["aspecto"] = True                                # la pantalla se vuelve a pintar
                 if o_s[0] == "salva_ver":
                     t["salvapantallas"] = True
+            elif inst_esto:
+                t["estado"] = "hablando"
+                t["respuesta"] = self.instalar_web(forzar=_aex.quiere_forzar(texto))
+                t["barra"] = True                                  # refrescar iconos del escritorio
             elif self.cli is None:
                 t["respuesta"] = ("No encuentro mi cerebro de casa (el servidor de Kira). Si acabas de encender, "
                                   "espera un minuto y vuelve a hablarme.")
@@ -603,6 +650,7 @@ class EscritorioMixin:
             pag = self._internet().leer(url)
         except Exception as e:                        # noqa: BLE001
             return {"ok": False, "error": str(e), "via": self._via()}
+        self._pagina_vista = pag.get("url", url)      # v3.31: la última página que el dueño ve («descarga e instala esto»)
         todos = pag.get("enlaces") or []
         del_tema = ik.elegir_enlaces(pag, pag.get("titulo", ""), n=25)
         vistos = {e["url"] for e in del_tema}
