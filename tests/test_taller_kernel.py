@@ -39,7 +39,7 @@ def ok(c, m):
 
 # ---------------- el saber ----------------
 ok(len(so.fichas()) >= 15 and all(len(x) > 150 for _t, x in so.fichas()), "fichas de SO por dentro, con chicha")
-ok([e["n"] for e in so.ETAPAS] == [1, 2, 3, 4, 5, 6, 7, 8], "8 etapas")
+ok([e["n"] for e in so.ETAPAS] == list(range(1, 10)), "9 etapas")
 ok(all("KERNEL_LISTO" in e["espera"] for e in so.ETAPAS), "todas esperan KERNEL_LISTO")
 ok(all({"boot.s", "linker.ld", "kernel.c"} <= set(e["archivos"]) for e in so.ETAPAS), "cada etapa trae su base")
 ok(so.etapa_para("añade la GDT")["n"] == 2 and so.etapa_para("pon las interrupciones")["n"] == 3 and
@@ -51,6 +51,12 @@ ok(so.etapa_para("lista los aparatos del bus pci")["n"] == 6 and so.etapa_para("
 DISCO_C = so.etapa(7)["archivos"]["disco.c"]
 ok(DISCO_C.index('igual(sector, "KIRADISK", 8)') < DISCO_C.index("disco_escribir(1"),
    "el driver de disco SOLO escribe si el sector 0 dice KIRADISK (nunca en el disco de tu portátil)")
+AHCI_C = so.etapa(9)["archivos"]["ahci.c"]
+ok(all(x not in AHCI_C.lower() for x in ("0x35", "0xca", "0x30,", "0x3d", "0x61", "escribir_sector")) and
+   "1u << 6" not in AHCI_C and "orden_lectura(p, 0xEC" in AHCI_C and "orden_lectura(p, 0x25" in AHCI_C,
+   "el driver AHCI (v3.40) SOLO LEE: ni una orden de escritura, el descriptor siempre «disco → memoria»")
+ok(so.etapa_para("lee las particiones del disco sata")["n"] == 9 and so.etapa_para("driver ahci")["n"] == 9,
+   "particiones / AHCI → 9")
 CONSOLA = so.etapa(1)["archivos"]["consola.c"]
 ok("serie_ok" in CONSOLA and "i < 100000" in CONSOLA, "sin puerto serie (portátil de verdad) no se queda esperando")
 ok("0xFE" in so.etapa(4)["archivos"]["teclado.c"], "Esc reinicia (para volver a KiraOS desde el USB)")
@@ -93,7 +99,7 @@ ok(tk.errores_cortos("a.c:1: warning: x\na.c:2: error: y").startswith("a.c:2: er
 # ---------------- QEMU de mentira: imprime las marcas que el kernel lleva dentro ----------------
 MARCAS = ["Hola desde mi SO!", "Multiboot OK", "GDT OK", "IDT OK", "punto de ruptura", "Excepciones OK", "PIC OK",
           "Teclado OK", "TIMER OK", "MARCOS OK", "PAGINACION OK", "HEAP OK", "PCI OK", "DISCO OK: leo y escribo",
-          "Red: tarjeta e1000", "RED OK", "KERNEL_LISTO", "SEGUNDOS OK"]
+          "Red: tarjeta e1000", "RED OK", "AHCI OK", "Tabla MBR", "Tabla GPT", "KERNEL_LISTO", "SEGUNDOS OK"]
 FALSO = r'''
 import sys, os
 args = sys.argv[1:]
@@ -170,6 +176,12 @@ else:
     oq = " ".join(t.orden_qemu())
     ok("restrict=on" in oq and "e1000" in oq and "disco.img" in oq and "-nic none" not in oq,
        "QEMU con disco de pruebas y tarjeta e1000 con la red AISLADA (restrict=on)")
+    ok("ahci,id=ahci0" in oq and "disco_ahci_mbr.img" in oq and "disco_ahci_gpt.img" in oq,
+       "QEMU con un controlador AHCI y dos discos SATA de pruebas (MBR y GPT)")
+    mbr, gpt = tk.disco_mbr(), tk.disco_gpt()
+    ok(mbr[510:512] == b"\x55\xaa" and mbr[446 + 4] == 0x83 and mbr[462 + 4] == 0x82, "disco MBR: Linux + swap")
+    ok(gpt[446 + 4] == 0xEE and gpt[512:520] == b"EFI PART" and gpt[1024:1028] == bytes.fromhex("28732ac1") and
+       gpt[1152:1156] == bytes.fromhex("af3dc60f"), "disco GPT: protector + cabecera + EFI y Linux")
     with open(t.ruta_disco, "rb") as f:
         ok(f.read(8) == b"KIRADISK" and os.path.getsize(t.ruta_disco) == 1024 * 1024, "disco de pruebas con su firma")
 

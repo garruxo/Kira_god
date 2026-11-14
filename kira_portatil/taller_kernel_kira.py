@@ -76,6 +76,50 @@ def _ahora():
 GRUB_PC = os.environ.get("KIRA_GRUB_PC") or "/usr/lib/grub/i386-pc"
 
 
+SECTORES_AHCI = 8192                            # 4 MB cada disco de pruebas
+
+
+def _entrada_mbr(tipo, inicio, sectores):
+    import struct
+    return bytes([0, 0, 0, 0, tipo, 0, 0, 0]) + struct.pack("<II", inicio, sectores)
+
+
+def disco_mbr():
+    """Disco de pruebas con tabla MBR: Linux (2 MB) + Linux swap (1 MB). Puro."""
+    mbr = bytearray(512)
+    mbr[446:462] = _entrada_mbr(0x83, 2048, 4096)
+    mbr[462:478] = _entrada_mbr(0x82, 6144, 2048)
+    mbr[510:512] = b"\x55\xaa"
+    return bytes(mbr) + b"\0" * (512 * (SECTORES_AHCI - 1))
+
+
+def _guid(primero):
+    import struct
+    return struct.pack("<I", primero) + bytes(12)
+
+
+def disco_gpt():
+    """Disco de pruebas con tabla GPT (MBR protector + cabecera «EFI PART» + entradas): EFI (1 MB) + Linux (2 MB). Las
+    sumas CRC no se rellenan: el driver de Kira no las mira (es solo para leer la lista). Puro."""
+    import struct
+    disco = bytearray(512 * SECTORES_AHCI)
+    disco[446:462] = _entrada_mbr(0xEE, 1, SECTORES_AHCI - 1)
+    disco[510:512] = b"\x55\xaa"
+    cab = bytearray(512)
+    cab[0:8] = b"EFI PART"
+    struct.pack_into("<IIIIQQQQ", cab, 8, 0x00010000, 92, 0, 0, 1, SECTORES_AHCI - 1, 34, SECTORES_AHCI - 34)
+    struct.pack_into("<QIII", cab, 72, 2, 128, 128, 0)
+    disco[512:1024] = cab
+    for i, (tipo, ini, fin) in enumerate(((0xC12A7328, 2048, 4095), (0x0FC63DAF, 4096, 8191 - 34))):
+        e = bytearray(128)
+        e[0:16] = _guid(tipo)
+        e[16:32] = bytes([i + 1] * 16)
+        struct.pack_into("<QQ", e, 32, ini, fin)
+        e[56:64] = "Kira".encode("utf-16-le")
+        disco[1024 + 128 * i:1024 + 128 * (i + 1)] = e
+    return bytes(disco)
+
+
 def grub_cfg(espera=10):
     """El menú de arranque del USB. Puro."""
     return (f"set timeout={int(espera)}\nset default=0\nterminal_output console\n\n"
@@ -361,11 +405,30 @@ class Taller:
             f.write(b"\0" * (1024 * 1024 - 512))
         return self.ruta_disco
 
+    def asegurar_discos_ahci(self):
+        """v3.40: dos discos SATA de PRUEBAS para el driver AHCI (solo lectura): uno con tabla MBR y otro con GPT, con
+        particiones de ejemplo (Linux, swap, EFI). Se crean una vez en la carpeta del kernel."""
+        os.makedirs(self.base, exist_ok=True)
+        rutas = []
+        for nombre, datos in (("disco_ahci_mbr.img", disco_mbr()), ("disco_ahci_gpt.img", disco_gpt())):
+            ruta = os.path.join(self.base, nombre)
+            if not (os.path.isfile(ruta) and os.path.getsize(ruta) == len(datos)):
+                with open(ruta, "wb") as f:
+                    f.write(datos)
+            rutas.append(ruta)
+        return rutas
+
     def _aparatos(self):
         """Lo que se le enchufa al ordenador de mentira: el disco de pruebas y una tarjeta de red e1000 con la red de
         QEMU AISLADA (restrict=on: ni internet ni tu casa; solo su router virtual 10.0.2.2)."""
         return ["-drive", f"file={self.asegurar_disco()},format=raw,if=ide,index=0,media=disk",
-                "-netdev", "user,id=red0,restrict=on", "-device", "e1000,netdev=red0"]
+                "-netdev", "user,id=red0,restrict=on", "-device", "e1000,netdev=red0"] + self._sata()
+
+    def _sata(self):
+        mbr, gpt = self.asegurar_discos_ahci()
+        return ["-device", "ahci,id=ahci0",
+                "-drive", f"file={mbr},format=raw,if=none,id=sata0", "-device", "ide-hd,drive=sata0,bus=ahci0.0",
+                "-drive", f"file={gpt},format=raw,if=none,id=sata1", "-device", "ide-hd,drive=sata1,bus=ahci0.1"]
 
     def orden_qemu(self, con_pantalla=False):
         args = ["qemu-system-i386", "-kernel", os.path.join(self.base, "kernel.bin"), "-m", "128",

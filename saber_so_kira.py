@@ -914,6 +914,7 @@ struct pci_disp {
 uint32_t pci_leer(uint8_t bus, uint8_t disp, uint8_t func, uint8_t off);
 void pci_escribir(uint8_t bus, uint8_t disp, uint8_t func, uint8_t off, uint32_t valor);
 int pci_buscar(uint16_t vendedor, uint16_t aparato, struct pci_disp *d);   /* 1 si lo encuentra */
+int pci_buscar_clase(uint8_t clase, uint8_t subclase, struct pci_disp *d); /* el primero de esa clase */
 int pci_listar(void);                                                    /* los escribe y dice cuántos */
 
 #endif
@@ -963,7 +964,7 @@ static void hex4(uint16_t v) {
     for (int s = 12; s >= 0; s -= 4) kputc(h[(v >> s) & 0xF]);
 }
 
-static int recorrer(uint16_t ven, uint16_t apa, struct pci_disp *encontrado, int escribir) {
+static int recorrer(uint16_t ven, uint16_t apa, struct pci_disp *encontrado, int escribir, int por_clase) {
     int n = 0;
     for (int b = 0; b < 256; b++) {
         for (int d = 0; d < 32; d++) {
@@ -982,7 +983,8 @@ static int recorrer(uint16_t ven, uint16_t apa, struct pci_disp *encontrado, int
                     kputc(' '); hex4(x.vendedor); kputc(':'); hex4(x.aparato);
                     kprint("  "); kprint(nombre_clase(x.clase, x.subclase)); kputc('\n');
                 }
-                if (encontrado && x.vendedor == ven && x.aparato == apa) { *encontrado = x; return 1; }
+                if (encontrado && (por_clase ? (x.clase == (ven >> 8) && x.subclase == (ven & 0xFF))
+                                             : (x.vendedor == ven && x.aparato == apa))) { *encontrado = x; return 1; }
             }
         }
     }
@@ -990,11 +992,15 @@ static int recorrer(uint16_t ven, uint16_t apa, struct pci_disp *encontrado, int
 }
 
 int pci_buscar(uint16_t vendedor, uint16_t aparato, struct pci_disp *d) {
-    return recorrer(vendedor, aparato, d, 0);
+    return recorrer(vendedor, aparato, d, 0, 0);
+}
+
+int pci_buscar_clase(uint8_t clase, uint8_t subclase, struct pci_disp *d) {
+    return recorrer((uint16_t)((clase << 8) | subclase), 0, d, 0, 1);
 }
 
 int pci_listar(void) {
-    int n = recorrer(0, 0, 0, 1);
+    int n = recorrer(0, 0, 0, 1, 0);
     kprint("PCI OK (");
     kprint_dec((uint32_t)n);
     kprint(" aparatos)\n");
@@ -1288,6 +1294,254 @@ void red_probar(void) {
 }
 """
 
+_AHCI_H = r"""/* ahci.h — disco SATA por AHCI (el modo de los portátiles modernos): SOLO LECTURA */
+#ifndef AHCI_H
+#define AHCI_H
+void ahci_probar(void);
+#endif
+"""
+
+_AHCI_C = r"""/* ahci.c — driver AHCI de SOLO LECTURA: encuentra el controlador SATA, mira qué hay en cada puerto, identifica
+   el disco (modelo y tamaño) y lee su tabla de particiones (MBR o GPT).
+   SEGURIDAD: este código NO tiene ninguna orden de escritura. Solo usa IDENTIFY (0xEC) y READ DMA EXT (0x25), y la
+   tabla de descriptores siempre pide «del disco a la memoria». Tu Xubuntu y tus archivos no se tocan. */
+#include <stdint.h>
+#include "ahci.h"
+#include "pci.h"
+#include "consola.h"
+#include "memoria.h"
+#include "timer.h"
+
+/* registros generales */
+#define CAP   0x00
+#define GHC   0x04
+#define IS    0x08
+#define PI    0x0C
+#define VS    0x10
+#define CAP2  0x24
+#define BOHC  0x28
+/* registros de cada puerto (0x100 + n*0x80) */
+#define P_CLB  0x00
+#define P_CLBU 0x04
+#define P_FB   0x08
+#define P_FBU  0x0C
+#define P_IS   0x10
+#define P_IE   0x14
+#define P_CMD  0x18
+#define P_TFD  0x20
+#define P_SIG  0x24
+#define P_SSTS 0x28
+#define P_SERR 0x30
+#define P_CI   0x38
+
+#define SIG_ATA   0x00000101u
+#define SIG_ATAPI 0xEB140101u
+
+struct cabecera { uint32_t dw0, prdbc, ctba, ctbau, res[4]; } __attribute__((packed));
+struct prd { uint32_t dba, dbau, res, dbc; } __attribute__((packed));
+struct tabla { uint8_t cfis[64]; uint8_t acmd[16]; uint8_t res[48]; struct prd prdt[1]; } __attribute__((packed));
+
+static volatile struct cabecera lista[32] __attribute__((aligned(1024)));
+static volatile uint8_t recibidos[256] __attribute__((aligned(256)));
+static volatile struct tabla tab __attribute__((aligned(128)));
+static uint8_t buf[512] __attribute__((aligned(16)));
+static uint8_t entradas[512] __attribute__((aligned(16)));
+static uint32_t abar = 0;
+
+static uint32_t lee(uint32_t r) { return *(volatile uint32_t *)(abar + r); }
+static void escribe(uint32_t r, uint32_t v) { *(volatile uint32_t *)(abar + r) = v; }
+static uint32_t plee(int p, uint32_t r) { return lee(0x100 + 0x80 * (uint32_t)p + r); }
+static void pescribe(int p, uint32_t r, uint32_t v) { escribe(0x100 + 0x80 * (uint32_t)p + r, v); }
+
+static void ceros(volatile void *d, uint32_t n) { volatile uint8_t *b = d; for (uint32_t i = 0; i < n; i++) b[i] = 0; }
+
+static int esperar(int p, uint32_t reg, uint32_t bits, int puestos, uint32_t tics) {
+    uint32_t fin = timer_tics() + tics;
+    for (;;) {
+        uint32_t v = plee(p, reg) & bits;
+        if (puestos ? v == bits : v == 0) return 0;
+        if (timer_tics() > fin) return -1;
+    }
+}
+
+static void parar(int p) {
+    pescribe(p, P_CMD, plee(p, P_CMD) & ~1u);            /* ST = 0 */
+    esperar(p, P_CMD, 1u << 15, 0, 60);                  /* CR libre */
+    pescribe(p, P_CMD, plee(p, P_CMD) & ~(1u << 4));     /* FRE = 0 */
+    esperar(p, P_CMD, 1u << 14, 0, 60);                  /* FR libre */
+}
+
+static int arrancar(int p) {
+    parar(p);
+    ceros(lista, sizeof(lista)); ceros(recibidos, sizeof(recibidos));
+    pescribe(p, P_CLB, (uint32_t)lista); pescribe(p, P_CLBU, 0);
+    pescribe(p, P_FB, (uint32_t)recibidos); pescribe(p, P_FBU, 0);
+    pescribe(p, P_SERR, 0xFFFFFFFFu);
+    pescribe(p, P_IS, 0xFFFFFFFFu);
+    pescribe(p, P_IE, 0);                                /* sin interrupciones: miramos nosotros */
+    pescribe(p, P_CMD, plee(p, P_CMD) | (1u << 4));      /* FRE */
+    pescribe(p, P_CMD, plee(p, P_CMD) | 1u);             /* ST */
+    return 0;
+}
+
+/* Manda una orden de LECTURA (del disco a la memoria) y espera. 0 = bien. */
+static int orden_lectura(int p, uint8_t cmd, uint32_t lba, uint8_t *destino) {
+    if (esperar(p, P_TFD, 0x88, 0, 100) != 0) return -1;     /* BSY y DRQ libres */
+    ceros(&tab, sizeof(tab));
+    lista[0].dw0 = 5u | (1u << 16);                           /* 5 dwords de FIS, W=0 (leer), 1 descriptor */
+    lista[0].prdbc = 0;
+    lista[0].ctba = (uint32_t)&tab; lista[0].ctbau = 0;
+    tab.prdt[0].dba = (uint32_t)destino; tab.prdt[0].dbau = 0;
+    tab.prdt[0].dbc = 511;                                    /* 512 bytes */
+    tab.cfis[0] = 0x27; tab.cfis[1] = 0x80; tab.cfis[2] = cmd;
+    tab.cfis[4] = (uint8_t)lba; tab.cfis[5] = (uint8_t)(lba >> 8); tab.cfis[6] = (uint8_t)(lba >> 16);
+    tab.cfis[7] = 0x40;                                       /* modo LBA */
+    tab.cfis[8] = (uint8_t)(lba >> 24);
+    tab.cfis[12] = 1;                                         /* 1 sector */
+    pescribe(p, P_IS, 0xFFFFFFFFu);
+    pescribe(p, P_CI, 1);
+    uint32_t fin = timer_tics() + 300;
+    while (plee(p, P_CI) & 1) {
+        if (plee(p, P_IS) & (1u << 30)) return -2;           /* error del disco */
+        if (timer_tics() > fin) return -3;
+    }
+    if ((plee(p, P_IS) & (1u << 30)) || (plee(p, P_TFD) & 1)) return -2;
+    return 0;
+}
+
+static void texto_id(const uint16_t *id, int desde, int palabras, char *sal) {
+    int n = 0;
+    for (int i = 0; i < palabras; i++) { sal[n++] = (char)(id[desde + i] >> 8); sal[n++] = (char)(id[desde + i] & 0xFF); }
+    sal[n] = 0;
+    while (n > 0 && sal[n - 1] == ' ') sal[--n] = 0;
+}
+
+static void tamano(uint32_t mb) {
+    if (mb >= 10240) { kprint_dec(mb / 1024); kprint(" GB"); }
+    else { kprint_dec(mb); kprint(" MB"); }
+}
+
+static uint32_t u32(const uint8_t *b) { return b[0] | (b[1] << 8) | (b[2] << 16) | ((uint32_t)b[3] << 24); }
+
+static const char *tipo_mbr(uint8_t t) {
+    switch (t) {
+    case 0x83: return "Linux";
+    case 0x82: return "Linux swap";
+    case 0x8E: return "Linux LVM";
+    case 0x07: return "NTFS (Windows)";
+    case 0x0B: case 0x0C: return "FAT32";
+    case 0x05: case 0x0F: return "extendida";
+    case 0x27: return "recuperacion de Windows";
+    case 0xEF: return "EFI";
+    default:   return "otra";
+    }
+}
+
+static const char *tipo_gpt(uint32_t g) {
+    switch (g) {
+    case 0x0FC63DAFu: return "Linux";
+    case 0x0657FD6Du: return "Linux swap";
+    case 0xE6D6D379u: return "Linux LVM";
+    case 0xC12A7328u: return "EFI";
+    case 0x21686148u: return "arranque BIOS";
+    case 0xEBD0A0A2u: return "datos de Windows";
+    case 0xE3C9E316u: return "reservada de Windows";
+    case 0xDE94BBA4u: return "recuperacion de Windows";
+    default:          return "otra";
+    }
+}
+
+static void particion(int n, const char *tipo, uint32_t sectores) {
+    kprint("      "); kprint_dec((uint32_t)n); kprint(": "); kprint(tipo); kprint(", "); tamano(sectores / 2048); kputc('\n');
+}
+
+static int leer_gpt(int p) {
+    if (orden_lectura(p, 0x25, 1, buf) != 0) return 0;
+    if (!(buf[0] == 'E' && buf[1] == 'F' && buf[2] == 'I' && buf[3] == ' ' && buf[4] == 'P')) return 0;
+    uint32_t lba = u32(buf + 72), num = u32(buf + 80), tam = u32(buf + 84);
+    if (tam < 128 || tam > 512 || num == 0) return 0;
+    kprint("    Tabla GPT\n");
+    int n = 0;
+    uint32_t por_sector = 512 / tam, mirar = num < 32 ? num : 32;     /* las 32 primeras bastan */
+    for (uint32_t i = 0; i < mirar; i++) {
+        if (i % por_sector == 0 && orden_lectura(p, 0x25, lba + i / por_sector, entradas) != 0) break;
+        const uint8_t *e = entradas + (i % por_sector) * tam;
+        uint32_t tipo = u32(e);
+        if (!tipo && !u32(e + 4)) continue;
+        uint32_t ini = u32(e + 32), fin = u32(e + 40);
+        if (++n <= 8) particion(n, tipo_gpt(tipo), fin >= ini ? fin - ini + 1 : 0);
+    }
+    if (n > 8) { kprint("      … y "); kprint_dec((uint32_t)(n - 8)); kprint(" mas\n"); }
+    if (!n) kprint("      (sin particiones)\n");
+    return 1;
+}
+
+static void leer_tabla(int p) {
+    if (orden_lectura(p, 0x25, 0, buf) != 0) { kprint("    no puedo leer el sector 0\n"); return; }
+    if (buf[510] != 0x55 || buf[511] != 0xAA) { kprint("    sin tabla de particiones\n"); return; }
+    if (buf[446 + 4] == 0xEE && leer_gpt(p)) return;           /* MBR protector: es GPT */
+    if (orden_lectura(p, 0x25, 0, buf) != 0) return;
+    kprint("    Tabla MBR\n");
+    int n = 0;
+    for (int i = 0; i < 4; i++) {
+        const uint8_t *e = buf + 446 + 16 * i;
+        if (!e[4]) continue;
+        particion(i + 1, tipo_mbr(e[4]), u32(e + 12));
+        n++;
+    }
+    if (!n) kprint("      (sin particiones)\n");
+}
+
+static int mirar_puerto(int p) {
+    uint32_t ssts = plee(p, P_SSTS);
+    if ((ssts & 0xF) != 3) return 0;                             /* no hay nada enchufado */
+    kprint("  Puerto "); kprint_dec((uint32_t)p); kprint(": ");
+    if (((ssts >> 8) & 0xF) != 1) { kprint("aparato dormido (no lo despierto)\n"); return 0; }
+    uint32_t sig = plee(p, P_SIG);
+    if (sig == SIG_ATAPI) { kprint("lector de CD/DVD (no lo leo)\n"); return 0; }
+    if (sig != SIG_ATA) { kprint("otro aparato SATA\n"); return 0; }
+    arrancar(p);
+    uint16_t id[256];
+    if (orden_lectura(p, 0xEC, 0, (uint8_t *)id) != 0) { kprint("disco que no contesta\n"); parar(p); return 0; }
+    char modelo[41];
+    texto_id(id, 27, 20, modelo);
+    uint32_t lo, hi;
+    if (id[83] & (1u << 10)) { lo = id[100] | ((uint32_t)id[101] << 16); hi = id[102] | ((uint32_t)id[103] << 16); }
+    else { lo = id[60] | ((uint32_t)id[61] << 16); hi = 0; }
+    kprint("disco "); kprint(modelo); kprint(", "); tamano((hi << 21) | (lo >> 11)); kputc('\n');
+    leer_tabla(p);
+    parar(p);
+    return 1;
+}
+
+void ahci_probar(void) {
+    struct pci_disp d;
+    if (!pci_buscar_clase(0x01, 0x06, &d)) {
+        kprint("AHCI: no hay controlador SATA en modo AHCI\n");
+        return;
+    }
+    uint32_t orden = pci_leer(d.bus, d.disp, d.func, 0x04);
+    pci_escribir(d.bus, d.disp, d.func, 0x04, orden | 0x06);      /* memoria + bus master */
+    abar = pci_leer(d.bus, d.disp, d.func, 0x24) & 0xFFFFF000u;   /* BAR5 */
+    if (!abar) { kprint("AHCI: el controlador no tiene direccion\n"); return; }
+    paginacion_mapear(abar, 0x1100);
+    if ((lee(CAP2) & 1) && (lee(BOHC) & 1)) {                     /* la BIOS aún lo maneja: se lo pido */
+        escribe(BOHC, lee(BOHC) | 2);
+        uint32_t fin = timer_tics() + 200;
+        while ((lee(BOHC) & 1) && timer_tics() < fin) { }
+    }
+    escribe(GHC, (lee(GHC) | (1u << 31)) & ~2u);                  /* modo AHCI, sin interrupciones */
+    uint32_t vs = lee(VS), pi = lee(PI);
+    kprint("AHCI: controlador ");
+    kprint_dec(vs >> 16); kputc('.'); kprint_dec((vs >> 8) & 0xFF);
+    kprint(", "); kprint_dec((lee(CAP) & 0x1F) + 1); kprint(" puertos\n");
+    int discos = 0;
+    for (int p = 0; p < 32; p++) if (pi & (1u << p)) discos += mirar_puerto(p);
+    if (!discos) { kprint("AHCI: no he encontrado discos\n"); return; }
+    kprint("AHCI OK (solo lectura: "); kprint_dec((uint32_t)discos); kprint(discos == 1 ? " disco)\n" : " discos)\n");
+}
+"""
+
 
 def _k_desde5(titulo, decl, cuerpo):
     """kernel.c de las etapas 6+: el de la etapa 5 con más pasos antes de KERNEL_LISTO."""
@@ -1303,6 +1557,9 @@ _K7 = _k_desde5("etapa 7: driver de disco ATA (leer y escribir sectores)", '#inc
 _K8 = _k_desde5("etapa 8: driver de red e1000 (enviar y recibir tramas)",
                 '#include "pci.h"\n#include "disco.h"\n#include "red.h"\n',
                 "    pci_listar();\n    disco_probar();\n    red_probar();\n")
+_K9 = _k_desde5("etapa 9: driver AHCI de solo lectura (el disco SATA de verdad)",
+                '#include "pci.h"\n#include "disco.h"\n#include "red.h"\n#include "ahci.h"\n',
+                "    pci_listar();\n    disco_probar();\n    red_probar();\n    ahci_probar();\n")
 
 _BASE = {"boot.s": _BOOT, "linker.ld": _LINKER, "io.h": _IO_H, "consola.h": _CONSOLA_H, "consola.c": _CONSOLA_C}
 _E2 = {"gdt.c": _GDT_C, "gdt_asm.s": _GDT_S}
@@ -1312,6 +1569,7 @@ _E5 = {"memoria.h": _MEMORIA_H, "memoria.c": _MEMORIA_C}
 _E6 = {"pci.h": _PCI_H, "pci.c": _PCI_C}
 _E7 = {"disco.h": _DISCO_H, "disco.c": _DISCO_C}
 _E8 = {"red.h": _RED_H, "red.c": _RED_C}
+_E9 = {"ahci.h": _AHCI_H, "ahci.c": _AHCI_C}
 
 
 def _junta(*partes):
@@ -1362,6 +1620,11 @@ ETAPAS = [
      "claves": "red tarjeta ethernet e1000 internet paquetes tramas arp mac network enviar recibir",
      "espera": ["Red: tarjeta e1000", "RED OK", "KERNEL_LISTO"],
      "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, {"kernel.c": _K8})},
+    {"n": 9, "titulo": "Driver AHCI de solo lectura (disco SATA)",
+     "que": "El disco de los portátiles modernos: identificarlo y leer su tabla de particiones (MBR o GPT). Nunca escribe.",
+     "claves": "ahci sata particiones particion gpt mbr disco duro portatil real lectura driver",
+     "espera": ["AHCI OK", "Tabla MBR", "Tabla GPT", "KERNEL_LISTO"],
+     "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, {"kernel.c": _K9})},
 ]
 
 SIGUIENTES = ("pantalla gráfica (dibujar píxeles)", "multitarea (cambio de contexto y planificador)",
