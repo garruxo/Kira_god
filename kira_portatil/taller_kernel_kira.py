@@ -954,7 +954,7 @@ def orden(texto):
         return ("archivos", "")
     if re.match(r"^(?:las\s+|que\s+|cuales\s+son\s+las\s+)?etapas\s+" + _K + r"$", low):
         return ("etapas", "")
-    m = re.match(r"^(?:pon|aplica|pasa\s+a|ve\s+a)\s+(?:la\s+)?etapa\s+(\d)\s*(?:" + _K + r")?$", low)
+    m = re.match(r"^(?:pon|aplica|pasa\s+a|ve\s+a)\s+(?:la\s+)?etapa\s+(\d{1,2})\s*(?:" + _K + r")?$", low)
     if m:
         return ("etapa", m.group(1))
     if re.match(r"^(?:deshaz|deshacer)\s+(?:el\s+)?(?:ultimo\s+cambio|lo\s+ultimo)\s+" + _K + r"$", low):

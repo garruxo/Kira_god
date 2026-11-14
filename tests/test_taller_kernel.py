@@ -95,6 +95,8 @@ ok(O("compila el kernel") == ("compilar", "") and O("prueba tu kernel") == ("pro
 ok(O("prepara el USB del kermel") == ("usb", "") and O("programa el kernell: hola") == ("programar", "hola") and
    O("pon la etapa 2 del kernal") == ("etapa", "2"), "con faltas («kermel», visto en el Packard Bell) también")
 ok(O("kermesse") is None and O("abre el kermit") is None, "…sin comerse otras palabras")
+ok(O("pon la etapa 15 del kernel") == ("etapa", "15") and O("pon la etapa 10 del kermel") == ("etapa", "10") and
+   O("pon la etapa 9 del kernel") == ("etapa", "9"), "etapas de dos cifras (visto en el Packard Bell: «pon la etapa 15 del kernel»)")
 for t in ("qué es un kernel", "estudia kernels", "abre la terminal", "instala el kernel de linux 6.8"):
     ok(O(t) is None, f"«{t}» NO es del taller")
 
