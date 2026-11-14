@@ -85,6 +85,12 @@ def es_estudia_general(texto):
             return None
     except ImportError:
         pass
+    try:                                         # v3.44: el hardware/drivers del portátil lo estudia KiraOS
+        import mando_kira as _mk
+        if _mk.es_de_hardware(t):
+            return None
+    except ImportError:
+        pass
     try:                                         # v3.01: «estudia esta página y sus enlaces…» va por internet
         import internet_kira as _ik
         if (_ik.interpretar(t) or {}).get("accion") == "estudiar_enlaces":

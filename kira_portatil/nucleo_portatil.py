@@ -585,6 +585,10 @@ def ejecutar(core, orden, paso):
         tipo, describir = so
         paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
         return {"texto": sp.hacer(tipo, describir)}
+    import hardware_kira as hw_                   # v3.44: ESTUDIA el hardware y los drivers del portátil (solo lectura)
+    if hw_.es_orden(o):
+        paso(0.0, "Estudio tu portátil…")
+        return {"texto": hw_.hacer(core, al_paso=paso)["texto"]}
     import taller_kernel_kira as tk_              # v3.35: el TALLER DE KERNEL (programa un SO de verdad, lo prueba en QEMU)
     o_k = tk_.orden(o)
     if o_k:

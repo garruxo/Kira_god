@@ -165,7 +165,34 @@ class EscritorioMixin:
                                    if v.get("lugar") in ("arriba", "abajo") else {}))
                            for v in self.ventanas_extra()],
                 "accesos": self.accesos(),                    # v3.26: accesos directos de los programas creados
-                "aspecto": self.aspecto()}
+                "aspecto": self.aspecto(),
+                "prioritario": self._prioritario()}           # v3.44: aviso prioritario (franja rosa con «Visto»)
+
+    # ---------- v3.44: AVISOS PRIORITARIOS (p. ej. «ya he estudiado tu portátil») ----------
+    def _prioritario(self):
+        try:
+            import avisos_kira as av
+            a = av.pendiente()
+        except Exception:
+            return None
+        if not a:
+            return None
+        dichos = self.__dict__.setdefault("_avisos_dichos", set())
+        if a["id"] not in dichos:                     # lo dice en voz alta UNA vez
+            dichos.add(a["id"])
+            if getattr(self, "voz_activa", True) and hasattr(self, "_hablar"):
+                try:
+                    threading.Thread(target=self._hablar, args=(para_voz(a["texto"]),), daemon=True).start()
+                except Exception:
+                    pass
+        return {k: a.get(k, "") for k in ("id", "titulo", "texto", "cuando")}
+
+    def aviso_visto(self, iid=None):
+        try:
+            import avisos_kira as av
+            return av.visto(iid or None)
+        except Exception:
+            return False
 
     # ---------- v3.26: accesos directos de los programas que Kira creó (icono en el escritorio; clic derecho ▸ desinstalar) ----------
     def accesos(self):

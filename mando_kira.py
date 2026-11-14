@@ -106,6 +106,16 @@ def orden_modo_app(texto):
     return None
 
 
+_HARDWARE = re.compile(r"\b(?:estudia|analiza|mira|revisa|conoce|aprende)\b.*\b(?:hardware|drivers?|controladores?|"
+                       r"piezas|componentes|packard\s*bell|xubuntu)\b")
+
+
+def es_de_hardware(texto):
+    """v3.44: «estudia tu hardware / los drivers / los controladores del portátil / todo el sistema xubuntu»."""
+    t = _norm(texto)
+    return bool(_HARDWARE.search(t) or re.match(r"^que\s+(?:drivers|controladores|piezas)\s+tiene(?:s|\s+(?:el|tu)\s+portatil)$", t))
+
+
 def es_trabajo(texto):
     t = _norm(texto)
     if not t or orden_control(texto) or orden_modo_app(texto):
@@ -114,6 +124,8 @@ def es_trabajo(texto):
         return True
     if _KERNEL.match(re.sub(r"\b(?:kermel|kernell|kernal|kenel|kernerl|kenrel|cernel)\b", "kernel", t)):
         # v3.35: el taller de kernel vive en KiraOS (v3.39: también con faltas como «kermel»)
+        return True
+    if es_de_hardware(texto):                     # v3.44: estudiar el hardware/drivers del portátil es de KiraOS
         return True
     if _CAMARA.match(t):
         return False
