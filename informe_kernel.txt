@@ -1,0 +1,517 @@
+== Etapa 1: Arranque: el kernel arranca y saluda → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+Multiboot OK
+KERNEL_LISTO
+
+== Etapa 2: GDT: segmentos propios (modelo plano) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+KERNEL_LISTO
+
+== Etapa 3: IDT: excepciones del procesador → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+Excepcion 3 (punto de ruptura) en eip=0x0010080F
+Excepciones OK
+KERNEL_LISTO
+Excepciones: v=03 punto de ruptura (int 3) en 0008:0010080e
+
+== Etapa 4: PIC, temporizador y teclado → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+TIMER OK (10 tics)
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 5: Memoria: marcos, paginación y heap → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 6: PCI: qué aparatos tiene el ordenador → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+  PCI 0:0.0 8086:1237  puente principal
+  PCI 0:1.0 8086:7000  puente ISA
+  PCI 0:1.1 8086:7010  controlador de disco IDE
+  PCI 0:1.3 8086:7113  puente
+  PCI 0:2.0 1234:1111  tarjeta grafica
+  PCI 0:3.0 8086:100e  tarjeta de red
+  PCI 0:4.0 8086:2922  controlador de disco SATA (AHCI)
+PCI OK (7 aparatos)
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 7: Driver de disco ATA (leer y escribir sectores) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+  PCI 0:0.0 8086:1237  puente principal
+  PCI 0:1.0 8086:7000  puente ISA
+  PCI 0:1.1 8086:7010  controlador de disco IDE
+  PCI 0:1.3 8086:7113  puente
+  PCI 0:2.0 1234:1111  tarjeta grafica
+  PCI 0:3.0 8086:100e  tarjeta de red
+  PCI 0:4.0 8086:2922  controlador de disco SATA (AHCI)
+PCI OK (7 aparatos)
+Disco: QEMU HARDDISK, 1 MB
+Sector 0: KIRADISK: el disco de pruebas de Kira (QEMU)
+DISCO OK: leo y escribo sectores
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 8: Driver de red e1000 (enviar y recibir) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+  PCI 0:0.0 8086:1237  puente principal
+  PCI 0:1.0 8086:7000  puente ISA
+  PCI 0:1.1 8086:7010  controlador de disco IDE
+  PCI 0:1.3 8086:7113  puente
+  PCI 0:2.0 1234:1111  tarjeta grafica
+  PCI 0:3.0 8086:100e  tarjeta de red
+  PCI 0:4.0 8086:2922  controlador de disco SATA (AHCI)
+PCI OK (7 aparatos)
+Disco: QEMU HARDDISK, 1 MB
+Sector 0: KIRADISK: el disco de pruebas de Kira (QEMU)
+DISCO OK: leo y escribo sectores
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+RED OK: el router virtual 10.0.2.2 me ha contestado (MAC 52:55:0a:00:02:02)
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 9: Driver AHCI de solo lectura (disco SATA) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+  PCI 0:0.0 8086:1237  puente principal
+  PCI 0:1.0 8086:7000  puente ISA
+  PCI 0:1.1 8086:7010  controlador de disco IDE
+  PCI 0:1.3 8086:7113  puente
+  PCI 0:2.0 1234:1111  tarjeta grafica
+  PCI 0:3.0 8086:100e  tarjeta de red
+  PCI 0:4.0 8086:2922  controlador de disco SATA (AHCI)
+PCI OK (7 aparatos)
+Disco: QEMU HARDDISK, 1 MB
+Sector 0: KIRADISK: el disco de pruebas de Kira (QEMU)
+DISCO OK: leo y escribo sectores
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+RED OK: el router virtual 10.0.2.2 me ha contestado (MAC 52:55:0a:00:02:02)
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 10: Sistema de archivos ext4 (solo lectura) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+  PCI 0:0.0 8086:1237  puente principal
+  PCI 0:1.0 8086:7000  puente ISA
+  PCI 0:1.1 8086:7010  controlador de disco IDE
+  PCI 0:1.3 8086:7113  puente
+  PCI 0:2.0 1234:1111  tarjeta grafica
+  PCI 0:3.0 8086:100e  tarjeta de red
+  PCI 0:4.0 8086:2922  controlador de disco SATA (AHCI)
+PCI OK (7 aparatos)
+Disco: QEMU HARDDISK, 1 MB
+Sector 0: KIRADISK: el disco de pruebas de Kira (QEMU)
+DISCO OK: leo y escribo sectores
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+RED OK: el router virtual 10.0.2.2 me ha contestado (MAC 52:55:0a:00:02:02)
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+Carpeta /:
+  lost+found/  home/  kira.txt  programas/
+/kira.txt dice: Hola desde el disco de Kira
+EXT4 OK (solo lectura)
+KERNEL_LISTO
+Escribe algo (Esc = reiniciar):
+
+== Etapa 11: Consola propia (kira>) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> ayuda
+Ordenes:
+  ayuda     lo que se puede hacer
+  ls        lo que hay en una carpeta (ls /home)
+  cd        entrar en una carpeta (cd /home/papi, cd ..)
+  pwd       en que carpeta estoy
+  cat       ver un archivo de texto (cat notas.txt)
+  aparatos  los aparatos del ordenador (PCI)
+  discos    discos y particiones
+  memoria   memoria libre
+  tiempo    cuanto llevo encendido
+  eco       repite lo que escribas
+  limpiar   borra la pantalla
+  version   que kernel es
+  reiniciar reinicia el ordenador (igual que Esc)
+Las rutas pueden ser incompletas: "cat notas" abre notas.txt si es el unico que empieza asi.
+kira:/> ls /
+  lost+found/  home/  kira.txt  programas/
+kira:/> cat kira
+Hola desde el disco de Kira
+kira:/> memoria
+Memoria libre: 126 MB (en marcos de 4 KB)
+kira:/>
+
+== Etapa 12: Multitarea (varias tareas a la vez) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> tareas
+  0. kernel (en marcha, 18 turnos) <- ahora
+  1. contador A (terminada, 18 turnos)
+  2. contador B (terminada, 18 turnos)
+kira:/>
+
+== Etapa 13: Modo usuario y llamadas al sistema → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK (con modo usuario y TSS)
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> usuario
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+Modo usuario: el bueno termina bien y al travieso lo cierra el kernel
+kira:/>
+Excepciones: v=0d protección general en 001b:00800035; v=0d protección general en 001b:00800035
+
+== Etapa 14: Programas desde el disco (ELF) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK (con modo usuario y TSS)
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+Cargo /programas/hola (4808 bytes) y lo ejecuto en modo usuario:
+Hola desde un programa cargado del disco! Soy hola.elf, corro en modo usuario.
+El kernel me dice que lleva 0 segundos encendido. Me despido.
+[kernel] El programa termino bien
+PROGRAMA OK: cargado del disco y ejecutado en modo usuario
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> programas
+  /programas/hola.elf
+kira:/>
+Excepciones: v=0d protección general en 001b:00800035
+
+== Etapa 15: Red: IP, UDP y DHCP (en QEMU) → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK (con modo usuario y TSS)
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+Cargo /programas/hola (4808 bytes) y lo ejecuto en modo usuario:
+Hola desde un programa cargado del disco! Soy hola.elf, corro en modo usuario.
+El kernel me dice que lleva 0 segundos encendido. Me despido.
+[kernel] El programa termino bien
+PROGRAMA OK: cargado del disco y ejecutado en modo usuario
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+DHCP: pido una direccion al router...
+DHCP: me ofrece 10.0.2.15
+DHCP OK: mi IP es 10.0.2.15, router 10.0.2.2
+PING OK: el router 10.0.2.2 contesta en 0 ms
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> ip
+IP 10.0.2.15  mascara 255.255.255.0  router 10.0.2.2  DNS 10.0.2.2
+kira:/>
+Excepciones: v=0d protección general en 001b:00800035
+
+== Etapa 16: WiFi W1: despertar la Atheros y leer su EEPROM → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK (con modo usuario y TSS)
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+Cargo /programas/hola (4808 bytes) y lo ejecuto en modo usuario:
+Hola desde un programa cargado del disco! Soy hola.elf, corro en modo usuario.
+El kernel me dice que lleva 0 segundos encendido. Me despido.
+[kernel] El programa termino bien
+PROGRAMA OK: cargado del disco y ejecutado en modo usuario
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+DHCP: pido una direccion al router...
+DHCP: me ofrece 10.0.2.15
+DHCP OK: mi IP es 10.0.2.15, router 10.0.2.2
+PING OK: el router 10.0.2.2 contesta en 0 ms
+WiFi: busco la Atheros AR9287 (168c:002e)...
+WiFi: no encuentro la tarjeta Atheros (en QEMU es normal: solo esta en tu Packard Bell)
+WIFI W1: sin tarjeta
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> wifi
+WiFi: busco la Atheros AR9287 (168c:002e)...
+WiFi: no encuentro la tarjeta Atheros (en QEMU es normal: solo esta en tu Packard Bell)
+WIFI W1: sin tarjeta
+kira:/>
+Excepciones: v=0d protección general en 001b:00800035
+
+== Etapa 17: WiFi W2: escuchar y listar las redes → OK (arrancar: Arranca y funciona.)
+Hola desde mi SO!
+GDT OK (con modo usuario y TSS)
+IDT OK
+PIC OK
+Teclado OK
+Memoria: 127 MB
+MARCOS OK
+PAGINACION OK
+HEAP OK
+AHCI: controlador 1.0, 6 puertos
+  Puerto 0: disco QEMU HARDDISK, 4 MB
+    Tabla MBR
+      1: Linux, 2 MB
+      2: Linux swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+Cargo /programas/hola (4808 bytes) y lo ejecuto en modo usuario:
+Hola desde un programa cargado del disco! Soy hola.elf, corro en modo usuario.
+El kernel me dice que lleva 0 segundos encendido. Me despido.
+[kernel] El programa termino bien
+PROGRAMA OK: cargado del disco y ejecutado en modo usuario
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+DHCP: pido una direccion al router...
+DHCP: me ofrece 10.0.2.15
+DHCP OK: mi IP es 10.0.2.15, router 10.0.2.2
+PING OK: el router 10.0.2.2 contesta en 0 ms
+WiFi: busco la Atheros AR9287 (168c:002e)...
+WiFi: no encuentro la tarjeta Atheros (en QEMU es normal: solo esta en tu Packard Bell)
+WIFI W1: sin tarjeta
+WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> redes
+WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)
+kira:/>
+Excepciones: v=0d protección general en 001b:00800035
+
+== USB (BIOS → GRUB → kernel): OK (Arranca y funciona.)
+ swap, 1 MB
+  Puerto 1: disco QEMU HARDDISK, 18 MB
+    Tabla GPT
+      1: EFI, 1 MB
+      2: Linux, 16 MB
+AHCI OK (solo lectura: 2 discos)
+EXT4: particion Linux "KIRA", 16 MB, bloques de 4 KB (solo lectura)
+MULTITAREA OK: 3 tareas turnandose a la vez
+Modo usuario listo (llamadas al sistema por int 0x80)
+Hola desde el modo usuario (anillo 3): pido al kernel que escriba esto
+Soy un programa travieso: voy a intentar apagar las interrupciones...
+[kernel] El programa de usuario intento algo prohibido (instruccion privilegiada o puerto): lo cierro. El sistema sigue.
+MODO USUARIO OK: el bueno termino bien y al travieso lo cerro el kernel
+Cargo /programas/hola (4808 bytes) y lo ejecuto en modo usuario:
+Hola desde un programa cargado del disco! Soy hola.elf, corro en modo usuario.
+El kernel me dice que lleva 0 segundos encendido. Me despido.
+[kernel] El programa termino bien
+PROGRAMA OK: cargado del disco y ejecutado en modo usuario
+Red: tarjeta e1000, MAC 52:54:00:12:34:56
+DHCP: pido una direccion al router...
+DHCP: me ofrece 10.0.2.15
+DHCP OK: mi IP es 10.0.2.15, router 10.0.2.2
+PING OK: el router 10.0.2.2 contesta en 0 ms
+WiFi: busco la Atheros AR9287 (168c:002e)...
+WiFi: no encuentro la tarjeta Atheros (en QEMU es normal: solo esta en tu Packard Bell)
+WIFI W1: sin tarjeta
+WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)
+KERNEL_LISTO
+Escribe ayuda para ver las ordenes.
+kira:/> redes
+WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)
+kira:/>
