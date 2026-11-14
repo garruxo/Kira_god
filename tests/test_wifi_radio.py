@@ -30,6 +30,7 @@ ok("0x0840" not in RC and "AR_Q_TXE" not in RC.split("*/", 1)[1] and "TXDP" not 
 ok("AR_DIAG_ACK_DIS | AR_DIAG_CTS_DIS" in RC, "apaga las respuestas automáticas (ACK y CTS)")
 ok("wifi_dma(0)" in RC and "wifi_dma(1)" in RC, "permiso de DMA solo mientras escucha")
 ok("0x180" in RC, "solo enciende la radio si es una AR9287")
+ok("cargar_ruido()" in RC and "NF_NOMINAL_9287" in RC and "(-50)" in RC, "carga el ruido de fondo como Linux (loadnf: -112 y luego -50)")
 # las tablas de Linux
 regs = [int(a, 16) for a in re.findall(r"\{0x([0-9a-f]{8}), 0x", wt.AR9287_TABLAS_H)]
 ok(len(regs) == 714 and "Atheros Communications" in wt.AR9287_TABLAS_H, "714 ajustes de Linux, con su aviso de licencia ISC")
@@ -66,8 +67,9 @@ uint32_t sim_lee(uint32_t r) {
     if (r == 0x7044) return rtc_on ? 0x2 : 0x1;
     if (r == 0x4020) return modo == 2 ? ((0x0C0u << 12) | 0xFF) : ((0x180u << 12) | (2u << 8) | 0xFF);
     if (r == 0x7000) return modo == 4 ? 0x1 : 0;
-    if (r == 0x9860) return modo == 3 ? regs[r / 4] : (regs[r / 4] & ~1u);
+    if (r == 0x9860) return modo == 3 ? regs[r / 4] : (regs[r / 4] & ~3u);   /* CAL y NF acaban */
     if (r == 0x0008) return rxe ? 4 : 0;
+    if (r == 0x80F8) return 9680000;                       /* ciclos: el reloj de la radio va */
     return regs[r / 4];
 }
 void sim_escribe(uint32_t r, uint32_t v) {
@@ -134,6 +136,8 @@ static int baliza(uint8_t *f, const struct ap *a, int canal_ds) {
 void sim_paso(uint32_t us) {
     ahora += us;
     if (!rxe || (regs[0x8048 / 4] & 0x20) || ahora - ultimo < 20000) return;
+    if ((regs[0x9864 / 4] & 0x1FF) == 0) return;           /* sin cargar el ruido, la radio real queda sorda */
+    if (modo == 5) return;                                 /* chip sordo */
     ultimo = ahora;
     int ch = canal_actual();
     uint8_t f[512];
@@ -172,6 +176,7 @@ int main(int argc, char **argv) {
     printf("RESULTADO=%d\n", r);
     printf("SWITCH_COM=0x%08x\n", regs[0x9964 / 4]);
     printf("STA_ID0=0x%08x\n", regs[0x8000 / 4]);
+    printf("RUIDO=0x%03x,0x%03x\n", regs[0x9864 / 4] & 0x1FF, regs[0xA864 / 4] & 0x1FF);
     printf("EEPROM=%d TXE=%d TXDP=%d SIN_ACK_DIS=%d VECES_RXE=%d RXE_AL_FINAL=%d DIAG_RX_DIS=%d\n", escritura_eeprom,
            escritura_txe, escritura_txdp, rxe_sin_ack_dis, veces_rxe, rxe, (regs[0x8048 / 4] & 0x20) ? 1 : 0);
     return 0;
@@ -207,10 +212,15 @@ if gcc:
             ok(re.search(r"canal 3\s+-80 dBm\s+WPA\s+Viejo", s) and re.search(r"canal 9\s+-85 dBm\s+WEP\s+Casa WEP", s),
                "WPA (fabricante) y WEP")
             ok("canales calibrados 13 de 13" in s and "con errores" in s, "calibra los 13 canales y cuenta los errores")
+            ok("WiFi diag:" in s and "RXDP" in s.split("WiFi diag:")[1].splitlines()[0], "línea de diagnóstico (contadores, ruido, ISR, DIAG, CR, RXDP)")
+            ok("RUIDO=0x19c,0x19c" in s, "ruido cargado en las dos cadenas: -112 y después el tope -50, como Linux")
             ok("SWITCH_COM=0x12345678" in s, "pone los valores de antena de TU EEPROM (set_board_values)")
             ok("STA_ID0=0x539d651c" in s, "usa tu MAC de la EEPROM")
             ok("EEPROM=0 TXE=0 TXDP=0 SIN_ACK_DIS=0" in s, "NUNCA: escribir la EEPROM, cola de envío, descriptor de envío, ni escuchar con ACK/CTS encendidos")
             ok("VECES_RXE=13" in s and "RXE_AL_FINAL=0 DIAG_RX_DIS=1" in s, "escucha una vez por canal y al acabar deja la recepción parada")
+            s = corre(5)
+            ok("La radio esta sorda" in s and "recibiendo 0% del tiempo" in s and "RESULTADO=0" in s,
+               "chip sordo: el diagnóstico lo dice (no nota nada en el aire)")
             s = corre(1)
             ok("WIFI W2: sin tarjeta" in s and "RESULTADO=-1" in s, "sin tarjeta (QEMU): lo dice y no enciende nada")
             s = corre(2)

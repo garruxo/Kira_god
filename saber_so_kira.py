@@ -4257,6 +4257,14 @@ static void espera_us(uint32_t n) { while (n--) io_wait(); }
 #define AR9287_AN_RF2G3_CH0    0x7808
 #define AR9287_AN_RF2G3_CH1    0x785C
 #define AR9287_AN_TOP2         0x78B4
+#define AR_PHY_CH1_CCA         0xA864
+#define AR_MIBC                0x0040
+#define AR_MIBC_FMC            0x00000002
+#define AR_TFCNT               0x80EC
+#define AR_RFCNT               0x80F0
+#define AR_RCCNT               0x80F4
+#define AR_CCCNT               0x80F8
+#define NF_NOMINAL_9287        (-112)       /* AR_PHY_CCA_NOM_VAL_9287_2GHZ */
 
 #define AGC_CAL        0x00000001
 #define AGC_NF         0x00000002
@@ -4338,6 +4346,53 @@ static void delta_vals(uint32_t escala, uint32_t *man, uint32_t *ex) {
 }
 
 static uint8_t rx_mask = 3;
+
+/* ---- cargar el ruido de fondo (ath9k_hw_loadnf): primero el valor nominal de la AR9287 (-112) y, cuando el
+   chip lo ha cogido, el tope -50 para la siguiente calibración. Las tablas dejan aquí un 0 (0 dBm): con eso el chip
+   cree que todo lo que oye es ruido y no descodifica nada. ---- */
+static const uint32_t regs_ruido[2] = {AR_PHY_CCA, AR_PHY_CH1_CCA};
+static int cargar_ruido(void) {
+    uint32_t agc = R(AR_PHY_AGC_CONTROL);
+    for (int i = 0; i < 2; i++)
+        if (rx_mask & (1 << i))
+            W(regs_ruido[i], (R(regs_ruido[i]) & ~0x1FFu) | (((uint32_t)NF_NOMINAL_9287 << 1) & 0x1FFu));
+    if (agc & AGC_NF) quita(AR_PHY_AGC_CONTROL, AGC_NF);
+    quita(AR_PHY_AGC_CONTROL, AGC_ENABLE_NF);
+    quita(AR_PHY_AGC_CONTROL, AGC_NO_UPDATE);
+    pon(AR_PHY_AGC_CONTROL, AGC_NF);
+    if (!esperar(AR_PHY_AGC_CONTROL, AGC_NF, 0, 222000)) return 0;     /* hasta 22,2 ms, como Linux */
+    for (int i = 0; i < 2; i++)
+        if (rx_mask & (1 << i))
+            W(regs_ruido[i], (R(regs_ruido[i]) & ~0x1FFu) | (((uint32_t)(-50) << 1) & 0x1FFu));
+    return 1;
+}
+
+/* ---- diagnóstico: contadores de ciclos del chip (como ath_hw_cycle_counters_update) ---- */
+static uint32_t d_ciclos = 0, d_ocupado = 0, d_recibe = 0, d_isr = 0, d_diag = 0, d_cr = 0;
+static int d_rxdp_movido = 0, d_nf_min = 1000, d_nf_max = -1000;
+static int nf_actual(void) {                              /* AR_PHY_MINCCA_PWR: 9 bits con signo */
+    int v = (int)((R(AR_PHY_CCA) >> 19) & 0x1FF);
+    return (v & 0x100) ? v - 0x200 : v;
+}
+static void contadores_cero(void) {
+    W(AR_MIBC, AR_MIBC_FMC);
+    W(AR_CCCNT, 0); W(AR_RFCNT, 0); W(AR_RCCNT, 0); W(AR_TFCNT, 0);
+    W(AR_MIBC, 0);
+    W(AR_ISR, 0xFFFFFFFFu);
+}
+static void contadores_sumar(void) {
+    W(AR_MIBC, AR_MIBC_FMC);
+    d_ciclos += R(AR_CCCNT) >> 4;                          /* en unidades de 16 ciclos: no se desborda */
+    d_ocupado += R(AR_RCCNT) >> 4;
+    d_recibe += R(AR_RFCNT) >> 4;
+    W(AR_MIBC, 0);
+    d_isr |= R(AR_ISR);
+    int nf = nf_actual();
+    if (nf < d_nf_min) d_nf_min = nf;
+    if (nf > d_nf_max) d_nf_max = nf;
+}
+static uint32_t por_ciento(uint32_t parte, uint32_t total) { return total >= 100 ? parte / (total / 100) : 0; }
+static void escribe_con_signo(int v) { if (v < 0) { kputc('-'); kprint_dec((uint32_t)(-v)); } else kprint_dec((uint32_t)v); }
 
 /* ---- lo que hace ath9k_hw_reset para un canal de 2,4 GHz HT20 (solo lo necesario para ESCUCHAR) ---- */
 static int preparar(int canal, int *cal_ok) {
@@ -4461,6 +4516,7 @@ static int preparar(int canal, int *cal_ok) {
     W(AR_PHY_AGC_CONTROL, R(AR_PHY_AGC_CONTROL) | AGC_CAL);
     *cal_ok = esperar(AR_PHY_AGC_CONTROL, AGC_CAL, 0, ESPERA_MAX);
     quita(AR_PHY_AGC_CONTROL, AGC_FLTR_CAL);
+    *cal_ok = *cal_ok && cargar_ruido();                   /* ath9k_hw_loadnf (sin esto la radio queda «sorda») */
     pon(AR_PHY_AGC_CONTROL, AGC_ENABLE_NF);                /* start_nfcal: calibración del ruido */
     quita(AR_PHY_AGC_CONTROL, AGC_NO_UPDATE);
     pon(AR_PHY_AGC_CONTROL, AGC_NF);
@@ -4593,11 +4649,16 @@ static void escuchar(int canal, uint32_t ms) {
     W(AR_RXDP, fisica(&anillo[0]));
     W(AR_CR, AR_CR_RXE);
     quita(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
+    contadores_cero();
+    uint32_t rxdp0 = fisica(&anillo[0]);
     for (uint32_t t = 0; t < ms * 10; t++) {               /* cada 100 microsegundos */
         revisar(canal);
+        if (t == ms * 5 && canal == 1) { d_diag = R(AR_DIAG_SW); d_cr = R(AR_CR); }
         espera_us(100);
     }
     revisar(canal);
+    if (R(AR_RXDP) != rxdp0) d_rxdp_movido = 1;
+    contadores_sumar();
     parar_rx();
 }
 
@@ -4612,6 +4673,8 @@ static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4
 int radio_escanear(void) {
     struct wifi_info w;
     nredes = 0; tramas = 0; errores = 0;
+    d_ciclos = d_ocupado = d_recibe = d_isr = d_diag = d_cr = 0;
+    d_rxdp_movido = 0; d_nf_min = 1000; d_nf_max = -1000;
     if (wifi_leer(&w) != 1) {
         if (!w.hay) { kprint("WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)\n"); return -1; }
         kprint("WIFI W2: no he podido leer la tarjeta (W1 fallo): no enciendo la radio\n");
@@ -4641,6 +4704,14 @@ int radio_escanear(void) {
     kprint(", con errores "); kprint_dec(errores);
     kprint(", canales calibrados "); kprint_dec((uint32_t)calibrados); kprint(" de 13\n");
     if (fallos == 13) { kprint("WIFI W2: el chip no se dejo reiniciar en ningun canal\n"); return -4; }
+    kprint("WiFi diag: recibiendo "); kprint_dec(por_ciento(d_recibe, d_ciclos));
+    kprint("% del tiempo, canal ocupado "); kprint_dec(por_ciento(d_ocupado, d_ciclos));
+    kprint("%, ruido ");
+    if (d_nf_min <= d_nf_max) { escribe_con_signo(d_nf_min); kprint(".."); escribe_con_signo(d_nf_max); }
+    else kprint("?");
+    kprint(" dBm, ISR "); kprint_hex(d_isr);
+    kprint(", DIAG "); kprint_hex(d_diag); kprint(", CR "); kprint_hex(d_cr);
+    kprint(d_rxdp_movido ? ", RXDP se movio\n" : ", RXDP quieto\n");
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)
@@ -4655,8 +4726,17 @@ int radio_escanear(void) {
         kprint("  ("); for (int j = 0; j < 6; j++) { if (j) kputc(':'); hex2(redes[i].bssid[j]); } kprint(")\n");
     }
     if (!nredes) {
-        kprint("WIFI W2: no he oido ninguna red. La radio y la calibracion han ido, pero no llega nada: puede que\n"
-               "  falte algun ajuste de Linux que me he saltado. Hazme una foto de esto y lo miramos.\n");
+        if (!d_ciclos)
+            kprint("WIFI W2: no he oido ninguna red y los contadores del chip no se mueven (el reloj de la radio no va).\n");
+        else if (d_recibe && !tramas)
+            kprint("WIFI W2: no he oido ninguna red. La radio SI recibe tramas, pero no llegan a la memoria\n"
+                   "  (fallo de DMA o del filtro). Hazme una foto de esto y lo miramos.\n");
+        else if (!d_recibe && d_ocupado)
+            kprint("WIFI W2: no he oido ninguna red. La radio nota senal en el aire pero no la descodifica\n"
+                   "  (ajuste de antena, ganancia o ruido). Hazme una foto de esto y lo miramos.\n");
+        else
+            kprint("WIFI W2: no he oido ninguna red. La radio esta sorda: no nota nada en el aire\n"
+                   "  (antena, canal o sintetizador). Hazme una foto de esto y lo miramos.\n");
         return 0;
     }
     kprint("WIFI W2 OK: "); kprint_dec((uint32_t)nredes);
