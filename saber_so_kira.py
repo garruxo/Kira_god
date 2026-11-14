@@ -4204,6 +4204,8 @@ _RADIO_H = r"""/* radio.h — WiFi W2: escuchar y listar las redes de alrededor 
 #define RADIO_H
 int radio_escanear(void);     /* devuelve cuántas redes ha oído, o <0 si no ha podido */
 void radio_probar(void);      /* lo de la etapa 17: lo escribe en pantalla */
+int radio_sintonizar(int canal);   /* ajusta la radio en un canal SIN escuchar; <0 si no ha podido */
+uint32_t radio_reg(uint32_t r);    /* lee un registro de la tarjeta */
 #endif
 """
 
@@ -4238,7 +4240,10 @@ static void espera_us(uint32_t n) { sim_paso(n); }
    (100 tics por segundo) cuántas io_wait caben en un milisegundo y se espera siempre un poco de más. */
 static uint32_t por_ms = 0;                               /* io_wait en 1 ms (0 = sin medir: 1 por microsegundo) */
 static void espera_us(uint32_t n) {
-    uint32_t vueltas = por_ms ? (n / 1000u) * por_ms + ((n % 1000u) * por_ms) / 1000u + 1 : n;
+    /* En tu Packard Bell el reloj del kernel corre ~2,1 veces más rápido de lo que dice (lo midió rdtsc en la
+       v3.53), así que la medida de por_ms sale corta. Cada io_wait real tarda ~1,06 us: se usa 1 por
+       microsegundo con un 12 % de margen (esperar de más no estropea nada; de menos, sí). */
+    uint32_t vueltas = n + n / 8 + 1;
     while (vueltas--) io_wait();
 }
 static void medir_esperas(void) {
@@ -4791,7 +4796,7 @@ int radio_escanear(void) {
 #ifndef WIFI_SIMULADA
     medir_esperas();
     kprint("WiFi: esperas medidas con el reloj del kernel: ");
-    if (por_ms) { kprint_dec(por_ms); kprint(" io_wait por milisegundo (lo normal: unas 1000)\n"); }
+    if (por_ms) { kprint_dec(por_ms); kprint(" io_wait por \"milisegundo\" del kernel (que corre de mas: espero 1 por microsegundo)\n"); }
     else kprint("no se pudo medir (uso 1 por microsegundo)\n");
 #endif
     {
@@ -4909,14 +4914,168 @@ int radio_escanear(void) {
 }
 
 void radio_probar(void) { radio_escanear(); }
+
+/* ---- para la orden «compara»: deja la radio ajustada en un canal (como para escuchar, pero SIN escuchar:
+   la recepción sigue apagada y no se da permiso de DMA) y deja leer sus registros ---- */
+int radio_sintonizar(int canal) {
+    struct wifi_info w;
+    if (wifi_leer(&w) != 1) return w.hay ? -2 : -1;
+    if (w.version != 0x180) return -3;
+    rx_mask = w.antenas_rx;
+    if (rx_mask != 1 && rx_mask != 2 && rx_mask != 3) rx_mask = 3;
+    if (canal < 1 || canal > 13) canal = 1;
+    int cal_ok = 0;
+    if (preparar(canal, &cal_ok) < 0) return -4;
+    return cal_ok;
+}
+uint32_t radio_reg(uint32_t r) { return R(r); }
+"""
+
+_COMPARA_H = r"""/* compara.h — comparar los registros de la radio con los que pone Linux (orden «compara») */
+#ifndef COMPARA_H
+#define COMPARA_H
+void compara_orden(const char *args);
+#endif
+"""
+
+_COMPARA_C = r"""/* compara.c — orden «compara [pagina]»: pone la radio de la AR9287 en el mismo canal que tenía Linux y compara
+   sus registros con los que Linux dejó mientras su WiFi FUNCIONABA (archivo regs_linux.txt que guarda
+   kira_portatil/copiar_regs_wifi.sh en tu carpeta). Así se ve en qué ajuste se diferencia mi driver del suyo.
+   Solo LEE el disco (ext4 de solo lectura) y no enciende la recepción ni transmite nada. */
+#include <stdint.h>
+#include "consola.h"
+#include "ext4.h"
+#include "memoria.h"
+#include "radio.h"
+
+#define MAX_TXT   (80 * 1024)
+#define MAX_REGS  2600
+#define POR_PAG   39
+
+static uint32_t l_dir[MAX_REGS], l_val[MAX_REGS];
+static int l_n, l_canal, l_ancho;
+
+static int hex(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+static const char *salta(const char *p) { while (*p == ' ' || *p == '\t') p++; return p; }
+static const char *lee_num(const char *p, uint32_t *v, int *ok) {
+    uint32_t n = 0; int d = 0;
+    p = salta(p);
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+        while (hex(*p) >= 0) { n = (n << 4) | (uint32_t)hex(*p); p++; d++; }
+    } else {
+        while (*p >= '0' && *p <= '9') { n = n * 10 + (uint32_t)(*p - '0'); p++; d++; }
+    }
+    *v = n; *ok = d > 0;
+    return p;
+}
+static int empieza(const char *p, const char *q) { while (*q) if (*p++ != *q++) return 0; return 1; }
+static void une(char *d, int max, const char *a, const char *b, const char *c) {
+    int i = 0;
+    const char *t[3] = {a, b, c};
+    for (int k = 0; k < 3; k++) for (const char *x = t[k]; x && *x && i < max - 1; x++) d[i++] = *x;
+    d[i] = 0;
+}
+static int buscar(char *ruta, int max) {
+    static char gente[16][32];
+    int n = ext4_nombres("/home", gente, 16);
+    for (int i = 0; i < n; i++) {
+        une(ruta, max, "/home/", gente[i], "/kira_portatil/kernel/regs_linux.txt");
+        if (ext4_existe(ruta) == 1) return 1;
+    }
+    return 0;
+}
+
+static int cargar(void) {
+    char ruta[128];
+    l_n = 0; l_canal = 0; l_ancho = 20;
+    if (!buscar(ruta, sizeof(ruta))) return -1;
+    char *t = kmalloc(MAX_TXT + 1);
+    uint32_t tam = 0;
+    if (!t) return -2;
+    if (ext4_leer(ruta, t, MAX_TXT, &tam) != 0) { kfree(t); return -2; }
+    if (tam > MAX_TXT) tam = MAX_TXT;
+    t[tam] = 0;
+    for (const char *p = t; *p; ) {
+        const char *q = salta(p);
+        uint32_t a, v; int ok1, ok2;
+        if (empieza(q, "# canal")) {
+            q = lee_num(q + 7, &a, &ok1); if (ok1) l_canal = (int)a;
+            q = salta(q);
+            if (empieza(q, "ancho")) { lee_num(q + 5, &v, &ok2); if (ok2) l_ancho = (int)v; }
+        } else if (*q != '#') {
+            q = lee_num(q, &a, &ok1);
+            q = lee_num(q, &v, &ok2);
+            if (ok1 && ok2 && l_n < MAX_REGS && !(a & 3)) { l_dir[l_n] = a; l_val[l_n] = v; l_n++; }
+        }
+        while (*p && *p != '\n') p++;
+        if (*p) p++;
+    }
+    kfree(t);
+    return l_n;
+}
+
+static void hexn(uint32_t v, int cifras) {
+    const char *h = "0123456789ABCDEF";
+    for (int i = cifras - 1; i >= 0; i--) kputc(h[(v >> (i * 4)) & 0xF]);
+}
+
+void compara_orden(const char *args) {
+    uint32_t pag = 1; int ok = 0;
+    if (args) { lee_num(args, &pag, &ok); if (!ok || pag < 1) pag = 1; }
+    int n = cargar();
+    if (n == -1) {
+        kprint("COMPARA: no encuentro kira_portatil/kernel/regs_linux.txt en tu disco.\n"
+               "  Primero en Xubuntu, con la WiFi CONECTADA:  cd kira_god/kira_portatil  y  bash copiar_regs_wifi\n");
+        return;
+    }
+    if (n <= 0) { kprint("COMPARA: no he podido leer regs_linux.txt (o esta vacio)\n"); return; }
+    int r = radio_sintonizar(l_canal);
+    if (r == -1) { kprint("COMPARA: sin tarjeta WiFi (en QEMU es normal)\n"); return; }
+    if (r < -1) { kprint("COMPARA: no he podido ajustar la radio (codigo "); kprint_dec((uint32_t)(-r)); kprint(")\n"); return; }
+    static uint32_t d_dir[MAX_REGS], d_lin[MAX_REGS], d_mio[MAX_REGS];
+    int nd = 0, mirados = 0;
+    for (int i = 0; i < l_n; i++) {
+        uint32_t a = l_dir[i];
+        if (!((a >= 0x7800 && a < 0x7900) || (a >= 0x9800 && a < 0xB500))) continue;   /* radio y analógicos */
+        mirados++;
+        uint32_t m = radio_reg(a);
+        if (m != l_val[i]) { d_dir[nd] = a; d_lin[nd] = l_val[i]; d_mio[nd] = m; nd++; }
+    }
+    uint32_t pags = nd ? (uint32_t)(nd + POR_PAG - 1) / POR_PAG : 1;
+    if (pag > pags) pag = pags;
+    kprint("COMPARA: Linux en el canal "); kprint_dec((uint32_t)l_canal);
+    kprint(", ancho "); kprint_dec((uint32_t)l_ancho); kprint(" MHz");
+    if (l_ancho != 20) kprint(" (OJO: yo uso 20; los de ancho van a salir distintos)");
+    kprint(r ? ", mi calibracion bien" : ", mi calibracion NO acabo");
+    kprint("\nCOMPARA: miro "); kprint_dec((uint32_t)mirados); kprint(" registros, distintos ");
+    kprint_dec((uint32_t)nd); kprint(" (L = Linux, K = Kira)\n");
+    int ini = (int)(pag - 1) * POR_PAG, col = 0;
+    for (int i = ini; i < nd && i < ini + POR_PAG; i++) {
+        hexn(d_dir[i], 4); kprint(" L "); hexn(d_lin[i], 8); kprint(" K "); hexn(d_mio[i], 8);
+        if (++col == 3) { kputc('\n'); col = 0; } else kprint("  ");
+    }
+    if (col) kputc('\n');
+    kprint("COMPARA: pagina "); kprint_dec(pag); kprint(" de "); kprint_dec(pags);
+    if (pag < pags) { kprint(" (escribe: compara "); kprint_dec(pag + 1); kputc(')'); }
+    kprint(". Hazme una foto de cada pagina.\n");
+}
 """
 
 _D17 = _D16 + r"""#include "radio.h"
+#include "compara.h"
 
 static void o_redes(const char *a) { (void)a; radio_escanear(); }
+static void o_compara(const char *a) { compara_orden(a); }
 """
 _C17 = _C16 + "    radio_probar();\n"
-_O17 = _O16 + '    shell_orden("redes", "escucha y lista las redes WiFi de alrededor (sin transmitir)", o_redes);\n'
+_O17 = _O16 + '    shell_orden("redes", "escucha y lista las redes WiFi de alrededor (sin transmitir)", o_redes);\n' + \
+    '    shell_orden("compara", "compara mis registros de la WiFi con los de Linux (compara 2 = pagina 2)", o_compara);\n'
 
 _K11 = _k_shell("etapa 11: consola propia", _D11, _C11, "")
 _K12 = _k_shell("etapa 12: multitarea", _D12, _C12, _O12)
@@ -4944,6 +5103,7 @@ _E14 = {"programa.h": _PROGRAMA_H, "programa.c": _PROGRAMA_C}
 _E15 = {"red.h": _RED2_H, "red.c": _RED2_C, "ip.h": _IP_H, "ip.c": _IP_C}
 _E16 = {"wifi.h": _WIFI_H, "wifi.c": _WIFI_C}
 _E17 = {"wifi.h": _WIFI2_H, "wifi.c": _WIFI2_C, "radio.h": _RADIO_H, "radio.c": _RADIO_C,
+        "compara.h": _COMPARA_H, "compara.c": _COMPARA_C,
         "ar9287_tablas.h": _AR9287_TABLAS_H}
 
 
