@@ -1452,7 +1452,7 @@ static const char *tipo_gpt(uint32_t g) {
 }
 
 static void particion(int n, const char *tipo, uint32_t sectores) {
-    kprint("      "); kprint_dec((uint32_t)n); kprint(": "); kprint(tipo); kprint(", "); tamano(sectores / 2048); kputc('\n');
+    kprint("      "); kprint_dec((uint32_t)n); kprint(": "); kprint(tipo); kprint(", "); tamano((sectores + 1024) / 2048); kputc('\n');
 }
 
 static int leer_gpt(int p) {
