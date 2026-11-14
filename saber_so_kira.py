@@ -4206,6 +4206,9 @@ int radio_escanear(void);     /* devuelve cuántas redes ha oído, o <0 si no ha
 void radio_probar(void);      /* lo de la etapa 17: lo escribe en pantalla */
 int radio_sintonizar(int canal);   /* ajusta la radio en un canal SIN escuchar; <0 si no ha podido */
 uint32_t radio_reg(uint32_t r);    /* lee un registro de la tarjeta */
+uint32_t radio_reg_lento(uint32_t r);            /* lo mismo, despacio (analógicos) */
+int radio_valor_tabla(uint32_t r, uint32_t *v);  /* lo que escriben mis tablas; 0 si no está */
+void radio_reescribir_analogicos(void);          /* reescribe los analógicos de mis tablas, muy despacio */
 #endif
 """
 
@@ -4929,6 +4932,33 @@ int radio_sintonizar(int canal) {
     return cal_ok;
 }
 uint32_t radio_reg(uint32_t r) { return R(r); }
+
+/* Los registros analógicos (0x7800-0x789F) van por un registro de desplazamiento en serie: se leen DESPACIO
+   por si leerlos seguidos da datos a medias. */
+uint32_t radio_reg_lento(uint32_t r) { espera_us(300); uint32_t v = R(r); espera_us(300); return v; }
+
+/* Lo que MIS tablas escriben en un registro (la última vez que aparece, en el orden de process_ini). */
+int radio_valor_tabla(uint32_t r, uint32_t *v) {
+    int hay = 0;
+    for (int i = 0; i < AR9287_MODES_N; i++) if (ar9287_modes[i][0] == r) { *v = ar9287_modes[i][1]; hay = 1; }
+    for (int i = 0; i < AR9287_RX_GAIN_N; i++) if (ar9287_rx_gain[i][0] == r) { *v = ar9287_rx_gain[i][1]; hay = 1; }
+    for (int i = 0; i < AR9287_TX_GAIN_N; i++) if (ar9287_tx_gain[i][0] == r) { *v = ar9287_tx_gain[i][1]; hay = 1; }
+    for (int i = 0; i < AR9287_COMMON_N; i++) if (ar9287_common[i][0] == r) { *v = ar9287_common[i][1]; hay = 1; }
+    return hay;
+}
+
+/* Vuelve a escribir los analógicos de MIS tablas (los mismos valores que pone Linux), muy despacio (1 ms cada
+   uno), para ver si así se quedan. No transmite ni enciende nada. */
+void radio_reescribir_analogicos(void) {
+    W(AR_PHY_BASE, 0x00000007);
+    for (int i = 0; i < AR9287_COMMON_N; i++) {
+        uint32_t r = ar9287_common[i][0];
+        if (r >= 0x7800 && r < 0x78A0 && r != AR9287_AN_RF2G3_CH0 && r != AR9287_AN_RF2G3_CH1) {
+            W(r, ar9287_common[i][1]);
+            espera_us(1000);
+        }
+    }
+}
 """
 
 _COMPARA_H = r"""/* compara.h — comparar los registros de la radio con los que pone Linux (orden «compara») */
@@ -4950,7 +4980,7 @@ _COMPARA_C = r"""/* compara.c — orden «compara [pagina]»: pone la radio de l
 
 #define MAX_TXT   (80 * 1024)
 #define MAX_REGS  2600
-#define POR_PAG   39
+#define POR_PAG   57          /* 19 filas de 3: cabe en la pantalla sin que se corte nada */
 
 static uint32_t l_dir[MAX_REGS], l_val[MAX_REGS];
 static int l_n, l_canal, l_ancho;
@@ -5025,6 +5055,24 @@ static void hexn(uint32_t v, int cifras) {
     for (int i = cifras - 1; i >= 0; i--) kputc(h[(v >> (i * 4)) & 0xF]);
 }
 
+static int es_analogico(uint32_t a) { return a >= 0x7800 && a < 0x7900; }
+static int grupo(uint32_t a) {          /* primero lo que importa para RECIBIR */
+    if (es_analogico(a)) return 0;
+    if ((a >= 0x9800 && a < 0x9A00) || (a >= 0xA800 && a < 0xAA00)) return 1;
+    if (a >= 0xA200 && a < 0xA300) return 2;
+    return 3;
+}
+/* analógicos que escriben mis tablas (salvo los dos que cambian los valores de la placa): cuántos se leen igual */
+static void contar_analogicos(int lento, int *iguales, int *total) {
+    *iguales = 0; *total = 0;
+    for (uint32_t a = 0x7800; a < 0x78A0; a += 4) {
+        uint32_t t;
+        if (a == 0x7808 || a == 0x785C || !radio_valor_tabla(a, &t)) continue;
+        (*total)++;
+        if ((lento ? radio_reg_lento(a) : radio_reg(a)) == t) (*iguales)++;
+    }
+}
+
 void compara_orden(const char *args) {
     uint32_t pag = 1; int ok = 0;
     if (args) { lee_num(args, &pag, &ok); if (!ok || pag < 1) pag = 1; }
@@ -5038,32 +5086,41 @@ void compara_orden(const char *args) {
     int r = radio_sintonizar(l_canal);
     if (r == -1) { kprint("COMPARA: sin tarjeta WiFi (en QEMU es normal)\n"); return; }
     if (r < -1) { kprint("COMPARA: no he podido ajustar la radio (codigo "); kprint_dec((uint32_t)(-r)); kprint(")\n"); return; }
+    int ig_r, ig_l, ig_e, tot;
+    contar_analogicos(0, &ig_r, &tot);
+    contar_analogicos(1, &ig_l, &tot);
     static uint32_t d_dir[MAX_REGS], d_lin[MAX_REGS], d_mio[MAX_REGS];
     int nd = 0, mirados = 0;
-    for (int i = 0; i < l_n; i++) {
-        uint32_t a = l_dir[i];
-        if (!((a >= 0x7800 && a < 0x7900) || (a >= 0x9800 && a < 0xB500))) continue;   /* radio y analógicos */
-        mirados++;
-        uint32_t m = radio_reg(a);
-        if (m != l_val[i]) { d_dir[nd] = a; d_lin[nd] = l_val[i]; d_mio[nd] = m; nd++; }
-    }
+    for (int g = 0; g < 4; g++)
+        for (int i = 0; i < l_n; i++) {
+            uint32_t a = l_dir[i];
+            if (!((a >= 0x7800 && a < 0x7900) || (a >= 0x9800 && a < 0xB500)) || grupo(a) != g) continue;
+            mirados++;
+            uint32_t m = es_analogico(a) ? radio_reg_lento(a) : radio_reg(a);
+            if (m != l_val[i]) { d_dir[nd] = a; d_lin[nd] = l_val[i]; d_mio[nd] = m; nd++; }
+        }
+    radio_reescribir_analogicos();
+    contar_analogicos(1, &ig_e, &tot);
     uint32_t pags = nd ? (uint32_t)(nd + POR_PAG - 1) / POR_PAG : 1;
     if (pag > pags) pag = pags;
-    kprint("COMPARA: Linux en el canal "); kprint_dec((uint32_t)l_canal);
+    kprint("COMPARA: Linux canal "); kprint_dec((uint32_t)l_canal);
     kprint(", ancho "); kprint_dec((uint32_t)l_ancho); kprint(" MHz");
-    if (l_ancho != 20) kprint(" (OJO: yo uso 20; los de ancho van a salir distintos)");
-    kprint(r ? ", mi calibracion bien" : ", mi calibracion NO acabo");
-    kprint("\nCOMPARA: miro "); kprint_dec((uint32_t)mirados); kprint(" registros, distintos ");
-    kprint_dec((uint32_t)nd); kprint(" (L = Linux, K = Kira)\n");
+    if (l_ancho != 20) kprint(" (OJO: yo uso 20)");
+    kprint(r ? ", calibracion bien" : ", calibracion NO acabo");
+    kprint(". Distintos "); kprint_dec((uint32_t)nd); kprint(" de "); kprint_dec((uint32_t)mirados); kputc('\n');
+    kprint("ANALOGICOS como mi tabla: leidos rapido "); kprint_dec((uint32_t)ig_r);
+    kprint(", despacio "); kprint_dec((uint32_t)ig_l); kprint(", reescritos 1ms "); kprint_dec((uint32_t)ig_e);
+    kprint(" (de "); kprint_dec((uint32_t)tot); kprint(")\n");
     int ini = (int)(pag - 1) * POR_PAG, col = 0;
-    for (int i = ini; i < nd && i < ini + POR_PAG; i++) {
-        hexn(d_dir[i], 4); kprint(" L "); hexn(d_lin[i], 8); kprint(" K "); hexn(d_mio[i], 8);
-        if (++col == 3) { kputc('\n'); col = 0; } else kprint("  ");
+    for (int i = ini; i < nd && i < ini + POR_PAG; i++) {          /* «AAAA linux___ kira____», 3 por fila */
+        hexn(d_dir[i], 4); kputc(' '); hexn(d_lin[i], 8); kputc(' '); hexn(d_mio[i], 8);
+        if (++col == 3) { kputc('\n'); col = 0; } else kprint("    ");
     }
     if (col) kputc('\n');
-    kprint("COMPARA: pagina "); kprint_dec(pag); kprint(" de "); kprint_dec(pags);
-    if (pag < pags) { kprint(" (escribe: compara "); kprint_dec(pag + 1); kputc(')'); }
-    kprint(". Hazme una foto de cada pagina.\n");
+    kprint("Pagina "); kprint_dec(pag); kprint(" de "); kprint_dec(pags);
+    kprint(" (cada uno: registro, Linux, Kira)");
+    if (pag < pags) { kprint(". Sigue: compara "); kprint_dec(pag + 1); }
+    kputc('\n');
 }
 """
 

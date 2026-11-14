@@ -118,15 +118,20 @@ int ext4_leer(const char *ruta, void *b, uint32_t max, uint32_t *tam) {
 int canal_pedido = -1, hay_tarjeta = 1;
 int radio_sintonizar(int c) { canal_pedido = c; return hay_tarjeta ? 1 : -1; }
 uint32_t radio_reg(uint32_t r) { return r == 0x9864 ? 0x1FFF3A00u : (r >= 0xA000 && r < 0xA040) ? r : 0x11111111u; }
+int lentas = 0, reescrito = 0;
+uint32_t radio_reg_lento(uint32_t r) { lentas++; if (r == 0x7800) return reescrito ? 0x800 : 0x6DB6DB6D; return radio_reg(r); }
+int radio_valor_tabla(uint32_t r, uint32_t *v) { if (r == 0x7800) { *v = 0x800; return 1; } if (r == 0x7804) { *v = 0x11111111u; return 1; } return 0; }
+void radio_reescribir_analogicos(void) { reescrito = 1; }
 void compara_orden(const char *a);
 int main(int argc, char **argv) {
     static char buf[200000];
     int modo = atoi(argv[1]);
     if (modo == 1) {
         int n = sprintf(buf, "# canal 6 ancho 20\n# copiado\n0x009864 0x1fff3a5c\n0x009868 0x11111111\n0x000008 0x4\n");
-        for (int i = 0; i < 50; i++) n += sprintf(buf + n, "0x%06x 0x%08x\n", 0xA100 + 4 * i, 0x22222222);
+        for (int i = 0; i < 70; i++) n += sprintf(buf + n, "0x%06x 0x%08x\n", 0xB100 + 4 * i, 0x22222222);
+        n += sprintf(buf + n, "0x007800 0x00000800\n0x009850 0x33333333\n");
         ARCH = buf; compara_orden(argc > 2 ? argv[2] : "");
-        printf("\nCANAL=%d\n", canal_pedido);
+        printf("\nCANAL=%d LENTAS=%d\n", canal_pedido, lentas);
     } else if (modo == 2) { compara_orden("");
     } else if (modo == 3) { ARCH = "# canal 11 ancho 40\n0x009864 0x1fff3a00\n"; compara_orden("");
     } else { ARCH = "# canal 1\n0x009864 0x0\n"; hay_tarjeta = 0; compara_orden(""); }
@@ -145,17 +150,22 @@ with tempfile.TemporaryDirectory() as tmp:
     if r.returncode == 0:
         s1 = subprocess.run([exe, "1"], capture_output=True, text=True).stdout
         ok("CANAL=6" in s1, "pone la radio en el mismo canal que tenía Linux")
-        ok("miro 52 registros, distintos 51" in s1, "compara solo la radio y cuenta los distintos: " + s1[:300])
-        ok("9864 L 1FFF3A5C K 1FFF3A00" in s1, "enseña dirección, valor de Linux y el mío")
-        ok("9868" not in s1, "los iguales no salen")
-        ok("pagina 1 de 2" in s1 and "compara 2" in s1, "39 por página y dice cómo ver la siguiente")
+        ok("Distintos 73 de 74" in s1, "compara solo la radio y cuenta los distintos: " + s1[:300])
+        lineas = [l for l in s1.splitlines() if re.match(r"^[0-9A-F]{4} [0-9A-F]{8} [0-9A-F]{8}", l)]
+        ok(lineas and lineas[0].startswith("7800 00000800 6DB6DB6D") and "9850 33333333 11111111" in lineas[0],
+           "primero los analógicos y la recepción (0x98xx), leídos despacio: " + (lineas[0] if lineas else ""))
+        ok("9864 1FFF3A5C 1FFF3A00" in s1, "enseña registro, valor de Linux y el mío")
+        ok(all(len(l) <= 79 for l in s1.splitlines()), "ninguna línea pasa de 79 letras (no se corta en pantalla)")
+        ok(len(lineas) == 19, "19 filas de 3 por página")
+        ok("ANALOGICOS como mi tabla: leidos rapido 1, despacio 1, reescritos 1ms 2 (de 2)" in s1,
+           "cuenta los analógicos que se quedan como mi tabla (rápido, despacio y reescritos): " + s1[:400])
+        ok("Pagina 1 de 2" in s1 and "compara 2" in s1, "dice cómo ver la siguiente")
         s2 = subprocess.run([exe, "1", "2"], capture_output=True, text=True).stdout
-        ok("pagina 2 de 2" in s2 and "A1C4 L" in s2 and "9864 L" not in s2, "«compara 2» enseña la página 2")
-        ok(sum(1 for l in s1.splitlines() if " L " in l and " K " in l) == 13, "13 filas de 3: cabe en la pantalla")
+        ok("Pagina 2 de 2" in s2 and "9850 33333333" not in s2, "«compara 2» enseña la página 2")
         s3 = subprocess.run([exe, "2"], capture_output=True, text=True).stdout
         ok("no encuentro" in s3 and "bash copiar_regs_wifi" in s3, "sin el archivo dice cómo hacerlo en Xubuntu")
         s4 = subprocess.run([exe, "3"], capture_output=True, text=True).stdout
-        ok("ancho 40" in s4 and "OJO" in s4 and "distintos 0" in s4, "avisa si Linux iba a 40 MHz")
+        ok("ancho 40" in s4 and "OJO" in s4 and "Distintos 0" in s4, "avisa si Linux iba a 40 MHz")
         s5 = subprocess.run([exe, "4"], capture_output=True, text=True).stdout
         ok("sin tarjeta" in s5, "sin tarjeta (QEMU) lo dice")
 
