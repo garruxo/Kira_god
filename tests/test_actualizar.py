@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(RAIZ, "kira_portatil"))
 T = tempfile.mkdtemp()
 os.environ["HOME"] = T
 import actualizar_kira as ak  # noqa: E402
+ACTUALIZAR_REAL = ak.actualizar
 
 n = 0
 
@@ -117,4 +118,18 @@ ok(all(esk._TRANSITORIA.match(x) for x in ("En cola: lo haré en cuanto acabe lo
    "KiraOS quita los avisos de espera («En cola…», «Pensando…») cuando ya ha contestado")
 ok(not esk._TRANSITORIA.match("[OK] Me he puesto 2 mejoras"), "pero no lo demás")
 ok(not esk.EscritorioMixin().es_busqueda("busca actualizaciones"), "«busca actualizaciones» no abre el Buscador")
+# v3.38: visto en el Packard Bell: «error: permisos insuficientes para agregar un objeto a la base de datos .git/objects»
+def _correr_sin_permiso(args, espera=120):
+    if "pull" in args:
+        return 1, "", "error: permisos insuficientes para agregar un objeto a la base de datos del repositorio .git/objects"
+    if "log" in args:
+        return 0, "v3.37: algo nuevo\n", ""
+    return 0, "main\n" if "--abbrev-ref" in args else "", ""
+
+
+RAIZ_GIT_PERMISOS = tempfile.mkdtemp()
+os.makedirs(os.path.join(RAIZ_GIT_PERMISOS, ".git"))
+_r = ACTUALIZAR_REAL(RAIZ_GIT_PERMISOS, poner=True, correr=_correr_sin_permiso)
+ok(_r.get("permisos") and "sudo chown -R" in _r["texto"] and "implementa las mejoras" in _r["texto"],
+   "si git no puede escribir (archivos del administrador), dice cómo arreglarlo con chown")
 print("\nTODO BIEN", n)

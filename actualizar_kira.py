@@ -86,6 +86,25 @@ def _limpio(titulo):
     return t[:140] + ("…" if len(t) > 140 else "")
 
 
+_PERMISOS = re.compile(r"permis|permission|insufficient|denegado|denied", re.I)
+
+
+def texto_permisos(raiz=RAIZ):
+    """v3.38: git no puede escribir en mi carpeta porque hay archivos del administrador (de algún «sudo»). Puro salvo
+    leer el nombre del usuario."""
+    import getpass
+    try:
+        usuario = getpass.getuser()
+    except Exception:                                   # noqa: BLE001
+        usuario = "tu_usuario"
+    casa = os.path.expanduser("~")
+    carpeta = os.path.relpath(raiz, casa) if raiz.startswith(casa + os.sep) else raiz
+    return (f"No puedo escribir en mi propia carpeta: hay archivos que son del administrador (seguramente de algún "
+            f"comando que se lanzó con sudo). Arréglalo UNA vez en la Terminal: escribe  cd  (Intro) y luego  "
+            f"sudo chown -R {usuario} {carpeta}  (Intro; te pedirá TU contraseña). Después dime otra vez «implementa "
+            f"las mejoras». No he cambiado nada.")
+
+
 def actualizar(raiz=RAIZ, poner=True, correr=None):
     """Mira (y si `poner`, pone) las mejoras de GitHub. Devuelve {"ok", "texto", "nuevas", "antes", "despues"}."""
     correr = correr or _correr_real
@@ -95,6 +114,9 @@ def actualizar(raiz=RAIZ, poner=True, correr=None):
                                       "yo sola.", "nuevas": [], "antes": antes, "despues": antes}
     g = ["git", "-C", raiz]
     c, _o, e = correr(g + ["fetch", "--quiet", "origin"], 180)
+    if c != 0 and _PERMISOS.search(e or ""):
+        return {"ok": False, "texto": texto_permisos(raiz), "nuevas": [], "antes": antes, "despues": antes,
+                "permisos": True}
     if c != 0:
         return {"ok": False, "texto": "No he podido mirar si hay mejoras: " + (_limpio(e.splitlines()[0]) if e.strip()
                                       else "no contesta GitHub") + ". ¿Hay internet?", "nuevas": [],
@@ -117,6 +139,9 @@ def actualizar(raiz=RAIZ, poner=True, correr=None):
     c, viejo, _e = correr(g + ["rev-parse", "HEAD"], 30)
     viejo = (viejo or "").strip()
     c, _o, e = correr(g + ["pull", "--ff-only", "--quiet", "origin", rama], 300)
+    if c != 0 and _PERMISOS.search(e or ""):
+        return {"ok": False, "texto": texto_permisos(raiz), "nuevas": nuevas, "antes": antes, "despues": antes,
+                "permisos": True}
     if c != 0:
         motivo = _limpio((e or "").strip().splitlines()[0] if (e or "").strip() else "sin motivo")
         extra = (" Parece que hay archivos cambiados a mano en el portátil; no los toco. Dímelo y miramos cuáles."
