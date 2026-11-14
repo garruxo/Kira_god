@@ -27,6 +27,7 @@ kernel de cero».
 `correr`, `popen` y `which` se inyectan para probar sin herramientas reales.
 """
 import json
+import glob
 import os
 import re
 import select
@@ -77,6 +78,7 @@ GRUB_PC = os.environ.get("KIRA_GRUB_PC") or "/usr/lib/grub/i386-pc"
 
 
 SECTORES_AHCI = 8192                            # 4 MB cada disco de pruebas
+DISCOS_VERSION = "3.41"                         # cambia si cambia lo que llevan los discos de pruebas
 
 
 def _entrada_mbr(tipo, inicio, sectores):
@@ -98,25 +100,30 @@ def _guid(primero):
     return struct.pack("<I", primero) + bytes(12)
 
 
-def disco_gpt():
-    """Disco de pruebas con tabla GPT (MBR protector + cabecera «EFI PART» + entradas): EFI (1 MB) + Linux (2 MB). Las
-    sumas CRC no se rellenan: el driver de Kira no las mira (es solo para leer la lista). Puro."""
+def disco_gpt(linux=None):
+    """Disco de pruebas con tabla GPT (MBR protector + cabecera «EFI PART» + entradas): EFI (1 MB) + Linux. Si se da
+    `linux` (los bytes de un ext4), la partición Linux lo lleva dentro (v3.41). Las sumas CRC no se rellenan: el
+    driver de Kira no las mira (es solo para leer la lista). Puro."""
     import struct
-    disco = bytearray(512 * SECTORES_AHCI)
-    disco[446:462] = _entrada_mbr(0xEE, 1, SECTORES_AHCI - 1)
+    sectores = SECTORES_AHCI if not linux else 4096 + (len(linux) + 511) // 512 + 34
+    disco = bytearray(512 * sectores)
+    disco[446:462] = _entrada_mbr(0xEE, 1, min(sectores - 1, 0xFFFFFFFF))
     disco[510:512] = b"\x55\xaa"
     cab = bytearray(512)
     cab[0:8] = b"EFI PART"
-    struct.pack_into("<IIIIQQQQ", cab, 8, 0x00010000, 92, 0, 0, 1, SECTORES_AHCI - 1, 34, SECTORES_AHCI - 34)
+    struct.pack_into("<IIIIQQQQ", cab, 8, 0x00010000, 92, 0, 0, 1, sectores - 1, 34, sectores - 34)
     struct.pack_into("<QIII", cab, 72, 2, 128, 128, 0)
     disco[512:1024] = cab
-    for i, (tipo, ini, fin) in enumerate(((0xC12A7328, 2048, 4095), (0x0FC63DAF, 4096, 8191 - 34))):
+    fin_linux = sectores - 35
+    for i, (tipo, ini, fin) in enumerate(((0xC12A7328, 2048, 4095), (0x0FC63DAF, 4096, fin_linux))):
         e = bytearray(128)
         e[0:16] = _guid(tipo)
         e[16:32] = bytes([i + 1] * 16)
         struct.pack_into("<QQ", e, 32, ini, fin)
         e[56:64] = "Kira".encode("utf-16-le")
         disco[1024 + 128 * i:1024 + 128 * (i + 1)] = e
+    if linux:
+        disco[4096 * 512:4096 * 512 + len(linux)] = linux
     return bytes(disco)
 
 
@@ -387,7 +394,40 @@ class Taller:
         if rc != 0:
             return False, errores_cortos("\n".join(salidas))
         avisos = errores_cortos("\n".join(salidas), 8)
+        try:
+            self.compilar_programas()                # v3.41: hola.elf aparte (no va dentro del kernel)
+        except Exception:                            # noqa: BLE001
+            pass
         return True, ("Compila bien." + (" Avisos:\n" + avisos if avisos else ""))
+
+    @property
+    def carpeta_programas(self):
+        return os.path.join(self.base, "programas")
+
+    def compilar_programas(self):
+        """v3.41: compila los programas de USUARIO (hola.c…) aparte, enlazados en la zona 8 MB, y los deja en
+        <kernel>/programas/*.elf. Como esa carpeta está en tu disco (~/kira_portatil/kernel/programas), el kernel que
+        arranca desde el USB los encuentra en tu SSD y los ejecuta. Devuelve la lista de .elf hechos."""
+        if not (self.which("gcc") and self.which("ld")):
+            return []
+        os.makedirs(self.carpeta_programas, exist_ok=True)
+        ld = os.path.join(self.carpeta_programas, "programa.ld")
+        with open(ld, "w", encoding="utf-8") as f:
+            f.write(so.PROGRAMA_LD)
+        hechos = []
+        for nombre, fuente in so.PROGRAMAS.items():
+            src = os.path.join(self.carpeta_programas, nombre)
+            with open(src, "w", encoding="utf-8") as f:
+                f.write(fuente)
+            obj, elf = src[:-2] + ".o", src[:-2] + ".elf"
+            rc, _ = self.correr(["gcc"] + CFLAGS + ["-c", src, "-o", obj], cwd=self.carpeta_programas, timeout=60)
+            if rc != 0:
+                continue
+            rc, _ = self.correr(["ld", "-m", "elf_i386", "-T", ld, "-nostdlib", "-z", "noexecstack", "-o", elf, obj],
+                                cwd=self.carpeta_programas, timeout=60)
+            if rc == 0:
+                hechos.append(elf)
+        return hechos
 
     @property
     def ruta_disco(self):
@@ -409,14 +449,61 @@ class Taller:
         """v3.40: dos discos SATA de PRUEBAS para el driver AHCI (solo lectura): uno con tabla MBR y otro con GPT, con
         particiones de ejemplo (Linux, swap, EFI). Se crean una vez en la carpeta del kernel."""
         os.makedirs(self.base, exist_ok=True)
-        rutas = []
-        for nombre, datos in (("disco_ahci_mbr.img", disco_mbr()), ("disco_ahci_gpt.img", disco_gpt())):
-            ruta = os.path.join(self.base, nombre)
-            if not (os.path.isfile(ruta) and os.path.getsize(ruta) == len(datos)):
-                with open(ruta, "wb") as f:
-                    f.write(datos)
-            rutas.append(ruta)
+        rutas = [os.path.join(self.base, "disco_ahci_mbr.img"), os.path.join(self.base, "disco_ahci_gpt.img")]
+        firma = self._firma_discos()
+        ruta_firma = os.path.join(self.base, "discos.firma")
+        try:
+            with open(ruta_firma, encoding="utf-8") as f:
+                igual = f.read() == firma
+        except OSError:
+            igual = False
+        if igual and all(os.path.isfile(r) for r in rutas):
+            return rutas
+        for ruta, datos in zip(rutas, (disco_mbr(), disco_gpt(self.contenido_ext4()))):
+            with open(ruta, "wb") as f:
+                f.write(datos)
+        with open(ruta_firma, "w", encoding="utf-8") as f:
+            f.write(firma)
         return rutas
+
+    def _firma_discos(self):
+        import hashlib
+        h = hashlib.sha256(DISCOS_VERSION.encode())
+        for elf in sorted(glob.glob(os.path.join(self.carpeta_programas, "*.elf"))):
+            with open(elf, "rb") as f:
+                h.update(f.read())
+        return h.hexdigest()
+
+    def contenido_ext4(self):
+        """v3.41: un ext4 DE VERDAD (hecho con mke2fs, con las mismas opciones que Ubuntu: 64 bits, extents, carpetas
+        indexadas) con /kira.txt, /home/papi/notas.txt y /programas/*.elf. Sin mke2fs → None (disco sin archivos)."""
+        mke2fs = self.which("mke2fs") or self.which("mkfs.ext4")
+        if not mke2fs:
+            return None
+        if not glob.glob(os.path.join(self.carpeta_programas, "*.elf")):
+            self.compilar_programas()
+        raiz = os.path.join(self.base, "disco_raiz")
+        shutil.rmtree(raiz, ignore_errors=True)
+        os.makedirs(os.path.join(raiz, "home", "papi"))
+        os.makedirs(os.path.join(raiz, "programas"))
+        with open(os.path.join(raiz, "kira.txt"), "w", encoding="utf-8") as f:
+            f.write("Hola desde el disco de Kira\n")
+        with open(os.path.join(raiz, "home", "papi", "notas.txt"), "w", encoding="utf-8") as f:
+            f.write("Notas de papi: el kernel de Kira lee este archivo de un ext4 de verdad.\n")
+        for elf in glob.glob(os.path.join(self.carpeta_programas, "*.elf")):
+            shutil.copy(elf, os.path.join(raiz, "programas"))
+        img = os.path.join(self.base, "ext4.img")
+        try:
+            os.remove(img)
+        except OSError:
+            pass
+        rc, sal = self.correr([mke2fs, "-q", "-F", "-t", "ext4", "-b", "4096", "-I", "256", "-L", "KIRA",
+                               "-O", "64bit,metadata_csum,extent,flex_bg,dir_index", "-d", raiz, img, "16M"],
+                              cwd=self.base, timeout=60)
+        if rc != 0 or not os.path.isfile(img):
+            return None
+        with open(img, "rb") as f:
+            return f.read()
 
     def _aparatos(self):
         """Lo que se le enchufa al ordenador de mentira: el disco de pruebas y una tarjeta de red e1000 con la red de
@@ -438,7 +525,7 @@ class Taller:
         return args + ["-display", "none", "-serial", "stdio", "-monitor", "none",
                        "-d", "int,cpu_reset", "-D", os.path.join(self.base, "qemu.log")]
 
-    def arrancar(self, espera=None, segundos=ESPERA_QEMU):
+    def arrancar(self, espera=None, segundos=ESPERA_QEMU, entrada=None):
         """Arranca kernel.bin en QEMU sin pantalla y lee el puerto serie. Para en cuanto salen todas las marcas
         esperadas (o al acabar el tiempo). Devuelve {ok, serie, reinicio, excepciones, faltan, motivo}."""
         espera = list(espera or ["KERNEL_LISTO"])
@@ -448,9 +535,11 @@ class Taller:
         if not os.path.isfile(os.path.join(self.base, "kernel.bin")):
             return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
                     "motivo": "No hay kernel.bin: compila antes."}
-        return self._correr_qemu(self.orden_qemu(), espera, segundos)
+        return self._correr_qemu(self.orden_qemu(), espera, segundos, entrada)
 
-    def _correr_qemu(self, args, espera, segundos):
+    def _correr_qemu(self, args, espera, segundos, entrada=None):
+        """entrada (v3.41): lo que se le «escribe» al kernel por el puerto serie cuando dice KERNEL_LISTO (para probar
+        su consola «kira>» como si tecleara alguien)."""
         if not self.which("qemu-system-i386"):
             return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
                     "motivo": self.texto_faltan(["qemu-system-i386"])}
@@ -462,7 +551,7 @@ class Taller:
         serie = ""
         try:
             p = self.popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           stdin=subprocess.DEVNULL, cwd=self.base)
+                           stdin=subprocess.PIPE if entrada else subprocess.DEVNULL, cwd=self.base)
         except Exception as e:                       # noqa: BLE001
             return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
                     "motivo": f"No pude arrancar QEMU: {e}"}
@@ -482,6 +571,13 @@ class Taller:
                     if not trozo:
                         break
                     serie += trozo.decode("utf-8", "replace")
+                    if entrada and "KERNEL_LISTO" in serie:
+                        try:
+                            p.stdin.write(entrada.encode())
+                            p.stdin.flush()
+                        except Exception:            # noqa: BLE001
+                            pass
+                        entrada = None
                     if listo_en is None and all(m in serie for m in espera):
                         listo_en = time.time()
                 if listo_en and time.time() - listo_en > 0.4:
@@ -512,13 +608,14 @@ class Taller:
         return {"ok": ok, "serie": serie.replace("\r", "")[-3000:], "reinicio": reinicio, "excepciones": exc,
                 "faltan": faltan, "motivo": motivo}
 
-    def probar(self, espera=None):
-        """Compila y arranca. Devuelve {ok, fase: 'compilar'|'arrancar', texto, serie, ...}."""
+    def probar(self, espera=None, entrada=None):
+        """Compila y arranca. Devuelve {ok, fase: 'compilar'|'arrancar', texto, serie, ...}. `entrada`: órdenes para su
+        consola (etapas 11+)."""
         ok, sal = self.compilar()
         if not ok:
             r = {"ok": False, "fase": "compilar", "texto": sal, "serie": ""}
         else:
-            a = self.arrancar(espera)
+            a = self.arrancar(espera, segundos=20 if entrada else ESPERA_QEMU, entrada=entrada)
             r = dict(a, fase="arrancar", texto=a["motivo"])
         self._apuntar(ultima={"ok": r["ok"], "cuando": _ahora(), "fase": r["fase"], "texto": r["texto"][:500],
                               "serie": r.get("serie", "")[-800:]})
@@ -578,14 +675,14 @@ class Taller:
         mb = os.path.getsize(self.ruta_iso) / 1024 / 1024
         return True, f"Imagen arrancable lista: {self.ruta_iso} ({mb:.1f} MB)."
 
-    def probar_iso(self, espera=None, segundos=40):
+    def probar_iso(self, espera=None, segundos=40, entrada=None):
         """Arranca la IMAGEN en QEMU como si fuera el USB (BIOS → GRUB → kernel): comprueba el camino real."""
         espera = list(espera or ["KERNEL_LISTO"])
         if not os.path.isfile(self.ruta_iso):
             return {"ok": False, "motivo": "No hay imagen: hazla antes.", "serie": ""}
         args = ["qemu-system-i386", "-cdrom", self.ruta_iso, "-boot", "d", "-m", "128", "-no-reboot",
                 "-display", "none", "-serial", "stdio", "-monitor", "none"] + self._aparatos()
-        return self._correr_qemu(args, espera, segundos)
+        return self._correr_qemu(args, espera, segundos, entrada)
 
     def usbs(self):
         """Los pendrives USB conectados (solo discos USB extraíbles). [] si no hay o no está lsblk."""
@@ -699,7 +796,7 @@ class Taller:
             paso(0.2, f"Lo tengo en mis plantillas probadas: etapa {e['n']} ({e['titulo']}).")
             self.poner_etapa(e["n"])
             paso(0.5, "Compilo y lo arranco en QEMU…")
-            r = self.probar(e["espera"])
+            r = self.probar(e["espera"], e.get("entrada"))
             if r["ok"]:
                 self._cambio(tarea, True)
                 return {"ok": True, "serie": r.get("serie", ""),
@@ -884,7 +981,7 @@ def hacer(taller, accion, carga="", preguntar=None, al_paso=None, parar=None, ay
         if accion == "probar":
             paso(0.3, "Compilo y lo arranco en QEMU…")
             e = so.etapa(int(taller.estado().get("etapa", 0) or 0))
-            r = taller.probar(e["espera"] if e else None)
+            r = taller.probar(e["espera"] if e else None, e.get("entrada") if e else None)
             if r["ok"]:
                 return {"texto": "✓ Mi kernel compila y arranca. Puerto serie:\n" + r.get("serie", "").strip()[-1200:]}
             return {"ok": False, "texto": f"[x] Falla al {r['fase']}: {r['texto'][:900]}" +
@@ -901,7 +998,7 @@ def hacer(taller, accion, carga="", preguntar=None, al_paso=None, parar=None, ay
         if accion == "etapa":
             e = taller.poner_etapa(int(carga))
             paso(0.5, "Compilo y lo arranco en QEMU…")
-            r = taller.probar(e["espera"])
+            r = taller.probar(e["espera"], e.get("entrada"))
             return {"texto": (f"Puesta la etapa {e['n']} ({e['titulo']}). " +
                               ("Funciona ✓. Puerto serie:\n" + r.get("serie", "").strip()[-900:] if r["ok"] else
                                f"Pero aquí falla ({r['fase']}): {r['texto'][:600]}"))}
@@ -945,14 +1042,14 @@ def probar_etapas(base, salida=None, probar_usb=False):
     informe, todo = [], True
     for e in so.ETAPAS:
         t.poner_etapa(e["n"], copiar=False)
-        r = t.probar(e["espera"])
+        r = t.probar(e["espera"], e.get("entrada"))
         todo = todo and r["ok"]
         informe.append(f"== Etapa {e['n']}: {e['titulo']} → {'OK' if r['ok'] else 'FALLA'} ({r['fase']}: "
                        f"{r['texto'][:300]})\n{r.get('serie', '').strip()}\n" +
                        ("Excepciones: " + "; ".join(r.get("excepciones", [])) + "\n" if r.get("excepciones") else ""))
     if probar_usb:
         ok_i, txt_i = t.hacer_iso(espera=0)
-        r = t.probar_iso(so.ETAPAS[-1]["espera"]) if ok_i else {"ok": False, "motivo": txt_i, "serie": ""}
+        r = t.probar_iso(so.ETAPAS[-1]["espera"], entrada=so.ETAPAS[-1].get("entrada")) if ok_i else {"ok": False, "motivo": txt_i, "serie": ""}
         todo = todo and r["ok"]
         informe.append(f"== USB (BIOS → GRUB → kernel): {'OK' if r['ok'] else 'FALLA'} ({r.get('motivo', '')[:300]})\n"
                        f"{r.get('serie', '').strip()[-1500:]}\n")

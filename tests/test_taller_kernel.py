@@ -39,7 +39,7 @@ def ok(c, m):
 
 # ---------------- el saber ----------------
 ok(len(so.fichas()) >= 15 and all(len(x) > 150 for _t, x in so.fichas()), "fichas de SO por dentro, con chicha")
-ok([e["n"] for e in so.ETAPAS] == list(range(1, 10)), "9 etapas")
+ok([e["n"] for e in so.ETAPAS] == list(range(1, 16)), "15 etapas")
 ok(all("KERNEL_LISTO" in e["espera"] for e in so.ETAPAS), "todas esperan KERNEL_LISTO")
 ok(all({"boot.s", "linker.ld", "kernel.c"} <= set(e["archivos"]) for e in so.ETAPAS), "cada etapa trae su base")
 ok(so.etapa_para("añade la GDT")["n"] == 2 and so.etapa_para("pon las interrupciones")["n"] == 3 and
@@ -99,7 +99,10 @@ ok(tk.errores_cortos("a.c:1: warning: x\na.c:2: error: y").startswith("a.c:2: er
 # ---------------- QEMU de mentira: imprime las marcas que el kernel lleva dentro ----------------
 MARCAS = ["Hola desde mi SO!", "Multiboot OK", "GDT OK", "IDT OK", "punto de ruptura", "Excepciones OK", "PIC OK",
           "Teclado OK", "TIMER OK", "MARCOS OK", "PAGINACION OK", "HEAP OK", "PCI OK", "DISCO OK: leo y escribo",
-          "Red: tarjeta e1000", "RED OK", "AHCI OK", "Tabla MBR", "Tabla GPT", "KERNEL_LISTO", "SEGUNDOS OK"]
+          "Red: tarjeta e1000", "RED OK", "AHCI OK", "Tabla MBR", "Tabla GPT", "KERNEL_LISTO", "SEGUNDOS OK",
+          "EXT4: particion Linux", "Hola desde el disco de Kira", "EXT4 OK", "kira:", "Ordenes:", "Memoria libre",
+          "MULTITAREA OK", "contador A", "Hola desde el modo usuario (anillo 3)", "lo cierro. El sistema sigue.",
+          "MODO USUARIO OK", "Hola desde un programa cargado del disco", "PROGRAMA OK", "DHCP OK"]
 FALSO = r'''
 import sys, os
 args = sys.argv[1:]
@@ -110,6 +113,12 @@ if b"CUELGATE" in datos:
     if log:
         open(log, "w").write("     0: v=0d e=0010 i=0 cpl=0 IP=0008:00100abc\nTriple fault\nCPU Reset (CPU 0)\n")
     sys.exit(0)
+for a in args:                                   # v3.41: también lo que hay en sus discos (kira.txt, hola.elf…)
+    if "file=" in a:
+        try:
+            datos += open(a.split("file=")[1].split(",")[0], "rb").read()
+        except OSError:
+            pass
 for m in MARCAS:
     if m.encode() in datos:
         print(m, flush=True)
