@@ -73,7 +73,8 @@ ALIAS_DIBUJO = {"lupa": "buscador", "bocadillo": "hablar", "globo": "mapa", "mun
                 "codigo": "programando", "consola": "terminal", "cuadrados": "extra"}
 DEFECTO = {"tema": "noche", "salvapantallas": {"activo": True, "minutos": 10, "estilo": "orbe"},
            "saludo": "", "despedida": "", "voz": {"velocidad": 0, "tono": 0}, "ocultos": [],
-           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}, "salas": {}}
+           "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}, "salas": {},
+           "fondo": "", "iconos_img": {}}          # v3.45: fondo de pantalla e iconos con imagen (rutas de fondos_kira)
 MAX_FRASE = 140
 MAX_HISTORIAL = 30
 _MAC = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -167,7 +168,43 @@ def para_pantalla(ruta=None):
                         if _id_icono_valido(k) and v in DIBUJOS},
             "nombres": {str(k)[:60]: _limpia_nombre(v) for k, v in (d.get("nombres") or {}).items()
                         if _id_icono_valido(k) and _limpia_nombre(v)},
-            "salas": limpia_salas(d.get("salas"))}
+            "salas": limpia_salas(d.get("salas")),
+            "fondo": _fondo_pantalla(d.get("fondo")),
+            "iconos_img": {str(k)[:60]: _hash_ruta(v) for k, v in (d.get("iconos_img") or {}).items()
+                           if _id_icono_valido(k) and _imagen_valida(v)}}
+
+
+# ---------- v3.45: FONDO de pantalla e ICONOS con imagen (la imagen se elige de fondos_kira, nunca una ruta suelta) ----------
+_EXT_IMG = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+
+
+def _imagen_valida(ruta):
+    return isinstance(ruta, str) and ruta.lower().endswith(_EXT_IMG) and os.path.isfile(ruta)
+
+
+def _hash_ruta(ruta):
+    import hashlib
+    return hashlib.sha1(os.path.abspath(ruta).encode("utf-8", "replace")).hexdigest()[:12]
+
+
+def _fondo_pantalla(ruta):
+    if not _imagen_valida(ruta):
+        return None
+    try:
+        v = int(os.path.getmtime(ruta))
+    except OSError:
+        v = 0
+    return {"id": _hash_ruta(ruta), "v": v, "nombre": os.path.splitext(os.path.basename(ruta))[0][:60]}
+
+
+def ruta_fondo(ruta_aj=None):
+    r = cargar(ruta_aj).get("fondo")
+    return r if _imagen_valida(r) else ""
+
+
+def ruta_icono_img(ident, ruta_aj=None):
+    r = (cargar(ruta_aj).get("iconos_img") or {}).get(str(ident))
+    return r if _imagen_valida(r) else ""
 
 
 # ---------- v3.23: las SALAS por dentro (solo DATOS: la pantalla los aplica; nada de código de pantalla) ----------
@@ -560,7 +597,31 @@ def orden(texto):
     orig = re.sub(r"^(?:oye\s+|hola\s+)?kira\b[\s,:;]*", "", orig, flags=re.I)
     orig = re.sub(r"^por\s+favor\s*,?\s*", "", orig, flags=re.I)
     t = _plano(orig)
-    if not t or "movil" in t:                     # el aspecto del MÓVIL es otra orden (v2.87)
+    if not t:
+        return None
+    # --- v3.45: fondo de pantalla, iconos con imagen y el menú de aplicaciones ---
+    if re.match(r"^(?:quita|borra|elimina)\s+(?:el\s+|la\s+|mi\s+)?(?:fondo|imagen\s+de\s+fondo)(?:\s+de\s+(?:la\s+)?pantalla)?$", t) \
+            or re.match(r"^(?:pon|vuelve\s+a\s+poner)\s+(?:el\s+)?fondo\s+de\s+(?:serie|siempre|kira)$", t):
+        return ("fondo_quitar", None)
+    if re.match(r"^(?:cambia(?:me)?|elige|escoge|abre)\s+(?:el\s+|mi\s+)?(?:fondo|fondos)(?:\s+de\s+(?:la\s+)?pantalla)?$", t) or \
+            re.match(r"^(?:que\s+)?(?:fondos|imagenes)\s+(?:de\s+fondo\s+)?(?:tienes|hay)$", t):
+        return ("fondo_galeria", None)
+    m = re.match(r"^(?:pon(?:me)?|usa|cambia)\s+(?:de|como)\s+fondo(?:\s+de\s+(?:la\s+)?pantalla)?\s+(?:a\s+|por\s+)?(?P<x>.+)$", t) or \
+        re.match(r"^cambia\s+(?:el\s+)?fondo(?:\s+de\s+(?:la\s+)?pantalla)?\s+(?:a|por)\s+(?P<x>.+)$", t) or \
+        re.match(r"^(?:pon(?:me)?|usa)\s+(?P<x>.+?)\s+(?:de|como)\s+fondo(?:\s+de\s+(?:la\s+)?pantalla)?$", t)
+    if m:
+        return ("fondo", m.group("x").strip())
+    m = re.match(r"^(?:quita|borra)\s+la\s+imagen\s+del\s+icono\s+(?:de\s+(?:la\s+|el\s+)?|del\s+)?(?P<i>.+)$", t)
+    if m:
+        return ("icono_img_quitar", m.group("i").strip())
+    m = re.match(r"^(?:pon(?:me|le)?|usa)\s+(?:la\s+imagen\s+|la\s+foto\s+)?(?P<x>.+?)\s+(?:de|como)\s+icono\s+"
+                 r"(?:de\s+(?:la\s+|el\s+)?|del\s+|para\s+(?:la\s+|el\s+)?)?(?P<i>.+)$", t)
+    if m:
+        return ("icono_img", (m.group("x").strip(), m.group("i").strip()))
+    if re.match(r"^(?:abre(?:me)?|ensename|muestrame|ver)\s+(?:todas\s+)?(?:las\s+)?(?:aplicaciones|apps|programas)"
+                r"(?:\s+de(?:l\s+sistema|\s+xubuntu|\s+linux))?$|^(?:abre\s+)?el\s+menu\s+de\s+(?:aplicaciones|xubuntu)$", t):
+        return ("abrir", "aplicaciones")
+    if "movil" in t:                              # el aspecto del MÓVIL es otra orden (v2.87)
         return None
     # --- deshacer / qué puedo cambiar ---
     if re.match(r"^(?:deshaz|deshacer|anula)\s+(?:el\s+)?(?:ultimo\s+)?cambio(?:\s+del\s+sistema)?$", t) or \
@@ -862,6 +923,8 @@ def hacer(accion, valor, ruta=None, equipo=None, extras=()):
     eq = equipo or Equipo(ruta=ruta)
     extras = [(str(a), str(b)) for a, b in (extras or [])]
     try:
+        if accion in ("fondo", "fondo_quitar", "fondo_galeria", "icono_img", "icono_img_quitar", "abrir"):
+            return _hacer_imagen(accion, valor, ruta, extras)
         if accion.startswith("sala_"):
             return _hacer_sala(accion, valor, ruta)
         if accion == "iconos_serie":
@@ -986,6 +1049,46 @@ def hacer(accion, valor, ruta=None, equipo=None, extras=()):
     except Exception as e:                        # noqa: BLE001
         return f"[x] No he podido: {e}"
     return "No conozco ese cambio."
+
+
+def _hacer_imagen(accion, valor, ruta, extras):
+    import fondos_kira as fk
+    if accion == "abrir":
+        return "Te abro todas las aplicaciones de Xubuntu, por categorías."
+    if accion == "fondo_galeria":
+        n = len(fk.listar())
+        return (f"Te abro tus fondos: tengo {n} imágenes (las que pintas en el móvil llegan solas al sincronizar). "
+                "Pulsa la que quieras." if n else
+                "Aún no tengo imágenes para el fondo. Pinta una en el móvil (llega sola al sincronizar) o guarda "
+                "imágenes en tu carpeta Imágenes o en kira_portatil/fondos.")
+    if accion == "fondo_quitar":
+        cambiar("fondo", "", ruta, que="fondo de serie")
+        return "Listo: vuelve el fondo de Kira de siempre."
+    if accion == "fondo":
+        lista = fk.listar()
+        f = fk.buscar(valor, lista)
+        if not f:
+            return (f"[x] No encuentro la imagen «{valor}». Tengo {len(lista)}. Di «cambia el fondo» y elígela, o "
+                    "«pon de fondo la última del móvil».")
+        cambiar("fondo", f["ruta"], ruta, que="fondo de pantalla")
+        return f"Listo: tu fondo de pantalla ahora es «{f['nombre']}» ({f['origen']})."
+    nombre_ic = valor[1] if accion == "icono_img" else valor
+    ident = resolver_icono(nombre_ic, extras)
+    if ident is None:
+        return f"[x] No encuentro el icono «{nombre_ic}». Los que hay: " + ", ".join(
+            list(ICONOS_BASE) + [t for _, t in extras]) + "."
+    d = cargar(ruta)
+    imgs = dict(d.get("iconos_img") or {})
+    if accion == "icono_img_quitar":
+        imgs.pop(ident, None)
+        cambiar("iconos_img", imgs, ruta, que="icono con su dibujo")
+        return "Listo: el icono vuelve a su dibujo."
+    f = fk.buscar(valor[0], fk.listar())
+    if not f:
+        return f"[x] No encuentro la imagen «{valor[0]}». Prueba «pon la última del móvil como icono de {nombre_ic}»."
+    imgs[ident] = f["ruta"]
+    cambiar("iconos_img", imgs, ruta, que="icono con imagen")
+    return f"Listo: el icono «{_nombre_visible(ident, d, extras)}» ahora lleva la imagen «{f['nombre']}»."
 
 
 def _hacer_sala(accion, valor, ruta):

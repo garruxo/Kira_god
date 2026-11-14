@@ -79,12 +79,32 @@ PRUEBA_PINTOR = {"nombre": "SDXS (prueba)", "archivo": "sdxs-512-tinySDdistilled
 # móvil en el procesador, poca memoria de conversación y SIN pintor (en 4 GB no caben los dos y tardaría minutos).
 LIGERO_CEREBRO = dict(PRUEBA_CEREBRO, nombre="Qwen3.5 2B (ligero)", args=["-c", "4096", "-b", "256", "-ub", "256"])
 LIGERO_PINTOR = dict(PRUEBA_PINTOR, nombre="sin pintor (modo ligero)", archivo="", url="")
+# v3.45: con 6 GB de RAM o más (el Packard Bell tiene 8), el cerebro GRANDE del modo ligero es el 4B: piensa, programa
+# y estudia mejor (más lento). Charlar sigue con el 2B (rápido). Si aún no está bajado, usa el 2B para todo.
+LIGERO_GRANDE = {"nombre": "Qwen3.5 4B (ligero, grande)", "archivo": "Qwen_Qwen3.5-4B-Q4_K_M.gguf",
+                 "bytes": 3_013_027_808,
+                 "url": HF + "bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf",
+                 "ojos": None, "args": ["-c", "8192", "-b", "256", "-ub", "256"]}
+RAM_PARA_GRANDE_MB = 6000
 
 
-def config(prueba=False, ligero=False):
+def ram_mb(meminfo="/proc/meminfo"):
+    try:
+        with open(meminfo, encoding="utf-8") as f:
+            for linea in f:
+                if linea.startswith("MemTotal:"):
+                    return int(linea.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0
+
+
+def config(prueba=False, ligero=False, ram=None):
     if ligero:
-        return {"rapido": dict(LIGERO_CEREBRO), "grande": dict(LIGERO_CEREBRO, nombre="Qwen3.5 2B (ligero, grande)")}, \
-            dict(LIGERO_PINTOR)
+        ram = ram_mb() if ram is None else ram
+        grande = dict(LIGERO_GRANDE) if ram >= RAM_PARA_GRANDE_MB else \
+            dict(LIGERO_CEREBRO, nombre="Qwen3.5 2B (ligero, grande)")
+        return {"rapido": dict(LIGERO_CEREBRO), "grande": grande}, dict(LIGERO_PINTOR)
     if prueba:
         return {"rapido": dict(PRUEBA_CEREBRO), "grande": dict(PRUEBA_CEREBRO, nombre="Qwen3.5 2B (prueba, grande)")}, \
             dict(PRUEBA_PINTOR)
@@ -510,9 +530,9 @@ def vigilar_cliente(sock, conexion_cerebro, fin, cada=0.4):
             return
 
 
-def descargas(prueba=False, sin_grande=False, ligero=False):
+def descargas(prueba=False, sin_grande=False, ligero=False, ram=None):
     """[(archivo, url, bytes|None)] de todo lo que hay que bajar (lo usa instalar_portatil.sh)."""
-    cerebros, pintor = config(prueba, ligero)
+    cerebros, pintor = config(prueba, ligero, ram)
     sal, vistos = [], set()
     for k, c in cerebros.items():
         if sin_grande and k == "grande":

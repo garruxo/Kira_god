@@ -113,7 +113,7 @@ _HARDWARE = re.compile(r"\b(?:estudia|analiza|mira|revisa|conoce|aprende)\b.*\b(
 def es_de_hardware(texto):
     """v3.44: «estudia tu hardware / los drivers / los controladores del portátil / todo el sistema xubuntu»."""
     t = _norm(texto)
-    return bool(_HARDWARE.search(t) or re.match(r"^que\s+(?:drivers|controladores|piezas)\s+tiene(?:s|\s+(?:el|tu)\s+portatil)$", t))
+    return bool(_HARDWARE.search(t) or re.search(r"\bingenieria\s+inversa\b", t) or re.match(r"^que\s+(?:drivers|controladores|piezas)\s+tiene(?:s|\s+(?:el|tu)\s+portatil)$", t))
 
 
 def es_trabajo(texto):

@@ -154,8 +154,14 @@ ok(len(lista) == 6 and sum(b for _, _, b in lista) > 35e9 and all(u.startswith("
    "descargas: 2 cerebros con ojos + pintor con VAE (~37 GB)")
 ok(len(sp.descargas(sin_grande=True)) == 4 and len(sp.descargas(prueba=True)) == 2, "sin el grande / modo prueba")
 # v2.82: modo LIGERO (portátil viejo sin gráfica): solo el 2B, poca memoria, sin pintor
-lig = sp.descargas(ligero=True)
-ok(len(lig) == 1 and lig[0][0].startswith("Qwen_Qwen3.5-2B"), "modo ligero: solo baja el cerebro 2B")
+lig = sp.descargas(ligero=True, ram=4000)
+ok(len(lig) == 1 and lig[0][0].startswith("Qwen_Qwen3.5-2B"), "modo ligero con 4 GB: solo baja el cerebro 2B")
+lig8 = sp.descargas(ligero=True, ram=7600)       # v3.45: con 8 GB, el grande es el 4B
+ok([a for a, _, _ in lig8] == ["Qwen_Qwen3.5-2B-Q4_K_M.gguf", "Qwen_Qwen3.5-4B-Q4_K_M.gguf"],
+   "modo ligero con 8 GB: 2B (charla) + 4B (pensar y programar)")
+cf, _ = sp.config(ligero=True, ram=7600)
+ok(cf["grande"]["archivo"].startswith("Qwen_Qwen3.5-4B") and "8192" in cf["grande"]["args"], "el grande ligero es el 4B")
+ok(sp.ram_mb("/no/existe") == 0, "sin /proc/meminfo no inventa la RAM")
 cl, pl = sp.config(ligero=True)
 ok("-c" in cl["rapido"]["args"] and cl["rapido"]["args"][cl["rapido"]["args"].index("-c") + 1] == "4096",
    "modo ligero: poca memoria de conversación")

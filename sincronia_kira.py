@@ -178,6 +178,79 @@ def _foco(dir_):
 # =====================================================================================
 #  EL MÓVIL ARMA SU PAQUETE (solo lo nuevo)
 # =====================================================================================
+# ---------- v3.45: los DIBUJOS del pintor del móvil viajan a KiraOS (fondos e iconos) ----------
+MAX_IMG_VIAJE = 2                     # imágenes por viaje (cada una hasta MAX_IMG_BYTES)
+MAX_IMG_BYTES = 4 * 1024 * 1024
+_EXT_IMG = (".png", ".jpg", ".jpeg")
+
+
+def _clave_img(ruta):
+    try:
+        return f"{os.path.basename(ruta)}:{os.path.getsize(ruta)}"
+    except OSError:
+        return os.path.basename(ruta)
+
+
+def _imagenes_nuevas(dir_, enviadas):
+    """([{nombre, datos(base64)}], [claves], quedan) de los dibujos del pintor aún no enviados."""
+    import base64
+    carpeta = os.path.join(dir_, "imagenes")
+    try:
+        nombres = sorted((n for n in os.listdir(carpeta) if n.lower().endswith(_EXT_IMG)),
+                         key=lambda n: os.path.getmtime(os.path.join(carpeta, n)))
+    except OSError:
+        return [], [], False
+    ya = set(enviadas or [])
+    fuera, claves, quedan = [], [], False
+    for n in nombres:
+        r = os.path.join(carpeta, n)
+        k = _clave_img(r)
+        if k in ya:
+            continue
+        if len(fuera) >= MAX_IMG_VIAJE:
+            quedan = True
+            break
+        try:
+            if os.path.getsize(r) > MAX_IMG_BYTES:
+                claves.append(k)              # demasiado grande: no viaja (y no se vuelve a intentar)
+                continue
+            with open(r, "rb") as f:
+                fuera.append({"nombre": n, "datos": base64.b64encode(f.read()).decode("ascii")})
+            claves.append(k)
+        except OSError:
+            continue
+    return fuera, claves, quedan
+
+
+def guardar_imagenes_recibidas(dir_, imagenes):
+    """KiraOS guarda los dibujos del móvil en <datos>/imagenes_movil (solo PNG/JPEG de verdad, nombre limpio)."""
+    import base64
+    import re as _re
+    n = 0
+    carpeta = os.path.join(dir_, "imagenes_movil")
+    for im in imagenes or []:
+        if not isinstance(im, dict):
+            continue
+        nombre = _re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(str(im.get("nombre") or "")))[:80]
+        if not nombre.lower().endswith(_EXT_IMG) or nombre.startswith("."):
+            continue
+        try:
+            datos = base64.b64decode(str(im.get("datos") or ""), validate=True)
+        except Exception:
+            continue
+        if len(datos) > MAX_IMG_BYTES or not (datos.startswith(b"\x89PNG") or datos.startswith(b"\xff\xd8")):
+            continue
+        os.makedirs(carpeta, exist_ok=True)
+        ruta = os.path.join(carpeta, nombre)
+        tmp = ruta + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(datos)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, ruta)
+        n += 1
+    return n
+
+
 def paquete_movil(dir_, rec, maximo=MAX_REC):
     """Lo nuevo del móvil para KiraOS. Devuelve (paquete, marcas): `marcas` se guardan SOLO si KiraOS lo recibió bien
     (ver `confirmar_envio`)."""
@@ -190,13 +263,14 @@ def paquete_movil(dir_, rec, maximo=MAX_REC):
     preguntas = [{"texto": p.get("texto", ""), "recurrente": bool(p.get("recurrente"))}
                  for p in iv.listar(dir_) if not p.get("hecha")]
     foco = _foco(dir_)
+    imgs, claves_img, quedan_img = _imagenes_nuevas(dir_, est.get("img_enviadas"))
     paquete = {"v": VERSION, "origen": "móvil", "recuerdos": [r for _n, r in lista], "notas": notas,
                "soluciones": sols, "preguntas": preguntas, "foco": foco if foco.get("activo") else None,
-               "hay_mas": hasta < rec.total(), "cursor": est["cursor"]}
+               "imagenes": imgs, "hay_mas": hasta < rec.total() or quedan_img, "cursor": est["cursor"]}
     marcas = {"rec_enviados": hasta,
               "notas_desde": max([est["notas_desde"]] + [n.get("cuando", 0) or 0 for n in notas]),
               "sol_desde": max([est["sol_desde"]] + [s.get("cuando", 0) or 0 for s in sols.values()]),
-              "enviados": len(lista) + len(notas) + len(sols)}
+              "enviados": len(lista) + len(notas) + len(sols) + len(imgs), "img_enviadas": claves_img}
     return paquete, marcas
 
 
@@ -207,6 +281,11 @@ def pendiente_movil(dir_, rec):
     try:
         _pn, _ruta, pen = _pensamientos(dir_)
         n += sum(1 for x in pen.get("notas", []) if (x.get("cuando", 0) or 0) > est["notas_desde"])
+    except Exception:
+        pass
+    try:
+        imgs, _c, quedan = _imagenes_nuevas(dir_, est.get("img_enviadas"))
+        n += len(imgs) + (1 if quedan else 0)
     except Exception:
         pass
     return n
@@ -227,6 +306,7 @@ def aplicar_en_kiraos(dir_, rec, paquete, maximo=MAX_REC):
     import investigar_kira as iv
     np_ = sum(1 for p in paquete.get("preguntas") or [] if isinstance(p, dict)
               and iv.anadir(dir_, p.get("texto", ""), recurrente=bool(p.get("recurrente"))))
+    ni = guardar_imagenes_recibidas(dir_, paquete.get("imagenes"))     # v3.45: dibujos del pintor del móvil
     foco_m, foco_k, nf = paquete.get("foco"), _foco(dir_), 0
     if isinstance(foco_m, dict) and foco_m.get("tema") and not foco_k.get("activo"):
         _escribir(os.path.join(dir_, "foco.json"), foco_m)
@@ -234,7 +314,7 @@ def aplicar_en_kiraos(dir_, rec, paquete, maximo=MAX_REC):
     est["ultima"] = int(time.time())
     est["recibidos_total"] = est.get("recibidos_total", 0) + nuevos + nn + ns
     guardar_estado_kiraos(dir_, est)
-    resumen = {"recuerdos": nuevos, "notas": nn, "soluciones": ns, "preguntas": np_, "foco": nf}
+    resumen = {"recuerdos": nuevos, "notas": nn, "soluciones": ns, "preguntas": np_, "foco": nf, "imagenes": ni}
     return resumen, paquete_para_movil(dir_, rec, paquete.get("cursor") or {}, est, maximo)
 
 
@@ -275,6 +355,8 @@ def aplicar_en_movil(dir_, rec, respuesta, marcas=None):
         for k in ("rec_enviados", "notas_desde", "sol_desde"):
             est[k] = max(est.get(k, 0), marcas.get(k, 0))
         est["enviados_total"] = est.get("enviados_total", 0) + marcas.get("enviados", 0)
+        if marcas.get("img_enviadas"):
+            est["img_enviadas"] = (list(est.get("img_enviadas") or []) + list(marcas["img_enviadas"]))[-1000:]
     if isinstance(respuesta.get("cursor"), dict):
         est["cursor"] = respuesta["cursor"]
     est["ultima"] = int(time.time())

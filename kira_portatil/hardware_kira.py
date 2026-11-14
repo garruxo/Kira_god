@@ -171,6 +171,209 @@ def estudiar(correr=None, al_paso=None):
             "drivers": drivers, "cargados": len(cargados)}
 
 
+# ---------- v3.45: estudio A FONDO («ingeniería inversa» de su propio portátil, solo leyendo) ----------
+SYS_PCI = "/sys/bus/pci/devices"
+SYS_MOD = "/sys/module"
+ESTUDIO = os.environ.get("KIRA_ESTUDIO_DRIVERS", os.path.expanduser("~/kira_portatil/kernel/estudio"))
+# el código ABIERTO de Linux de cada driver (para aprender cómo habla con su chip): lo que le sirve al kernel de Kira
+FUENTES_LINUX = {
+    "tg3": ["drivers/net/ethernet/broadcom/tg3.h", "drivers/net/ethernet/broadcom/tg3.c"],
+    "ath9k": ["drivers/net/wireless/ath/ath9k/reg.h", "drivers/net/wireless/ath/ath9k/hw.h"],
+    "ahci": ["drivers/ata/ahci.h"],
+    "e1000e": ["drivers/net/ethernet/intel/e1000e/regs.h", "drivers/net/ethernet/intel/e1000e/defines.h"],
+    "e1000": ["drivers/net/ethernet/intel/e1000/e1000_hw.h"],
+    "snd_hda_intel": ["include/sound/hda_register.h"],
+    "ehci-pci": ["drivers/usb/host/ehci.h"], "ehci_pci": ["drivers/usb/host/ehci.h"],
+    "r8169": ["drivers/net/ethernet/realtek/r8169_main.c"],
+}
+MAX_FUENTE = 2_000_000
+
+
+def recursos_pci(slot, raiz=SYS_PCI):
+    """Las zonas de memoria/puertos que Linux le dio a la pieza (lo que un driver usa para hablar con ella)."""
+    fuera = []
+    try:
+        with open(os.path.join(raiz, slot, "resource"), encoding="ascii") as f:
+            for i, linea in enumerate(f):
+                partes = linea.split()
+                if len(partes) < 3:
+                    continue
+                ini, fin, flags = (int(x, 16) for x in partes[:3])
+                if ini == 0 and fin == 0:
+                    continue
+                fuera.append({"bar": i, "inicio": hex(ini), "tam": fin - ini + 1,
+                              "tipo": "puertos" if flags & 0x100 else "memoria"})
+    except (OSError, ValueError):
+        pass
+    irq = ""
+    try:
+        with open(os.path.join(raiz, slot, "irq"), encoding="ascii") as f:
+            irq = f.read().strip()
+    except OSError:
+        pass
+    return {"zonas": fuera[:7], "irq": irq}
+
+
+def parametros_modulo(mod, raiz=SYS_MOD):
+    d = {}
+    carpeta = os.path.join(raiz, mod.replace("-", "_"), "parameters")
+    try:
+        for n in sorted(os.listdir(carpeta))[:30]:
+            try:
+                with open(os.path.join(carpeta, n), encoding="utf-8", errors="replace") as f:
+                    d[n] = f.read().strip()[:80]
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return d
+
+
+def registro_kernel(driver, correr=None, maximo=12):
+    """Lo que Linux apuntó al arrancar sobre ese driver (journalctl -k; si no deja, dmesg)."""
+    correr = correr or _correr
+    texto = _seguro(correr, ["journalctl", "-k", "-b", "-q", "--no-pager"]) or _seguro(correr, ["dmesg"])
+    pat = re.compile(r"\b" + re.escape(driver.replace("_", "-")) + r"\b|\b" + re.escape(driver) + r"\b", re.I)
+    return [l.strip()[:200] for l in texto.splitlines() if pat.search(l)][-maximo:]
+
+
+def version_linux(nucleo):
+    m = re.match(r"^(\d+)\.(\d+)", str(nucleo or ""))
+    return f"v{m.group(1)}.{m.group(2)}" if m else "master"
+
+
+def resumen_fuente(texto):
+    """Puro: de un archivo de Linux saca lo que sirve para escribir un driver: los REGISTROS (#define … 0x…)."""
+    regs = re.findall(r"^#define\s+([A-Z][A-Z0-9_]{2,})\s+(0x[0-9a-fA-F]+)\b", texto or "", re.M)
+    return {"lineas": (texto or "").count("\n"), "registros": len(regs), "ejemplos": [f"{n} = {v}" for n, v in regs[:12]]}
+
+
+def estudiar_codigo(driver, nucleo="", abrir=None, carpeta=None):
+    """Baja el código abierto de Linux de ese driver (por la puerta de investigar: la máquina virtual en KiraOS) y lo
+    deja en ~/kira_portatil/kernel/estudio/<driver>/ con un resumen. Solo LEE: nada se ejecuta."""
+    rutas = FUENTES_LINUX.get(driver) or FUENTES_LINUX.get(driver.replace("-", "_"))
+    if not rutas:
+        return {"ok": False, "texto": f"Aún no sé dónde está el código de «{driver}» dentro de Linux."}
+    if abrir is None:
+        try:
+            import red_kira
+            abrir = red_kira.abrir_investigar
+        except Exception:
+            abrir = None
+    if abrir is None:
+        import urllib.request
+        abrir = lambda req, timeout=60: urllib.request.urlopen(req, timeout=timeout)    # noqa: E731
+    import urllib.request
+    dest = os.path.join(carpeta or ESTUDIO, re.sub(r"[^A-Za-z0-9_.-]", "_", driver))
+    os.makedirs(dest, exist_ok=True)
+    tag, hechos = version_linux(nucleo), []
+    for r in rutas:
+        url = f"https://raw.githubusercontent.com/torvalds/linux/{tag}/{r}"
+        try:
+            resp = abrir(urllib.request.Request(url, headers={"User-Agent": "KiraOS"}), timeout=60)
+            datos = resp.read(MAX_FUENTE + 1)
+        except Exception as e:                        # noqa: BLE001
+            hechos.append({"archivo": r, "error": str(e)[:120]})
+            continue
+        if len(datos) > MAX_FUENTE:
+            datos = datos[:MAX_FUENTE]
+        texto_f = datos.decode("utf-8", "replace")
+        with open(os.path.join(dest, os.path.basename(r)), "w", encoding="utf-8") as f:
+            f.write(texto_f)
+        hechos.append(dict(resumen_fuente(texto_f), archivo=r))
+    buenos = [h for h in hechos if "error" not in h]
+    lineas = [f"Código de Linux ({tag}) del driver «{driver}», guardado en {dest}:"]
+    for h in hechos:
+        lineas.append(f"• {h['archivo']}: " + (f"no lo pude bajar ({h['error']})" if "error" in h else
+                                               f"{h['lineas']} líneas, {h['registros']} registros del chip"
+                                               + (" (p. ej. " + ", ".join(h["ejemplos"][:4]) + ")" if h["ejemplos"] else "")))
+    with open(os.path.join(dest, "resumen.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lineas) + "\n")
+    return {"ok": bool(buenos), "texto": "\n".join(lineas), "carpeta": dest, "archivos": hechos}
+
+
+def a_fondo(informe, correr=None, raiz_pci=SYS_PCI, raiz_mod=SYS_MOD):
+    """Añade a cada pieza sus zonas de memoria/puertos, su interrupción, los ajustes de su driver y lo que Linux
+    apuntó de ella al arrancar."""
+    for p in informe.get("pci", []):
+        p.update(recursos_pci("0000:" + p["slot"] if p["slot"].count(":") == 1 else p["slot"], raiz_pci))
+        drv = p.get("driver")
+        if drv:
+            p["parametros"] = parametros_modulo(drv, raiz_mod)
+            p["registro"] = registro_kernel(drv, correr)
+    informe["a_fondo"] = True
+    return informe
+
+
+def es_orden_fondo(texto_):
+    """«haz ingeniería inversa (del portátil / de linux / de la red)», «estudia a fondo tu hardware»,
+    «estudia el código del driver X», «estudia el driver de tu red (por cable)» → ('fondo', driver|'') o None."""
+    t = str(texto_ or "").lower().strip(" .¡!¿?")
+    t = t.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    t = re.sub(r"^(?:oye\s+|hola\s+)?kira\b[\s,:;]*", "", t)
+    m = re.match(r"^(?:estudia|lee|aprende)\s+(?:el\s+)?codigo\s+(?:del\s+driver|del\s+controlador|de)\s+([a-z0-9_-]+)$", t)
+    if m:
+        return ("fondo", m.group(1))
+    if re.search(r"\b(?:estudia|aprende)\b.*\bdriver\b.*\bred\b.*\bcable\b|\b(?:estudia|aprende)\s+(?:el\s+)?driver\s+de\s+"
+                 r"(?:tu|la)\s+red(?:\s+por\s+cable)?$", t):
+        return ("fondo", "red")
+    if re.search(r"\bingenieria\s+inversa\b", t) or re.match(r"^estudia\s+a\s+fondo\s+(?:tu|el)\s+(?:hardware|portatil)", t):
+        return ("fondo", "")
+    return None
+
+
+def hacer_fondo(core=None, driver="", correr=None, al_paso=None, abrir=None):
+    """Estudio a fondo: el hardware con sus recursos + el código de Linux de los drivers que importan."""
+    paso = al_paso or (lambda f, t: None)
+    inf = estudiar(correr, lambda f, t: paso(f * 0.4, t))
+    if not inf.get("pci"):
+        return {"texto": texto(inf), "informe": inf}
+    paso(0.45, "Miro las zonas de memoria, las interrupciones y los ajustes de cada driver…")
+    a_fondo(inf, correr)
+    guardar(inf)
+    if driver == "red":
+        objetivos = [p.get("driver") for p in inf["pci"] if p.get("clase_id") == "0200" and p.get("driver")]
+    elif driver:
+        objetivos = [driver]
+    else:
+        objetivos = [p.get("driver") for p in inf["pci"] if p.get("driver") in FUENTES_LINUX]
+    objetivos = [d for i, d in enumerate(objetivos) if d and d not in objetivos[:i]]
+    trozos = []
+    for i, d in enumerate(objetivos):
+        paso(0.5 + 0.45 * i / max(1, len(objetivos)), f"Leo el código de Linux del driver «{d}»…")
+        r = estudiar_codigo(d, inf.get("nucleo_linux", ""), abrir=abrir)
+        trozos.append(r["texto"])
+        rec = getattr(core, "recuerdos", None)
+        if rec is not None and r.get("ok"):
+            try:
+                rec.guardar(r["texto"][:1500], tema=f"driver {d} (código de Linux)", fuente="hardware")
+            except Exception:
+                pass
+    rec = getattr(core, "recuerdos", None)
+    if rec is not None:
+        for p in inf["pci"]:
+            if p.get("zonas") or p.get("registro"):
+                t = (f"{p['que_es']} {p['nombre']} [{p['id']}]: zonas " +
+                     ", ".join(f"{z['tipo']} {z['inicio']} ({z['tam']} bytes)" for z in p.get("zonas", [])[:3]) +
+                     (f"; interrupción {p['irq']}" if p.get("irq") else "") +
+                     ("; Linux dijo: " + " | ".join(p["registro"][-3:]) if p.get("registro") else ""))
+                try:
+                    rec.guardar(t[:1500], tema=f"hardware a fondo: {p['que_es']}", fuente="hardware")
+                except Exception:
+                    pass
+    lin = [texto(inf), "", "A FONDO (zonas de memoria y puertos de cada pieza, sus interrupciones y lo que Linux "
+           "apuntó al arrancar) — guardado en mi baúl y en hardware.json."]
+    lin += trozos or ["(No había drivers cuyo código sepa buscar todavía.)"]
+    lin.append("Todo leído, nada tocado. Con esto puedo preparar los drivers de mi kernel del pendrive.")
+    try:
+        import avisos_kira as av
+        av.prioritario("He estudiado a fondo tu portátil y el código de sus drivers. Ya puedo preparar el siguiente "
+                       "driver de mi kernel del pendrive.", titulo="Ingeniería inversa terminada")
+    except Exception:
+        pass
+    return {"texto": "\n".join(lin), "informe": inf}
+
+
 def guardar(informe, ruta=None):
     ruta = ruta or RUTA
     os.makedirs(os.path.dirname(ruta) or ".", exist_ok=True)

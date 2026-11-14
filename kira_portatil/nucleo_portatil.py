@@ -585,7 +585,16 @@ def ejecutar(core, orden, paso):
         tipo, describir = so
         paso(0.3, "Miro con mi cámara…" if tipo == "camara" else "Leo la pantalla…")
         return {"texto": sp.hacer(tipo, describir)}
+    import cerebro_grande_kira as cg_             # v3.45: «aumenta tu cerebro» (el 4B, para pensar/programar mejor)
+    o_cg = cg_.es_orden(o)
+    if o_cg:
+        paso(0.0, "Mi cerebro…")
+        return {"texto": cg_.hacer(o_cg, al_paso=paso, parar=getattr(core, "cancelado", None))}
     import hardware_kira as hw_                   # v3.44: ESTUDIA el hardware y los drivers del portátil (solo lectura)
+    o_hf = hw_.es_orden_fondo(o)                  # v3.45: a FONDO («ingeniería inversa» del portátil y sus drivers)
+    if o_hf:
+        paso(0.0, "Estudio tu portátil a fondo…")
+        return {"texto": hw_.hacer_fondo(core, o_hf[1], al_paso=paso)["texto"]}
     if hw_.es_orden(o):
         paso(0.0, "Estudio tu portátil…")
         return {"texto": hw_.hacer(core, al_paso=paso)["texto"]}

@@ -284,6 +284,25 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   transition:left 8s ease,top 8s ease;text-align:center}
 #salva .sreloj small{display:block;font-size:3.4vmin;color:var(--tenue);font-weight:400}
 @keyframes slate{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.06);opacity:1}}
+/* v3.45: TODAS LAS APLICACIONES (como el menú de Xubuntu) y FONDOS de pantalla */
+.apps{display:flex;flex-direction:column;gap:10px;height:100%}
+.apps input{padding:10px 14px;border-radius:12px;border:0;background:rgba(130,170,230,.1);box-shadow:inset 0 0 0 1px var(--borde);color:var(--texto);font-size:15px}
+.cats{display:flex;flex-wrap:wrap;gap:6px}
+.cats .b.on{background:var(--cian);color:#04121a}
+.appsLista{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;overflow:auto;padding-bottom:8px}
+.appi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;cursor:pointer;background:rgba(130,170,230,.06)}
+.appi:hover{background:rgba(130,170,230,.16)}
+.appico{width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center}
+.appico img{max-width:40px;max-height:40px}
+.appico svg{width:30px;height:30px;stroke:var(--cian);fill:none;stroke-width:1.6}
+.appi b{display:block;font-size:14px}.appi small{display:block;color:var(--tenue);font-size:12px}
+.fondos{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px}
+.fondo-i{cursor:pointer;border-radius:12px;overflow:hidden;background:rgba(130,170,230,.06)}
+.fondo-i:hover{box-shadow:0 0 0 2px var(--cian)}
+.fmini{height:110px;display:flex;align-items:center;justify-content:center;background:#000;color:var(--tenue);font-size:12px;padding:4px;text-align:center}
+.fmini img{width:100%;height:110px;object-fit:cover}
+.fondo-i small{display:block;padding:6px 8px;font-size:12px;color:var(--tenue)}
+.tile img.icoimg{width:34px;height:34px;object-fit:cover;border-radius:8px}
 </style>
 </head>
 <body>
@@ -374,6 +393,8 @@ var ICO = {
   juego:'<rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r=".8"/><circle cx="18" cy="13" r=".8"/>',
   mensaje:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   carpeta:'<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  aplicaciones:'<rect x="3" y="3" width="5" height="5" rx="1"/><rect x="10" y="3" width="5" height="5" rx="1"/><rect x="17" y="3" width="4" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="10" y="10" width="5" height="5" rx="1"/><rect x="17" y="10" width="4" height="5" rx="1"/><rect x="3" y="17" width="5" height="4" rx="1"/><rect x="10" y="17" width="5" height="4" rx="1"/>',
+  fondos:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M3 18l6-5 4 3 3-2 5 4"/>',
   programa:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18"/><path d="M8 13l2 2-2 2M13 17h3"/>'
 };
 function svg(n, extra){ if(String(n).indexOf("extra:")===0){       // v3.21: la ventana nueva puede traer su dibujo
@@ -387,7 +408,7 @@ var ICONOS = [
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-var OCULTAS={mejoras:"Mejoras"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
@@ -419,6 +440,13 @@ var DEMO_REDES=[{ssid:"MiCasa",senal:72,segura:true,guardada:true,en_uso:true,ba
   {ssid:"Bar Pepe",senal:22,segura:false,guardada:false,en_uso:false,banda:"2,4 GHz"}];
 var demoCharlas={};
 var FAKE = {
+  apps_menu:function(){ return Promise.resolve({categorias:["Internet","Sistema"],apps:[{id:"firefox.desktop",titulo:"Firefox",generico:"Navegador web",categoria:"Internet",icono:""},{id:"xfce4-taskmanager.desktop",titulo:"Gestor de tareas",generico:"Procesos",categoria:"Sistema",icono:""}]}); },
+  apps_abrir:function(id){ return Promise.resolve({ok:true,texto:"Abriendo "+id+"…"}); },
+  fondos:function(){ return Promise.resolve({texto:"Tengo 1 imagen.",imagenes:[{id:"abc",nombre:"atardecer",origen:"pintado en el móvil",mini:""}]}); },
+  fondo_poner:function(id){ FAKE._aspecto=Object.assign({},FAKE._aspecto||{},{fondo:{id:id,v:1}}); return Promise.resolve({ok:true,texto:"Listo: tu fondo ahora es «atardecer»."}); },
+  fondo_quitar:function(){ return Promise.resolve({ok:true,texto:"Listo."}); },
+  fondo_datos:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
+  icono_img:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
   barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],accesos:FAKE._accesos||[],aspecto:FAKE._aspecto||null}); },
   abrir_acceso:function(iid){ var a=(FAKE._accesos||[]).filter(function(x){ return x.id===iid; })[0]||{};
     if(a.tipo==="externa") return Promise.resolve({titulo:a.titulo||"App",externa:true,lanzada:true,mensaje:"Abriendo "+(a.titulo||"la app")+"…"});
@@ -501,8 +529,10 @@ function pintaIconos(){
   var tod=todosIconos();                          // v3.19: con ventanas añadidas, más columnas (que no tapen la barra)
   $("iconos").className = tod.length>16 ? "c5" : (tod.length>12 ? "c4" : "");
   $("iconos").innerHTML = tod.map(function(i){
-    return '<div class="icono" tabindex="0" data-app="'+esc(i.id)+'"><div class="tile">'+svg(i.dib||i.id)+'</div><span>'+esc(i.titulo)+
+    var im=(ASPECTO.iconos_img||{})[i.id];            // v3.45: icono con una imagen tuya (o pintada en el móvil)
+    return '<div class="icono" tabindex="0" data-app="'+esc(i.id)+'"><div class="tile">'+(im?'<img class="icoimg" data-ic="'+esc(i.id)+'" data-k="'+esc(im)+'" alt="">':svg(i.dib||i.id))+'</div><span>'+esc(i.titulo)+
            '<small>'+esc(i.sub)+'</small></span></div>'; }).join("");
+  [].forEach.call(document.querySelectorAll("img.icoimg"), function(im){ cargaIcoImg(im); });
   var ids=tod.map(function(i){ return i.id; });
   [].forEach.call(document.querySelectorAll(".icono"), function(el){
     el.addEventListener("click", function(){ abrir(el.dataset.app); });
@@ -596,6 +626,64 @@ function pintaPrio(a){
 document.addEventListener("DOMContentLoaded", function(){
   var b=$("prioVisto"); if(b) b.onclick=function(){ var id=PRIO&&PRIO.id; pintaPrio(null); llama("aviso_visto", id).catch(function(){}); };
 });
+// ---------- v3.45: FONDO de pantalla con imagen, ICONOS con imagen, TODAS LAS APLICACIONES ----------
+var FONDO={k:null,url:""}, ICOIMG={};
+function ponFondo(f){
+  var k=f?(f.id+":"+f.v):"";
+  if(k!==FONDO.k){ FONDO.k=k; FONDO.url="";
+    if(k){ llama("fondo_datos").then(function(u){ if(FONDO.k===k && /^data:image\//.test(u||"")){ FONDO.url=u; pintaFondo(); } }).catch(function(){}); } }
+  pintaFondo();
+}
+function pintaFondo(){
+  var el=$("fondo");
+  if(FONDO.url){ el.style.background='#000 center / cover no-repeat url("'+FONDO.url+'")'; }
+  else if(!FONDO.k && el.style.backgroundImage.indexOf("data:")>=0){ el.style.background=""; }
+  window.KIRA_FONDO={k:FONDO.k, puesto:!!FONDO.url};
+}
+function cargaIcoImg(im){
+  var id=im.dataset.ic, k=id+":"+im.dataset.k;
+  if(ICOIMG[k]){ im.src=ICOIMG[k]; return; }
+  llama("icono_img", id).then(function(u){ if(/^data:image\//.test(u||"")){ ICOIMG[k]=u; im.src=u; } }).catch(function(){});
+}
+var APPS=null, catApp="Todas";
+function pintaAplicaciones(){
+  var c=$("vcuerpo"); c.innerHTML='<div class="vacio">Leyendo tus aplicaciones…</div>';
+  llama("apps_menu").then(function(d){ if(actual!=="aplicaciones") return; APPS=d||{categorias:[],apps:[]}; dibujaApps(); })
+    .catch(function(){ c.innerHTML='<div class="texto">No he podido leer las aplicaciones.</div>'; });
+}
+function dibujaApps(){
+  var c=$("vcuerpo");
+  c.innerHTML='<div class="apps"><input id="appsBuscar" placeholder="Buscar aplicación…" autocomplete="off">'+
+    '<div class="cats">'+["Todas"].concat(APPS.categorias||[]).map(function(cat){
+      return '<button class="b'+(cat===catApp?' on':'')+'" data-cat="'+esc(cat)+'">'+esc(cat)+'</button>'; }).join("")+'</div>'+
+    '<div class="appsLista" id="appsLista"></div>'+
+    '<div class="vacio">Las mismas aplicaciones que el menú de Xubuntu. Se abren en su propia ventana; para volver a Kira, ciérrala o pulsa Alt+Tab.</div></div>';
+  [].forEach.call(c.querySelectorAll("[data-cat]"), function(b){ b.onclick=function(){ catApp=b.dataset.cat; dibujaApps(); }; });
+  $("appsBuscar").oninput=listaApps; listaApps();
+}
+function listaApps(){
+  var q=plano(($("appsBuscar")||{}).value||"");
+  var l=(APPS.apps||[]).filter(function(a){ return (catApp==="Todas"||a.categoria===catApp) && (!q || plano(a.titulo+" "+a.generico).indexOf(q)>=0); });
+  $("appsLista").innerHTML = l.map(function(a){
+    var ico=/^data:image\//.test(a.icono||"") ? '<img src="'+esc(a.icono)+'" alt="">' : svg("aplicaciones");
+    return '<div class="appi" data-id="'+esc(a.id)+'"><div class="appico">'+ico+'</div><div><b>'+esc(a.titulo)+'</b><small>'+esc(a.generico||a.categoria)+'</small></div></div>'; }).join("")
+    || '<div class="vacio">No hay ninguna con ese nombre.</div>';
+  window.KIRA_APPS={vistas:l.length};
+  [].forEach.call(document.querySelectorAll("#appsLista .appi"), function(el){ el.onclick=function(){
+    llama("apps_abrir", el.dataset.id).then(function(r){ aviso(esc((r&&r.texto)||"Abriendo…"), 4); }).catch(function(){}); }; });
+}
+function pintaFondos(){
+  var c=$("vcuerpo"); c.innerHTML='<div class="vacio">Buscando tus imágenes…</div>';
+  llama("fondos").then(function(d){ if(actual!=="fondos") return; d=d||{}; var l=d.imagenes||[];
+    c.innerHTML='<div class="texto">'+esc(d.texto||"")+'</div><div class="botones"><button class="b" id="fQuitar">Fondo de Kira (sin imagen)</button></div>'+
+      '<div class="fondos">'+l.map(function(x){
+        var mi=/^data:image\//.test(x.mini||"") ? '<img src="'+esc(x.mini)+'" alt="">' : '<span>'+esc(x.nombre)+'</span>';
+        return '<div class="fondo-i" data-id="'+esc(x.id)+'"><div class="fmini">'+mi+'</div><small>'+esc(x.nombre)+' · '+esc(x.origen)+'</small></div>'; }).join("")+'</div>';
+    $("fQuitar").onclick=function(){ llama("fondo_quitar").then(function(r){ aviso(esc((r&&r.texto)||""), 4); refrescaBarra(); }); };
+    [].forEach.call(c.querySelectorAll(".fondo-i"), function(el){ el.onclick=function(){
+      llama("fondo_poner", el.dataset.id).then(function(r){ aviso(esc((r&&r.texto)||""), 4); refrescaBarra(); }).catch(function(){}); }; });
+  }).catch(function(){ c.innerHTML='<div class="texto">No he podido buscar las imágenes.</div>'; });
+}
 // ---------- v3.21: el ASPECTO que tú eliges («cambia el tema a bosque», «oculta el icono del mapa»…) ----------
 function claroDe(hex){ var h=String(hex||"").replace("#",""); if(h.length!==6) return false;
   var r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
@@ -613,7 +701,8 @@ function ponAspecto(a){
     $("fondo").style.background = "radial-gradient(1100px 700px at 72% 38%,"+c.neon+"26 0%,"+c.fondo+" 55%,"+c.fondo+" 100%)";
     document.body.dataset.tema = ASPECTO.tema||"";
   }
-  var ahora=JSON.stringify([ASPECTO.ocultos||[],ASPECTO.orden_iconos||[],ASPECTO.nombres||{},ASPECTO.dibujos||{}]);
+  ponFondo(ASPECTO.fondo);                             // v3.45: tu imagen de fondo (encima del color del tema)
+  var ahora=JSON.stringify([ASPECTO.ocultos||[],ASPECTO.orden_iconos||[],ASPECTO.nombres||{},ASPECTO.dibujos||{},ASPECTO.iconos_img||{}]);
   if(ahora!==ponAspecto.ultimo){ ponAspecto.ultimo=ahora; pintaIconos(); }
   if(actual) aplicaSala(actual);                       // v3.23: la sala abierta se cambia al momento
 }
@@ -699,6 +788,8 @@ function abrir(id, consulta, tipo){
   if(id==="buscador") return pintaBuscador(consulta, tipo);
   if(id==="wifi") return pintaWifi();
   if(id==="terminal") return pintaTerminal();
+  if(id==="aplicaciones") return pintaAplicaciones();   // v3.45
+  if(id==="fondos") return pintaFondos();
   if(id.indexOf("acceso:")===0) return pintaAcceso(id.slice(7));   // v3.26: un programa de Kira
   if(id==="mapa"){ c.className="vcuerpo marco"; c.innerHTML='<iframe src="mapa.html" title="Mapa de ataques"></iframe>'; return; }
   if(id==="programando"){
@@ -1083,6 +1174,7 @@ function hablarCon(texto){
           var ca=$("callar"); if(ca) ca.onclick=function(){ llama("callar"); quitaAviso(); };
           if(d.pedir_clave){ abrir("wifi"); }
           if(d.aspecto) refrescaBarra();                       // v3.21: cambiaste algo de mi sistema
+          if(d.abrir==="fondos"||d.abrir==="aplicaciones") abrir(d.abrir);   // v3.45
           if(d.salvapantallas) setTimeout(function(){ refrescaBarra(); setTimeout(mostrarSalva, 600); }, 300);
         }
       }).catch(function(){});
@@ -1118,6 +1210,7 @@ function pintaMenu(){
   $("menu").innerHTML='<div class="quien"><div class="mini"><b style="background:linear-gradient(100deg,#2ee6ff,#f472d0);-webkit-background-clip:text;background-clip:text;color:transparent">K</b></div>'+
     '<div><div style="font-weight:600">KiraOS</div><div style="color:var(--tenue);font-size:12px">'+esc($("hola").textContent)+'</div></div></div>'+
     ICONOS.map(function(i){ return '<div class="op" data-app="'+i.id+'">'+svg(i.id)+esc(i.titulo)+'</div>'; }).join("")+
+    '<div class="op" data-app="aplicaciones">'+svg("aplicaciones")+'Todas las aplicaciones</div>'+
     '<div class="sep"></div><div class="op" data-sis="bloquear">'+svg("bloquear")+'Volver al orbe</div>'+
     '<div class="op" data-sis="salir">'+svg("salir")+'Ir a Xubuntu</div>'+
     '<div class="op peligro" data-sis="reiniciar">'+svg("reiniciar")+(confirmar==="reiniciar"?"¿Seguro? Toca otra vez":"Reiniciar el portátil")+'</div>'+

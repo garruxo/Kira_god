@@ -155,7 +155,9 @@ def leer_desktop(ruta):
     return {"titulo": nombre, "generico": d.get("GenericName[es]") or d.get("GenericName") or "",
             "lanzar": lanzar, "admite_archivo": admite, "acciones": acciones, "archivo": ruta,
             "oculta": d.get("NoDisplay", "").lower() == "true" or d.get("Hidden", "").lower() == "true",
-            "origen": "sistema"}
+            "origen": "sistema",
+            "categorias": [c for c in d.get("Categories", "").split(";") if c],      # v3.45: para el menú
+            "icono": d.get("Icon", "")}
 
 
 def apps_del_sistema(dirs=None):

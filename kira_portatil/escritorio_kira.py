@@ -312,6 +312,84 @@ class EscritorioMixin:
         except Exception:
             return {}
 
+    # ---------- v3.45: FONDO de pantalla, ICONOS con imagen y TODAS LAS APLICACIONES de Xubuntu ----------
+    def fondo_datos(self):
+        """La imagen de fondo elegida, como «data:» (la pantalla no lee archivos sueltos)."""
+        try:
+            import sistema_kira
+            import fondos_kira as fk
+            r = sistema_kira.ruta_fondo(getattr(self, "ruta_sistema", None))
+            if not r:
+                return ""
+            clave = (r, os.path.getmtime(r))
+            c = getattr(self, "_fondo_cache", None)
+            if c and c[0] == clave:
+                return c[1]
+            ancho = 1920
+            try:
+                import kiraos
+                ancho = int((kiraos.tam_pantalla() or (1920, 1080))[0]) or 1920
+            except Exception:
+                pass
+            d = fk.fondo(r, ancho=ancho)
+            self._fondo_cache = (clave, d)
+            return d
+        except Exception:
+            return ""
+
+    def icono_img(self, ident):
+        try:
+            import sistema_kira
+            import fondos_kira as fk
+            r = sistema_kira.ruta_icono_img(str(ident), getattr(self, "ruta_sistema", None))
+            return fk.miniatura(r, 96) if r else ""
+        except Exception:
+            return ""
+
+    def fondos(self):
+        import fondos_kira as fk
+        lista = fk.listar()
+        self._fondos_lista = lista
+        n_movil = sum(1 for x in lista if x["origen"] == "pintado en el móvil")
+        texto = (f"Tengo {len(lista)} imágenes" + (f" ({n_movil} pintadas en el móvil)" if n_movil else "") +
+                 ". Pulsa una para ponerla de fondo. Las que pintes en el móvil llegan solas al sincronizar; "
+                 "también vale cualquier imagen de tu carpeta Imágenes, Descargas o kira_portatil/fondos. "
+                 "Para un icono, dime por ejemplo «pon la última del móvil como icono del mapa».")
+        return {"texto": texto, "imagenes": fk.galeria(lista)}
+
+    def fondo_poner(self, ident):
+        import fondos_kira as fk
+        import sistema_kira
+        f = fk.por_id(ident, getattr(self, "_fondos_lista", None)) or fk.por_id(ident)
+        if not f:
+            return {"ok": False, "texto": "Esa imagen ya no está."}
+        sistema_kira.cambiar("fondo", f["ruta"], getattr(self, "ruta_sistema", None), que="fondo de pantalla")
+        return {"ok": True, "texto": f"Listo: tu fondo ahora es «{f['nombre']}»."}
+
+    def fondo_quitar(self):
+        import sistema_kira
+        return {"ok": True, "texto": sistema_kira.hacer("fondo_quitar", None, ruta=getattr(self, "ruta_sistema", None))}
+
+    def apps_menu(self):
+        ahora = time.time()
+        c = getattr(self, "_apps_cache", None)
+        if c and ahora - c[0] < 120:
+            return c[1]
+        try:
+            import menu_apps_kira as mak
+            d = mak.menu()
+        except Exception as e:                        # noqa: BLE001
+            d = {"categorias": [], "apps": [], "error": str(e)}
+        self._apps_cache = (ahora, d)
+        return d
+
+    def apps_abrir(self, ident):
+        try:
+            import menu_apps_kira as mak
+            return mak.abrir(ident)
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "texto": f"No pude abrirla: {e}"}
+
     # ---------- v3.19: las ventanas/secciones/botones que Kira se añadió (solo datos: texto y botones) ----------
     def ventanas_extra(self):
         ahora = time.time()
@@ -459,6 +537,10 @@ class EscritorioMixin:
                 t["respuesta"] = sistema_kira.hacer(o_s[0], o_s[1], ruta=getattr(self, "ruta_sistema", None),
                                                     equipo=getattr(self, "equipo_sis", None), extras=ex)
                 t["aspecto"] = True                                # la pantalla se vuelve a pintar
+                if o_s[0] == "fondo_galeria":                      # v3.45
+                    t["abrir"] = "fondos"
+                elif o_s[0] == "abrir":
+                    t["abrir"] = o_s[1]
                 if o_s[0] == "salva_ver":
                     t["salvapantallas"] = True
             elif elige_v:
@@ -553,6 +635,8 @@ class EscritorioMixin:
         for k in ("aspecto", "salvapantallas"):
             if t.get(k):
                 r[k] = True
+        if t.get("abrir") in ("fondos", "aplicaciones"):        # v3.45: abre esa ventana
+            r["abrir"] = t["abrir"]
         return r
 
     def voz_activa_poner(self, encender):
@@ -1020,7 +1104,9 @@ class EscritorioMixin:
                  + (f"\n\nMI SISTEMA (cámbialo pidiéndomelo):\n{sis}" if sis else "")
                  + (f"\n\n{partida}" if partida else ""))
         return {"titulo": "Ajustes", "texto": texto,
-                "botones": [{"texto": "Cerebro rápido", "accion": "hacer:rapido"},
+                "botones": [{"texto": "Todas las aplicaciones", "accion": "app:aplicaciones"},     # v3.45
+                            {"texto": "Fondo de pantalla", "accion": "app:fondos"},
+                            {"texto": "Cerebro rápido", "accion": "hacer:rapido"},
                             {"texto": "Cerebro grande", "accion": "hacer:grande"},
                             {"texto": "Con voz", "accion": "hacer:voz_si"},
                             {"texto": "Sin voz", "accion": "hacer:voz_no"},
