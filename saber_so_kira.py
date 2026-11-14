@@ -4117,6 +4117,8 @@ uint32_t wifi_lee(uint32_t reg);                 /* registros de la tarjeta (par
 void wifi_escribe(uint32_t reg, uint32_t valor);
 const uint8_t *wifi_eeprom(void);                /* la EEPROM leída (desde la palabra 128) */
 void wifi_dma(int si);                           /* la tarjeta puede escribir en la RAM (para recibir) o no */
+int wifi_puentes(int *encendidos);                /* puentes PCI de la cadena (y cuántos no tenían permiso) */
+uint32_t wifi_estado_pci(void);                  /* órdenes/estado PCI de la tarjeta tras escuchar */
 
 #endif
 """
@@ -4135,15 +4137,66 @@ uint32_t wifi_lee(uint32_t reg) { return lee(reg); }
 void wifi_escribe(uint32_t reg, uint32_t valor) { escribe(reg, valor); }
 const uint8_t *wifi_eeprom(void) { return (const uint8_t *)datos; }
 
+/* La tarjeta va detrás de uno o más PUENTES PCI (en tu portátil está en el bus 2). Un puente solo deja pasar la
+   DMA hacia la memoria si él también tiene el permiso «bus master» (Linux lo pone con pci_set_master en toda la
+   cadena). Lo encendemos mientras escuchamos y, al acabar, cada puente vuelve a quedar como estaba. */
+#define MAX_PUENTES 4
+#ifndef WIFI_SIMULADA
+static uint8_t pu_b[MAX_PUENTES], pu_d[MAX_PUENTES], pu_f[MAX_PUENTES];
+static uint32_t pu_antes[MAX_PUENTES];
+static int npu = 0;
+static int buscar_puente(uint8_t hijo, uint8_t *b, uint8_t *d, uint8_t *f) {
+    for (uint32_t bb = 0; bb < 256; bb++)
+        for (uint8_t dd = 0; dd < 32; dd++)
+            for (uint8_t ff = 0; ff < 8; ff++) {
+                uint32_t id = pci_leer((uint8_t)bb, dd, ff, 0x00);
+                if ((id & 0xFFFF) == 0xFFFF) { if (ff == 0) break; continue; }
+                uint32_t cab = (pci_leer((uint8_t)bb, dd, ff, 0x0C) >> 16) & 0xFF;
+                if ((cab & 0x7F) == 1 && ((pci_leer((uint8_t)bb, dd, ff, 0x18) >> 8) & 0xFF) == hijo) {
+                    *b = (uint8_t)bb; *d = dd; *f = ff;
+                    return 1;
+                }
+                if (ff == 0 && !(cab & 0x80)) break;           /* no tiene más funciones */
+            }
+    return 0;
+}
+#endif
+static int pu_encendidos = 0;          /* puentes que NO tenían el permiso y se lo hemos dado */
+static int pu_total = 0;
+static uint32_t estado_pci = 0;
+
 void wifi_dma(int si) {                       /* bit 2 del registro de órdenes PCI = bus master */
 #ifndef WIFI_SIMULADA
     if (!hay_disp) return;
     uint32_t orden = pci_leer(disp.bus, disp.disp, disp.func, 0x04);
-    pci_escribir(disp.bus, disp.disp, disp.func, 0x04, si ? (orden | 0x06) : ((orden | 0x02) & ~0x04u));
+    if (si) {
+        npu = 0; pu_encendidos = 0;
+        uint8_t hijo = disp.bus;
+        while (hijo != 0 && npu < MAX_PUENTES) {
+            uint8_t b, d, f;
+            if (!buscar_puente(hijo, &b, &d, &f) || b >= hijo) break;
+            uint32_t o = pci_leer(b, d, f, 0x04);
+            pu_b[npu] = b; pu_d[npu] = d; pu_f[npu] = f; pu_antes[npu] = o & 0xFFFF; npu++;
+            if (!(o & 0x04)) pu_encendidos++;
+            pci_escribir(b, d, f, 0x04, (o & 0xFFFF) | 0x06);   /* memoria + bus master (no toca su estado) */
+            hijo = b;
+        }
+        pu_total = npu;
+        /* escribir 1 en los bits de estado los borra: así luego vemos si hubo rechazos DURANTE la escucha */
+        pci_escribir(disp.bus, disp.disp, disp.func, 0x04, orden | 0x06);
+    } else {
+        estado_pci = pci_leer(disp.bus, disp.disp, disp.func, 0x04);
+        pci_escribir(disp.bus, disp.disp, disp.func, 0x04, ((orden & 0xFFFF) | 0x02) & ~0x04u);
+        for (int i = npu - 1; i >= 0; i--) pci_escribir(pu_b[i], pu_d[i], pu_f[i], 0x04, pu_antes[i]);
+        npu = 0;
+    }
 #else
     (void)si;
 #endif
 }
+
+int wifi_puentes(int *encendidos) { if (encendidos) *encendidos = pu_encendidos; return pu_total; }
+uint32_t wifi_estado_pci(void) { return estado_pci; }   /* registro órdenes/estado de la tarjeta al acabar */
 """)
 
 _RADIO_H = r"""/* radio.h — WiFi W2: escuchar y listar las redes de alrededor (solo recibir) */
@@ -4370,8 +4423,8 @@ static int cargar_ruido(void) {
 /* ---- diagnóstico: contadores de ciclos del chip (como ath_hw_cycle_counters_update) ---- */
 static uint32_t d_ciclos = 0, d_ocupado = 0, d_recibe = 0, d_isr = 0, d_diag = 0, d_cr = 0;
 static int d_rxdp_movido = 0, d_nf_min = 1000, d_nf_max = -1000;
-static int nf_actual(void) {                              /* AR_PHY_MINCCA_PWR: 9 bits con signo */
-    int v = (int)((R(AR_PHY_CCA) >> 19) & 0x1FF);
+static int nf_actual(void) {                              /* AR9280_PHY_MINCCA_PWR: bits 20-28, con signo */
+    int v = (int)((R(AR_PHY_CCA) >> 20) & 0x1FF);
     return (v & 0x100) ? v - 0x200 : v;
 }
 static void contadores_cero(void) {
@@ -4567,7 +4620,8 @@ static void parar_rx(void) {
 struct red { uint8_t bssid[6]; char ssid[33]; int canal, rssi, seg, veces; };
 static struct red redes[MAX_REDES];
 static int nredes = 0;
-static uint32_t tramas = 0, errores = 0;
+static uint32_t tramas = 0, errores = 0, err_radio = 0, err_suma = 0;
+static uint32_t err_codigo[40];                           /* errores de radio por código (ATH9K_PHYERR_*) */
 
 static void apuntar(const uint8_t *f, int n, int rssi, int canal) {
     if (n < 24 + 12 + 4) return;
@@ -4631,6 +4685,13 @@ static void revisar(int canal) {
             if (rssi > -128) apuntar(buf[actual], largo, rssi, canal);
         } else if (!(s8 & 2)) {
             errores++;
+            if (s8 & 0x10) {                               /* AR_PHYErr: la radio oyó algo y no lo entendió */
+                err_radio++;
+                uint32_t c = (s8 >> 8) & 0xFF;
+                if (c < 40) err_codigo[c]++;
+            } else if (s8 & 0x4) {                         /* AR_CRCErr: trama con la suma de control mal */
+                err_suma++;
+            }
         }
         saltando = mas;
         for (int k = 0; k < 9; k++) d->st[k] = 0;          /* el descriptor vuelve a estar libre */
@@ -4643,9 +4704,11 @@ static void escuchar(int canal, uint32_t ms) {
     montar_anillo();
     saltando = 0;
     pon(AR_DIAG_SW, AR_DIAG_ACK_DIS | AR_DIAG_CTS_DIS);    /* NUNCA contestar nada */
-    W(AR_RX_FILTER, 0x01 | 0x02 | 0x04 | 0x10);            /* UCAST | MCAST | BCAST | BEACON */
-    W(AR_PHY_ERR, 0);
-    quita(AR_RXCFG, 0x10);                                 /* AR_RXCFG_ZLFDMA */
+    /* UCAST | MCAST | BCAST | BEACON | PROM | PHYERR: TODO lo que oiga, también lo que no entiende (para el
+       diagnóstico). Sigue siendo solo escuchar. */
+    W(AR_RX_FILTER, 0x01 | 0x02 | 0x04 | 0x10 | 0x20 | 0x100);
+    W(AR_PHY_ERR, 0xFFFE005Eu);                            /* errores de temporización, cabecera, tasa, largo... */
+    pon(AR_RXCFG, 0x10);                                   /* AR_RXCFG_ZLFDMA: los errores también llegan a memoria */
     W(AR_RXDP, fisica(&anillo[0]));
     W(AR_CR, AR_CR_RXE);
     quita(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
@@ -4672,7 +4735,8 @@ static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4
 
 int radio_escanear(void) {
     struct wifi_info w;
-    nredes = 0; tramas = 0; errores = 0;
+    nredes = 0; tramas = 0; errores = 0; err_radio = 0; err_suma = 0;
+    for (int k = 0; k < 40; k++) err_codigo[k] = 0;
     d_ciclos = d_ocupado = d_recibe = d_isr = d_diag = d_cr = 0;
     d_rxdp_movido = 0; d_nf_min = 1000; d_nf_max = -1000;
     if (wifi_leer(&w) != 1) {
@@ -4687,6 +4751,13 @@ int radio_escanear(void) {
     rx_mask = w.antenas_rx;
     if (rx_mask != 1 && rx_mask != 2 && rx_mask != 3) rx_mask = 3;
     wifi_dma(1);                                           /* la tarjeta puede escribir lo que oye en la RAM */
+    int pu_on = 0, pu = wifi_puentes(&pu_on);
+    if (pu) {
+        kprint("WiFi: la tarjeta va detras de "); kprint_dec((uint32_t)pu);
+        kprint(pu == 1 ? " puente PCI" : " puentes PCI");
+        if (pu_on) { kprint(" ("); kprint_dec((uint32_t)pu_on); kprint(" sin permiso de DMA: se lo doy mientras escucho)\n"); }
+        else kprint(" (ya tenian permiso de DMA)\n");
+    }
     kprint("WiFi: enciendo la radio SOLO PARA ESCUCHAR (sin transmitir nada) y recorro los canales 1-13");
     int calibrados = 0, fallos = 0;
     for (int canal = 1; canal <= 13; canal++) {
@@ -4699,10 +4770,25 @@ int radio_escanear(void) {
     }
     kputc('\n');
     parar_rx();
+    uint32_t sync = R(AR_INTR_SYNC_CAUSE);
     wifi_dma(0);                                           /* ya no puede escribir en la RAM */
+    uint32_t pci = wifi_estado_pci();
+    int rechazo = (pci & 0x30000000u) != 0;                /* el bus le devolvió «no» (master/target abort) */
     kprint("WiFi: tramas oidas "); kprint_dec(tramas);
     kprint(", con errores "); kprint_dec(errores);
     kprint(", canales calibrados "); kprint_dec((uint32_t)calibrados); kprint(" de 13\n");
+    if (errores) {
+        kprint("WiFi: errores: "); kprint_dec(err_radio); kprint(" de radio, ");
+        kprint_dec(err_suma); kprint(" con la suma mal");
+        int mostrados = 0;
+        for (int c = 0; c < 40 && mostrados < 6; c++) {
+            if (!err_codigo[c]) continue;
+            kprint(mostrados ? ", " : " (codigos: ");
+            kprint_dec((uint32_t)c); kputc('x'); kprint_dec(err_codigo[c]);
+            mostrados++;
+        }
+        kprint(mostrados ? ")\n" : "\n");
+    }
     if (fallos == 13) { kprint("WIFI W2: el chip no se dejo reiniciar en ningun canal\n"); return -4; }
     kprint("WiFi diag: recibiendo "); kprint_dec(por_ciento(d_recibe, d_ciclos));
     kprint("% del tiempo, canal ocupado "); kprint_dec(por_ciento(d_ocupado, d_ciclos));
@@ -4711,7 +4797,8 @@ int radio_escanear(void) {
     else kprint("?");
     kprint(" dBm, ISR "); kprint_hex(d_isr);
     kprint(", DIAG "); kprint_hex(d_diag); kprint(", CR "); kprint_hex(d_cr);
-    kprint(d_rxdp_movido ? ", RXDP se movio\n" : ", RXDP quieto\n");
+    kprint(d_rxdp_movido ? ", RXDP se movio" : ", RXDP quieto");
+    kprint(", PCI "); kprint_hex(pci); kprint(", SYNC "); kprint_hex(sync); kputc('\n');
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)
@@ -4728,6 +4815,12 @@ int radio_escanear(void) {
     if (!nredes) {
         if (!d_ciclos)
             kprint("WIFI W2: no he oido ninguna red y los contadores del chip no se mueven (el reloj de la radio no va).\n");
+        else if (rechazo)
+            kprint("WIFI W2: no he oido ninguna red. La tarjeta intento escribir en la memoria y el bus PCI se lo\n"
+                   "  rechazo (permiso de DMA). Hazme una foto de esto y lo miramos.\n");
+        else if (errores && !tramas)
+            kprint("WIFI W2: no he oido ninguna red. Lo que oye SI llega a la memoria, pero todo con errores\n"
+                   "  (ajuste de radio: antena, ganancia o canal). Hazme una foto de esto y lo miramos.\n");
         else if (d_recibe && !tramas)
             kprint("WIFI W2: no he oido ninguna red. La radio SI recibe tramas, pero no llegan a la memoria\n"
                    "  (fallo de DMA o del filtro). Hazme una foto de esto y lo miramos.\n");

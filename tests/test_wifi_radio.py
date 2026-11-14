@@ -138,6 +138,13 @@ void sim_paso(uint32_t us) {
     if (!rxe || (regs[0x8048 / 4] & 0x20) || ahora - ultimo < 20000) return;
     if ((regs[0x9864 / 4] & 0x1FF) == 0) return;           /* sin cargar el ruido, la radio real queda sorda */
     if (modo == 5) return;                                 /* chip sordo */
+    if (modo == 6) {                                       /* oye, pero no entiende nada: solo errores de radio */
+        ultimo = ahora;
+        volatile uint32_t *d = (volatile uint32_t *)(radio_base_sim + rxdp);
+        d[4 + 1] = 0; d[4 + 8] = 0x1 | 0x10 | (25u << 8);
+        rxdp = d[0];
+        return;
+    }
     ultimo = ahora;
     int ch = canal_actual();
     uint8_t f[512];
@@ -221,6 +228,12 @@ if gcc:
             s = corre(5)
             ok("La radio esta sorda" in s and "recibiendo 0% del tiempo" in s and "RESULTADO=0" in s,
                "chip sordo: el diagnóstico lo dice (no nota nada en el aire)")
+            s0 = corre(0)
+            ok("RESULTADO=5" in s0 and re.search(r"errores: 0 de radio, \d+ con la suma mal", s0),
+               "cuenta aparte los errores de radio y las tramas con la suma mal")
+            s = corre(6)
+            ok("todo con errores" in s and "codigos: 25x" in s and "RESULTADO=0" in s,
+               "solo errores de radio: dice que SÍ llega a la memoria y qué códigos de error ve")
             s = corre(1)
             ok("WIFI W2: sin tarjeta" in s and "RESULTADO=-1" in s, "sin tarjeta (QEMU): lo dice y no enciende nada")
             s = corre(2)
@@ -230,6 +243,63 @@ if gcc:
             s = corre(4)
             ok("no se dejo reiniciar" in s and "BUCLE_INFINITO" not in s and "VECES_RXE=0" in s,
                "chip que no se deja reiniciar: para, sin colgarse ni escuchar")
+
+# ---- v3.51: la cadena de PUENTES PCI (tu WiFi va en el bus 2, detrás de un puente del chipset) ----
+W = E["archivos"]["wifi.c"]
+ok("buscar_puente" in W and "pu_antes" in W, "wifi.c busca los puentes PCI de la cadena y guarda cómo estaban")
+ok(re.search(r"#define AR9280_PHY_MINCCA|>> 20\) & 0x1FF", RC) is not None, "el ruido se lee en los bits 20-28 (AR9280_PHY_MINCCA_PWR)")
+ok("0x100" in RC and "AR_RXCFG_ZLFDMA" in RC, "pide también los errores de radio (diagnóstico), sin dejar de solo escuchar")
+PUENTE = r'''
+#include <stdio.h>
+#include <stdint.h>
+struct pci_disp { uint8_t bus, disp, func; uint16_t vendedor, aparato; uint8_t clase, subclase, irq; uint32_t bar0; };
+static uint32_t cfg[4][32][8][64];
+static int escrituras_fuera = 0;
+uint32_t pci_leer(uint8_t b, uint8_t d, uint8_t f, uint8_t o) { return b < 4 ? cfg[b][d][f][o / 4] : 0xFFFFFFFFu; }
+void pci_escribir(uint8_t b, uint8_t d, uint8_t f, uint8_t o, uint32_t v) {
+    if (o != 0x04) escrituras_fuera++;
+    if (b < 4) cfg[b][d][f][o / 4] = v;
+}
+static struct pci_disp disp; static int hay_disp = 1;
+CODIGO
+int main(void) {
+    for (int b = 0; b < 4; b++) for (int d = 0; d < 32; d++) for (int f = 0; f < 8; f++) cfg[b][d][f][0] = 0xFFFFFFFFu;
+    cfg[0][0][0][0] = 0x00448086; cfg[0][0][0][3] = 0;                       /* el chipset */
+    cfg[0][0x1c][0][0] = 0x3b428086; cfg[0][0x1c][0][3] = 0x00810000;        /* puente del bus 1 (multifunción) */
+    cfg[0][0x1c][0][6] = 0x00010100; cfg[0][0x1c][0][1] = 0x00100006;
+    cfg[0][0x1c][1][0] = 0x3b448086; cfg[0][0x1c][1][3] = 0x00010000;        /* puente del bus 2: SIN bus master */
+    cfg[0][0x1c][1][6] = 0x00020200; cfg[0][0x1c][1][1] = 0x20100002;        /* (y un «master abort» viejo) */
+    cfg[2][0][0][0] = 0x002e168c; cfg[2][0][0][3] = 0; cfg[2][0][0][1] = 0x20100002;
+    disp.bus = 2; disp.disp = 0; disp.func = 0;
+    wifi_dma(1);
+    int on = 0, n = wifi_puentes(&on);
+    printf("PUENTES=%d ENCENDIDOS=%d PUENTE=%08x TARJETA=%08x\n", n, on, cfg[0][0x1c][1][1], cfg[2][0][0][1]);
+    cfg[2][0][0][1] |= 0x20000000u;                                          /* la tarjeta recibió un «no» */
+    wifi_dma(0);
+    printf("DESPUES PUENTE=%08x TARJETA=%08x ESTADO=%08x FUERA=%d\n", cfg[0][0x1c][1][1], cfg[2][0][0][1],
+           wifi_estado_pci(), escrituras_fuera);
+    return 0;
+}
+'''
+if gcc:
+    ini = W.index("#define MAX_PUENTES"); fin = W.index("uint32_t wifi_estado_pci(void)")
+    fin = W.index("\n", fin) + 1
+    with tempfile.TemporaryDirectory() as d:
+        open(os.path.join(d, "p.c"), "w").write(PUENTE.replace("CODIGO", W[ini:fin]))
+        prog = os.path.join(d, "p")
+        c = subprocess.run([gcc, "-Wall", "-Werror", "-Wno-unused-variable", "-O1", "-o", prog, os.path.join(d, "p.c")],
+                           capture_output=True, text=True)
+        ok(c.returncode == 0, "la búsqueda de puentes compila " + c.stderr[:300])
+        if c.returncode == 0:
+            s = subprocess.run([prog], capture_output=True, text=True, timeout=30).stdout
+            print(s)
+            ok("PUENTES=1 ENCENDIDOS=1" in s, "encuentra el puente del bus 2 (00:1c.1) y ve que NO tenía permiso de DMA")
+            ok("PUENTE=20100006" in s or "PUENTE=00000006" in s or re.search(r"PUENTE=[0-9a-f]{4}0006 ", s),
+               "le da memoria + bus master mientras escucha")
+            ok("DESPUES PUENTE=00000002" in s, "al acabar el puente vuelve a quedar como estaba (sin bus master)")
+            ok(re.search(r"TARJETA=[0-9a-f]{4}0002 ESTADO=2", s) is not None,
+               "al acabar la tarjeta pierde el permiso y guarda el «rechazo» para el diagnóstico")
+            ok("FUERA=0" in s, "solo toca el registro de órdenes (0x04), nada más de la configuración PCI")
 
 print("\n" + ("TODO BIEN" if not FALLOS else f"{len(FALLOS)} FALLOS"))
 sys.exit(1 if FALLOS else 0)
