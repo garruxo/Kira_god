@@ -69,6 +69,9 @@ ok(O("compila el kernel") == ("compilar", "") and O("prueba tu kernel") == ("pro
    O("empieza el kernel de cero") == ("cero", "") and O("etapas del kernel") == ("etapas", "") and
    O("enséñame el archivo gdt.c del kernel") == ("leer", "gdt.c") and O("archivos del kernel") == ("archivos", ""),
    "las demás órdenes")
+ok(O("prepara el USB del kermel") == ("usb", "") and O("programa el kernell: hola") == ("programar", "hola") and
+   O("pon la etapa 2 del kernal") == ("etapa", "2"), "con faltas («kermel», visto en el Packard Bell) también")
+ok(O("kermesse") is None and O("abre el kermit") is None, "…sin comerse otras palabras")
 for t in ("qué es un kernel", "estudia kernels", "abre la terminal", "instala el kernel de linux 6.8"):
     ok(O(t) is None, f"«{t}» NO es del taller")
 
@@ -286,6 +289,7 @@ ok(est.es_estudia_general("estudia sistemas operativos por dentro") is None and
    "«estudia sistemas operativos por dentro» = fichas propias; a secas, el estudio general")
 import mando_kira as mk  # noqa: E402
 ok(mk.es_trabajo("programa el kernel: añade la IDT") and mk.es_trabajo("kernel: hola") and
+   mk.es_trabajo("prepara el usb del kermel") and
    not mk.es_trabajo("qué es un kernel"), "desde el móvil, las órdenes del kernel van a KiraOS")
 import kira_god  # noqa: E402
 core = kira_god.KiraGodCore()

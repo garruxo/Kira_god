@@ -89,7 +89,7 @@ _HAZ = re.compile(r"^(?:por favor\s+)?(?:haz(?:me)?|crea(?:me)?|escribe(?:me)?|g
                   r"el|la|mi|otro|otra)?\s*(?:[a-z]+\s+){0,2}?" + _OBJETO + r"\b")
 _KERNEL = re.compile(r"^(?:kernel\s*[:,]|(?:programa(?:me)?|mejora|cambia|modifica|anade|haz|ponle|arregla|"
                      r"compila(?:me)?|prueba|arranca|ensename|muestrame|pon la etapa|deshaz|empieza|estado|archivos|"
-                     r"etapas)\b.*\bkernel\b)")
+                     r"etapas|prepara(?:me)?|graba)\b.*\bkernel\b)")
 _CAMARA = re.compile(r"^(?:haz(?:me)?|saca(?:me)?)\s+una\s+(?:foto|captura|llamada)(?:\s+(?:a|al|a la)\b.*)?$")
 _MODO_COMPLETO = re.compile(r"^(?:pon|activa|vuelve a)\s+(?:el\s+)?modo\s+completo$|^modo completo$|"
                             r"^(?:pon|devuelveme|vuelve a poner)\s+(?:las\s+)?(?:pantallas|salas)\s+(?:antiguas|de antes)$")
@@ -112,7 +112,8 @@ def es_trabajo(texto):
         return False
     if es_de_maquina(texto):
         return True
-    if _KERNEL.match(t):                         # v3.35: el taller de kernel vive en KiraOS
+    if _KERNEL.match(re.sub(r"\b(?:kermel|kernell|kernal|kenel|kernerl|kenrel|cernel)\b", "kernel", t)):
+        # v3.35: el taller de kernel vive en KiraOS (v3.39: también con faltas como «kermel»)
         return True
     if _CAMARA.match(t):
         return False

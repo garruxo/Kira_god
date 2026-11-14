@@ -756,6 +756,9 @@ _K = r"(?:el|mi|tu|del|de\s+mi|de\s+tu)\s+kernel"
 def orden(texto):
     """(accion, carga) o None. Puro."""
     t = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", str(texto or ""), flags=re.I).strip()
+    # v3.39: faltas típicas al escribir «kernel» (visto en el Packard Bell: «kermel»)
+    t = re.sub(r"\b(?:kermel|kernell?|kernal|kenel|kernerl|kenrel|kernerl|kenrnel|kerne|kermnel|kernle|cernel|kernelk)\b",
+               "kernel", t, flags=re.I)
     low = so._norm(t).rstrip(" .!?¿¡")
     if re.match(r"^(?:busca|ve|mira|que|cuales\s+son)\s+(?:mi|mis|el|los|tengo)?\s*(?:usb|pendrives?|memorias?\s+usb)"
                 r"(?:\s+(?:tengo|hay|conectados?))?$", low):
