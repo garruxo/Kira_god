@@ -709,6 +709,8 @@ class Taller:
                 "",
                 "Para arrancarlo: reinicia, pulsa F12 al encender, elige el USB y luego «Kernel de Kira». Con Esc se "
                 "reinicia y vuelves a KiraOS. Linux y tus archivos no se tocan.",
+                "Desde la etapa 11 tiene su consola «kira>»: escribe  ayuda , y prueba  ls /home ,  cat … ,  tareas ,  "
+                "programas  o  ejecuta hola  (según la etapa). Lee tu Xubuntu pero NUNCA escribe en tu disco.",
                 "Si al arrancar la pantalla se queda en negro: tu portátil está arrancando en modo UEFI; en la BIOS "
                 "(F2) pon el arranque en «Legacy». Así se ve la pantalla de texto del kernel."]
         return "\n".join(lin)
