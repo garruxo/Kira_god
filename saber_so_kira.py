@@ -4209,6 +4209,7 @@ uint32_t radio_reg(uint32_t r);    /* lee un registro de la tarjeta */
 uint32_t radio_reg_lento(uint32_t r);            /* lo mismo, despacio (analógicos) */
 int radio_valor_tabla(uint32_t r, uint32_t *v);  /* lo que escriben mis tablas; 0 si no está */
 void radio_reescribir_analogicos(void);          /* reescribe los analógicos de mis tablas, muy despacio */
+int radio_analogicos_escuchando(int canal, uint32_t *vals);  /* 0x7800-0x78FC leídos mientras escucha (64) */
 #endif
 """
 
@@ -4737,6 +4738,8 @@ static void revisar(int canal) {
     }
 }
 
+static void (*a_mitad)(void) = 0;                        /* para «compara»: algo que hacer a mitad de escuchar */
+
 static void escuchar(int canal, uint32_t ms) {
     montar_anillo();
     saltando = 0;
@@ -4754,6 +4757,7 @@ static void escuchar(int canal, uint32_t ms) {
     for (uint32_t t = 0; t < ms * 10; t++) {               /* cada 100 microsegundos */
         revisar(canal);
         if (t == ms * 5 && canal == 1) { d_diag = R(AR_DIAG_SW); d_cr = R(AR_CR); }
+        if (t == ms * 5 && a_mitad) a_mitad();
         espera_us(100);
     }
     revisar(canal);
@@ -4947,6 +4951,34 @@ int radio_valor_tabla(uint32_t r, uint32_t *v) {
     return hay;
 }
 
+/* Los analógicos leídos MIENTRAS escucha (como los lee Linux, con la WiFi recibiendo): ajusta el canal, escucha
+   100 ms igual que «redes» (ACK/CTS apagados, nunca transmite, DMA solo durante esos 100 ms) y a mitad lee
+   0x7800-0x78FC en vals[64]. Devuelve 1 si ha podido. */
+static uint32_t *analog_dest = 0;
+static void leer_analogicos_ahora(void) {
+    for (int i = 0; i < 64; i++) analog_dest[i] = R(0x7800 + 4u * (uint32_t)i);
+}
+int radio_analogicos_escuchando(int canal, uint32_t *vals) {
+    struct wifi_info w;
+    if (wifi_leer(&w) != 1 || w.version != 0x180) return 0;
+    rx_mask = w.antenas_rx;
+    if (rx_mask != 1 && rx_mask != 2 && rx_mask != 3) rx_mask = 3;
+    if (canal < 1 || canal > 13) canal = 1;
+    for (int i = 0; i < 64; i++) vals[i] = 0xDEADBEEFu;
+    wifi_dma(1);
+    int cal_ok = 0, ok = 0;
+    if (preparar(canal, &cal_ok) >= 0) {
+        analog_dest = vals;
+        a_mitad = leer_analogicos_ahora;
+        escuchar(canal, 100);
+        a_mitad = 0;
+        ok = vals[0] != 0xDEADBEEFu;
+    }
+    parar_rx();
+    wifi_dma(0);
+    return ok;
+}
+
 /* Vuelve a escribir los analógicos de MIS tablas (los mismos valores que pone Linux), muy despacio (1 ms cada
    uno), para ver si así se quedan. No transmite ni enciende nada. */
 void radio_reescribir_analogicos(void) {
@@ -4979,7 +5011,8 @@ _COMPARA_C = r"""/* compara.c — orden «compara [pagina]»: pone la radio de l
 #include "radio.h"
 
 #define MAX_TXT   (80 * 1024)
-#define MAX_REGS  2600
+#define MAX_TXT_COMPLETO (150 * 1024)
+#define MAX_REGS  2700
 #define POR_PAG   57          /* 19 filas de 3: cabe en la pantalla sin que se corte nada */
 
 static uint32_t l_dir[MAX_REGS], l_val[MAX_REGS];
@@ -5011,26 +5044,56 @@ static void une(char *d, int max, const char *a, const char *b, const char *c) {
     for (int k = 0; k < 3; k++) for (const char *x = t[k]; x && *x && i < max - 1; x++) d[i++] = *x;
     d[i] = 0;
 }
-static int buscar(char *ruta, int max) {
+static int buscar_archivo(char *ruta, int max, const char *nombre) {
     static char gente[16][32];
     int n = ext4_nombres("/home", gente, 16);
     for (int i = 0; i < n; i++) {
-        une(ruta, max, "/home/", gente[i], "/kira_portatil/kernel/regs_linux.txt");
+        une(ruta, max, "/home/", gente[i], nombre);
         if (ext4_existe(ruta) == 1) return 1;
     }
     return 0;
 }
+/* lo que se compara: la radio y los analógicos, y además el reloj (RTC) y la conexión con el PC (host) */
+static int interesa(uint32_t a) {
+    return (a >= 0x7800 && a < 0x7900) || (a >= 0x9800 && a < 0xB500) ||
+           (a >= 0x4000 && a < 0x4100) || (a >= 0x7000 && a < 0x705C);
+}
+static int completo = 0;
 
 static int cargar(void) {
     char ruta[128];
-    l_n = 0; l_canal = 0; l_ancho = 20;
-    if (!buscar(ruta, sizeof(ruta))) return -1;
-    char *t = kmalloc(MAX_TXT + 1);
-    uint32_t tam = 0;
-    if (!t) return -2;
-    if (ext4_leer(ruta, t, MAX_TXT, &tam) != 0) { kfree(t); return -2; }
-    if (tam > MAX_TXT) tam = MAX_TXT;
+    l_n = 0; l_canal = 0; l_ancho = 20; completo = 0;
+    char ruta_corta[128];
+    if (!buscar_archivo(ruta_corta, sizeof(ruta_corta), "/kira_portatil/kernel/regs_linux.txt")) return -1;
+    char *t = 0;
+    uint32_t tam = 0, max = MAX_TXT;
+    if (buscar_archivo(ruta, sizeof(ruta), "/kira_portatil/kernel/regs_linux_completo.txt")) {
+        t = kmalloc(MAX_TXT_COMPLETO + 1);           /* el completo trae también el reloj y la conexión PCI */
+        if (t && ext4_leer(ruta, t, MAX_TXT_COMPLETO, &tam) == 0) { completo = 1; max = MAX_TXT_COMPLETO; }
+        else if (t) { kfree(t); t = 0; }
+    }
+    if (!t) {
+        t = kmalloc(MAX_TXT + 1);
+        if (!t) return -2;
+        if (ext4_leer(ruta_corta, t, MAX_TXT, &tam) != 0) { kfree(t); return -2; }
+    }
+    if (tam > max) tam = max;
     t[tam] = 0;
+    if (completo) {                                       /* el canal y el ancho van en el corto */
+        static char cab[256];
+        uint32_t tc = 0;
+        if (ext4_leer(ruta_corta, cab, sizeof(cab) - 1, &tc) == 0) {
+            if (tc > sizeof(cab) - 1) tc = sizeof(cab) - 1;
+            cab[tc] = 0;
+            const char *q = salta(cab);
+            uint32_t a, v; int o1, o2;
+            if (empieza(q, "# canal")) {
+                q = lee_num(q + 7, &a, &o1); if (o1) l_canal = (int)a;
+                q = salta(q);
+                if (empieza(q, "ancho")) { lee_num(q + 5, &v, &o2); if (o2) l_ancho = (int)v; }
+            }
+        }
+    }
     for (const char *p = t; *p; ) {
         const char *q = salta(p);
         uint32_t a, v; int ok1, ok2;
@@ -5038,10 +5101,16 @@ static int cargar(void) {
             q = lee_num(q + 7, &a, &ok1); if (ok1) l_canal = (int)a;
             q = salta(q);
             if (empieza(q, "ancho")) { lee_num(q + 5, &v, &ok2); if (ok2) l_ancho = (int)v; }
+        } else if (empieza(q, "#RUIDO")) {
+            break;
         } else if (*q != '#') {
             q = lee_num(q, &a, &ok1);
             q = lee_num(q, &v, &ok2);
-            if (ok1 && ok2 && l_n < MAX_REGS && !(a & 3)) { l_dir[l_n] = a; l_val[l_n] = v; l_n++; }
+            if (ok1 && ok2 && l_n < MAX_REGS && !(a & 3) && interesa(a)) {
+                int repe = 0;                             /* el completo trae los analógicos dos veces */
+                for (int k = l_n - 1; k >= 0 && k >= l_n - 80; k--) if (l_dir[k] == a) { l_val[k] = v; repe = 1; break; }
+                if (!repe) { l_dir[l_n] = a; l_val[l_n] = v; l_n++; }
+            }
         }
         while (*p && *p != '\n') p++;
         if (*p) p++;
@@ -5056,7 +5125,8 @@ static void hexn(uint32_t v, int cifras) {
 }
 
 static int es_analogico(uint32_t a) { return a >= 0x7800 && a < 0x7900; }
-static int grupo(uint32_t a) {          /* primero lo que importa para RECIBIR */
+static int grupo(uint32_t a) {          /* primero el reloj y la conexión, luego lo que importa para RECIBIR */
+    if ((a >= 0x4000 && a < 0x4100) || (a >= 0x7000 && a < 0x705C)) return 0;
     if (es_analogico(a)) return 0;
     if ((a >= 0x9800 && a < 0x9A00) || (a >= 0xA800 && a < 0xAA00)) return 1;
     if (a >= 0xA200 && a < 0xA300) return 2;
@@ -5086,21 +5156,29 @@ void compara_orden(const char *args) {
     int r = radio_sintonizar(l_canal);
     if (r == -1) { kprint("COMPARA: sin tarjeta WiFi (en QEMU es normal)\n"); return; }
     if (r < -1) { kprint("COMPARA: no he podido ajustar la radio (codigo "); kprint_dec((uint32_t)(-r)); kprint(")\n"); return; }
-    int ig_r, ig_l, ig_e, tot;
+    int ig_r, ig_l, ig_e = 0, tot, tot_e = 0;
     contar_analogicos(0, &ig_r, &tot);
     contar_analogicos(1, &ig_l, &tot);
+    static uint32_t escuchando[64];
+    int hay_esc = radio_analogicos_escuchando(l_canal, escuchando);
+    if (hay_esc)
+        for (uint32_t a = 0x7800; a < 0x78A0; a += 4) {
+            uint32_t t;
+            if (a == 0x7808 || a == 0x785C || !radio_valor_tabla(a, &t)) continue;
+            tot_e++;
+            if (escuchando[(a - 0x7800) / 4] == t) ig_e++;
+        }
+    radio_sintonizar(l_canal);                            /* vuelve a dejarla ajustada sin escuchar */
     static uint32_t d_dir[MAX_REGS], d_lin[MAX_REGS], d_mio[MAX_REGS];
     int nd = 0, mirados = 0;
     for (int g = 0; g < 4; g++)
         for (int i = 0; i < l_n; i++) {
             uint32_t a = l_dir[i];
-            if (!((a >= 0x7800 && a < 0x7900) || (a >= 0x9800 && a < 0xB500)) || grupo(a) != g) continue;
+            if (!interesa(a) || grupo(a) != g) continue;
             mirados++;
-            uint32_t m = es_analogico(a) ? radio_reg_lento(a) : radio_reg(a);
+            uint32_t m = es_analogico(a) ? (hay_esc ? escuchando[(a - 0x7800) / 4] : radio_reg_lento(a)) : radio_reg(a);
             if (m != l_val[i]) { d_dir[nd] = a; d_lin[nd] = l_val[i]; d_mio[nd] = m; nd++; }
         }
-    radio_reescribir_analogicos();
-    contar_analogicos(1, &ig_e, &tot);
     uint32_t pags = nd ? (uint32_t)(nd + POR_PAG - 1) / POR_PAG : 1;
     if (pag > pags) pag = pags;
     kprint("COMPARA: Linux canal "); kprint_dec((uint32_t)l_canal);
@@ -5108,9 +5186,12 @@ void compara_orden(const char *args) {
     if (l_ancho != 20) kprint(" (OJO: yo uso 20)");
     kprint(r ? ", calibracion bien" : ", calibracion NO acabo");
     kprint(". Distintos "); kprint_dec((uint32_t)nd); kprint(" de "); kprint_dec((uint32_t)mirados); kputc('\n');
-    kprint("ANALOGICOS como mi tabla: leidos rapido "); kprint_dec((uint32_t)ig_r);
-    kprint(", despacio "); kprint_dec((uint32_t)ig_l); kprint(", reescritos 1ms "); kprint_dec((uint32_t)ig_e);
-    kprint(" (de "); kprint_dec((uint32_t)tot); kprint(")\n");
+    (void)ig_l; (void)tot_e;
+    kprint("ANALOGICOS como mi tabla: parada "); kprint_dec((uint32_t)ig_r);
+    kprint(", ESCUCHANDO ");
+    if (hay_esc) kprint_dec((uint32_t)ig_e); else kprint("?");
+    kprint(" (de "); kprint_dec((uint32_t)tot);
+    kprint(completo ? "). Reloj y PCI: si\n" : "). Reloj y PCI: no\n");
     int ini = (int)(pag - 1) * POR_PAG, col = 0;
     for (int i = ini; i < nd && i < ini + POR_PAG; i++) {          /* «AAAA linux___ kira____», 3 por fila */
         hexn(d_dir[i], 4); kputc(' '); hexn(d_lin[i], 8); kputc(' '); hexn(d_mio[i], 8);

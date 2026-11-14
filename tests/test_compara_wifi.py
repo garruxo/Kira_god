@@ -108,13 +108,17 @@ void kprint_dec(uint32_t n) { printf("%u", n); }
 void kprint_hex(uint32_t n) { printf("0x%08X", n); }
 void *kmalloc(size_t t) { return malloc(t); }
 void kfree(void *p) { free(p); }
-static const char *ARCH = 0;
+static const char *ARCH = 0, *COMPLETO = 0;
 int ext4_nombres(const char *ruta, char nombres[][32], int max) {
     (void)max; if (strcmp(ruta, "/home")) return 0; strcpy(nombres[0], "otro"); strcpy(nombres[1], "papi"); return 2; }
-int ext4_existe(const char *ruta) { return ARCH && !strcmp(ruta, "/home/papi/kira_portatil/kernel/regs_linux.txt"); }
+int ext4_existe(const char *ruta) {
+    if (ARCH && !strcmp(ruta, "/home/papi/kira_portatil/kernel/regs_linux.txt")) return 1;
+    return COMPLETO && !strcmp(ruta, "/home/papi/kira_portatil/kernel/regs_linux_completo.txt"); }
 int ext4_leer(const char *ruta, void *b, uint32_t max, uint32_t *tam) {
-    if (!ext4_existe(ruta)) return -1; uint32_t n = strlen(ARCH); if (tam) *tam = n;
-    memcpy(b, ARCH, n < max ? n : max); return 0; }
+    if (!ext4_existe(ruta)) return -1;
+    const char *src = strstr(ruta, "completo") ? COMPLETO : ARCH;
+    uint32_t n = strlen(src); if (tam) *tam = n;
+    memcpy(b, src, n < max ? n : max); return 0; }
 int canal_pedido = -1, hay_tarjeta = 1;
 int radio_sintonizar(int c) { canal_pedido = c; return hay_tarjeta ? 1 : -1; }
 uint32_t radio_reg(uint32_t r) { return r == 0x9864 ? 0x1FFF3A00u : (r >= 0xA000 && r < 0xA040) ? r : 0x11111111u; }
@@ -122,6 +126,7 @@ int lentas = 0, reescrito = 0;
 uint32_t radio_reg_lento(uint32_t r) { lentas++; if (r == 0x7800) return reescrito ? 0x800 : 0x6DB6DB6D; return radio_reg(r); }
 int radio_valor_tabla(uint32_t r, uint32_t *v) { if (r == 0x7800) { *v = 0x800; return 1; } if (r == 0x7804) { *v = 0x11111111u; return 1; } return 0; }
 void radio_reescribir_analogicos(void) { reescrito = 1; }
+int radio_analogicos_escuchando(int c, uint32_t *v) { (void)c; for (int i = 0; i < 64; i++) v[i] = 0x11111111u; v[0] = 0x800; return 1; }
 void compara_orden(const char *a);
 int main(int argc, char **argv) {
     static char buf[200000];
@@ -133,6 +138,12 @@ int main(int argc, char **argv) {
         ARCH = buf; compara_orden(argc > 2 ? argv[2] : "");
         printf("\nCANAL=%d LENTAS=%d\n", canal_pedido, lentas);
     } else if (modo == 2) { compara_orden("");
+    } else if (modo == 5) {
+        ARCH = "# canal 9 ancho 20\n0x009864 0x1fff3a5c\n";
+        COMPLETO = "#REGDUMP\n0x000008 0x00000004\n0x004004 0x0000abcd\n0x007048 0x00000002\n0x009864 0x1fff3a5c\n"
+                   "#ANALOGICOS\n0x007800 0x00000800\n#RUIDO\n0x009850 0x99999999\n";
+        compara_orden("");
+        printf("\nCANAL=%d\n", canal_pedido);
     } else if (modo == 3) { ARCH = "# canal 11 ancho 40\n0x009864 0x1fff3a00\n"; compara_orden("");
     } else { ARCH = "# canal 1\n0x009864 0x0\n"; hay_tarjeta = 0; compara_orden(""); }
     return 0;
@@ -150,18 +161,22 @@ with tempfile.TemporaryDirectory() as tmp:
     if r.returncode == 0:
         s1 = subprocess.run([exe, "1"], capture_output=True, text=True).stdout
         ok("CANAL=6" in s1, "pone la radio en el mismo canal que tenía Linux")
-        ok("Distintos 73 de 74" in s1, "compara solo la radio y cuenta los distintos: " + s1[:300])
+        ok("Distintos 72 de 74" in s1, "compara solo la radio y cuenta los distintos: " + s1[:300])
         lineas = [l for l in s1.splitlines() if re.match(r"^[0-9A-F]{4} [0-9A-F]{8} [0-9A-F]{8}", l)]
-        ok(lineas and lineas[0].startswith("7800 00000800 6DB6DB6D") and "9850 33333333 11111111" in lineas[0],
-           "primero los analógicos y la recepción (0x98xx), leídos despacio: " + (lineas[0] if lineas else ""))
+        ok(lineas and not lineas[0].startswith("7800") and "9850 33333333 11111111" in lineas[0],
+           "los analógicos se leen MIENTRAS escucha (0x7800 ya coincide) y va la recepción (0x98xx): " + (lineas[0] if lineas else ""))
         ok("9864 1FFF3A5C 1FFF3A00" in s1, "enseña registro, valor de Linux y el mío")
         ok(all(len(l) <= 79 for l in s1.splitlines()), "ninguna línea pasa de 79 letras (no se corta en pantalla)")
         ok(len(lineas) == 19, "19 filas de 3 por página")
-        ok("ANALOGICOS como mi tabla: leidos rapido 1, despacio 1, reescritos 1ms 2 (de 2)" in s1,
-           "cuenta los analógicos que se quedan como mi tabla (rápido, despacio y reescritos): " + s1[:400])
+        ok("ANALOGICOS como mi tabla: parada 1, ESCUCHANDO 2 (de 2). Reloj y PCI: no" in s1,
+           "cuenta los analógicos como mi tabla, parada y ESCUCHANDO: " + s1[:400])
         ok("Pagina 1 de 2" in s1 and "compara 2" in s1, "dice cómo ver la siguiente")
         s2 = subprocess.run([exe, "1", "2"], capture_output=True, text=True).stdout
         ok("Pagina 2 de 2" in s2 and "9850 33333333" not in s2, "«compara 2» enseña la página 2")
+        s5 = subprocess.run([exe, "5"], capture_output=True, text=True).stdout
+        ok("Reloj y PCI: si" in s5 and "4004 0000ABCD" in s5 and "CANAL=9" in s5,
+           "con el volcado completo compara también el reloj y la conexión PCI, y el canal sale del corto: " + s5[:300])
+        ok("0008 " not in s5 and "9850" not in s5, "no mete los de la MAC ni lo que va tras #RUIDO")
         s3 = subprocess.run([exe, "2"], capture_output=True, text=True).stdout
         ok("no encuentro" in s3 and "bash copiar_regs_wifi" in s3, "sin el archivo dice cómo hacerlo en Xubuntu")
         s4 = subprocess.run([exe, "3"], capture_output=True, text=True).stdout
