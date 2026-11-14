@@ -45,7 +45,7 @@ uint32_t sim_lee(uint32_t r) {
     if (r >= 0x2000 && r < 0x3000) { uint16_t v = eep[(r - 0x2000) >> 2]; dato_eep = modo == 2 ? (uint16_t)((v >> 8) | (v << 8)) : v; return 0; }
     if (r == 0x407C) return modo == 3 ? 0x00010000 : dato_eep;
     if (r == 0x7044) return modo == 5 ? 0x1 : (rtc_on ? 0x2 : 0x1);
-    if (r == 0x4020) return (0x180u << 18) | (2u << 8) | 0xFF;
+    if (r == 0x4020) return (0x180u << 12) | (2u << 8) | 0xFF;   /* 0x001802FF */
     return regs[r / 4];
 }
 void sim_escribe(uint32_t r, uint32_t v) {
@@ -57,7 +57,7 @@ void sim_escribe(uint32_t r, uint32_t v) {
 void kputc(char c) { putchar(c); }
 void kprint(const char *s) { fputs(s, stdout); }
 void kprint_dec(uint32_t n) { printf("%u", n); }
-void kprint_hex(uint32_t n) { printf("%x", n); }
+void kprint_hex(uint32_t n) { printf("0x%08x", n); }
 #include "wifi.h"
 int main(int argc, char **argv) {
     modo = atoi(argv[1]);
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     eep[128] = (uint16_t)(n * 2);                    /* largo en bytes */
     eep[129] = 0;                                    /* suma (se calcula abajo) */
     eep[130] = 0xE003;                               /* versión 14.3 */
-    b[6] = 0x02; b[7] = 0; b[8] = 0x37; b[9] = 0; b[10] = 0x1F; b[11] = 0;
+    b[6] = 0x02; b[7] = 0; b[8] = 0x65; b[9] = 0; b[10] = 0x1F; b[11] = 0;
     uint8_t mac[6] = {0x00, 0x26, 0x5e, 0x12, 0x34, 0x56};
     memcpy(b + 12, mac, 6);
     b[18] = 0x03; b[19] = 0x03; b[30] = 5;
@@ -101,11 +101,12 @@ if gcc:
         if c.returncode == 0:
             s = corre(0)
             print(s)
-            ok("version 0x180 revision 2 (AR9287)" in s, "lee la versión del chip: AR9287")
+            ok("version 0x00000180 revision 2 (registro srev 0x001802ff) (ar9287)" in s.lower(), "lee la versión del chip: AR9287 (0x180)")
             ok("MAC 00:26:5e:12:34:56" in s, "lee la MAC de la EEPROM en su orden")
             ok("magia 0xa55a (correcta)" in s and "largo 720 bytes, version 14.3" in s, "magia, largo y versión")
             ok("suma de control correcta" in s, "comprueba la suma de control (XOR = 0xFFFF)")
-            ok("region 0x0037 (ETSI (Europa))" in s, "la región")
+            ok("region 0x0065 (mundial (WOR)" in s, "la región 0x0065 (la del Packard Bell) = mundial")
+            ok("0x0x" not in s, "sin el «0x0x» repetido (visto en el Packard Bell)")
             ok("recibir 2, para emitir 2, banda 2,4 GHz\n" in s, "antenas y banda")
             ok("WIFI W1 OK" in s and "ESCRITURAS_EEPROM=0" in s, "W1 OK sin escribir NADA en la EEPROM")
             s = corre(1)

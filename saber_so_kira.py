@@ -3892,7 +3892,7 @@ _WIFI_C = r"""/* wifi.c — etapa W1 de la WiFi Atheros AR9287 (PCI 168c:002e, e
 #define AR_SREV               0x4020
 #define AR_SREV_ID            0x000000FF
 #define AR_SREV_VERSION2      0xFFFC0000
-#define AR_SREV_VERSION2_S    18
+#define AR_SREV_VERSION2_S    12          /* AR_SREV_TYPE2_S de ath9k (visto en el Packard Bell: con 18 salía 0x6) */
 #define AR_SREV_REVISION2     0x00000F00
 #define AR_SREV_REVISION2_S   8
 #define AR_SREV_VERSION_9287  0x180
@@ -4038,8 +4038,9 @@ static const char *nombre_region(uint16_t r) {
     switch (r) {
     case 0x10: return "FCC (America)";
     case 0x37: return "ETSI (Europa)";
-    case 0x60: return "mundial";
-    default:   return "dominio de radio";
+    default:
+        if (r >= 0x60 && r <= 0x6C) return "mundial (WOR): en canales dudosos solo escucha";
+        return "dominio de radio";
     }
 }
 
@@ -4054,7 +4055,8 @@ void wifi_probar(void) {
     }
     if (r == -1 || r == -2) { kprint("WIFI W1: su zona de registros no es la esperada; no sigo\n"); return; }
     kprint("WiFi: tarjeta Atheros 168c:"); hex4(w.aparato);
-    kprint(", chip version 0x"); kprint_hex(w.version); kprint(" revision "); kprint_dec(w.revision);
+    kprint(", chip version "); kprint_hex(w.version); kprint(" revision "); kprint_dec(w.revision);
+    kprint(" (registro SREV "); kprint_hex(w.srev); kputc(')');
     kprint(w.version == AR_SREV_VERSION_9287 ? " (AR9287)\n" : " (no es una AR9287: cuidado)\n");
     if (!w.despierta) { kprint("WIFI W1: el chip no despierta (no contesta ON). No toco nada mas\n"); return; }
     kprint("WiFi: chip despierto\n");
