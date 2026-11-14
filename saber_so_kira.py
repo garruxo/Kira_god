@@ -4417,7 +4417,10 @@ static void delta_vals(uint32_t escala, uint32_t *man, uint32_t *ex) {
 }
 
 static uint8_t rx_mask = 3;
-static uint32_t mhz_radio = 0;
+static uint32_t mhz_radio = 0, mhz_cpu = 0, pll_leido = 0, rtc_estado = 0;
+#ifndef WIFI_SIMULADA
+static uint64_t tsc(void) { uint32_t a, d; __asm__ volatile ("rdtsc" : "=a"(a), "=d"(d)); return ((uint64_t)d << 32) | a; }
+#endif
 
 /* ---- cargar el ruido de fondo (ath9k_hw_loadnf): primero el valor nominal de la AR9287 (-112) y, cuando el
    chip lo ha cogido, el tope -50 para la siguiente calibración. Las tablas dejan aquí un 0 (0 dBm): con eso el chip
@@ -4483,7 +4486,7 @@ static int preparar(int canal, int *cal_ok) {
     }
     if (!despierta()) return -2;
     W(AR_RTC_PLL_CONTROL, (5 << 10) | 0x2C);               /* ar9002_hw_compute_pll_control: refdiv 5, div 0x2c */
-    espera_us(100);
+    espera_us(1000);                                       /* Linux espera 100 us; damos 1 ms para que el PLL enganche */
     W(AR_RTC_SLEEP_CLK, 0x2);                              /* AR_RTC_FORCE_DERIVED_CLK */
     pon(AR_GPIO_INPUT_EN_VAL, 0x00020000);                 /* AR_GPIO_JTAG_DISABLE */
 
@@ -4811,11 +4814,16 @@ int radio_escanear(void) {
             while (timer_tics() == t && lim--) ;
             t = timer_tics();
             W(AR_MIBC, AR_MIBC_FMC); W(AR_CCCNT, 0); W(AR_MIBC, 0);
+            uint64_t c0 = tsc();
             lim = 20000000u;
             while (timer_tics() < t + 10 && lim--) ;
             W(AR_MIBC, AR_MIBC_FMC);
             mhz_radio = R(AR_CCCNT) / 100000u;             /* ciclos en 100 ms -> MHz */
             W(AR_MIBC, 0);
+            uint64_t dc = tsc() - c0;                      /* el procesador, para comprobar el reloj del kernel */
+            mhz_cpu = (uint32_t)(dc >> 10) / 98u;          /* ~ dc / 100000 sin división de 64 bits */
+            pll_leido = R(AR_RTC_PLL_CONTROL);
+            rtc_estado = R(AR_RTC_STATUS);
         }
 #endif
         escuchar(canal, 220);                              /* una baliza sale cada ~102 ms: oímos 2 */
@@ -4854,6 +4862,8 @@ int radio_escanear(void) {
     kprint(", PCI "); kprint_hex(pci); kprint(", SYNC "); kprint_hex(sync); kputc('\n');
     kprint("WiFi diag 2: reloj de la radio ");
     if (mhz_radio) { kprint_dec(mhz_radio); kprint(" MHz (debe ser 44)"); } else kprint("?");
+    kprint(", procesador "); if (mhz_cpu) { kprint_dec(mhz_cpu); kprint(" MHz (tu i5 M430: unos 2260)"); } else kputc('?');
+    kprint(", PLL "); kprint_hex(pll_leido); kprint(" (debe ser 0x0000142C), RTC "); kprint_hex(rtc_estado);
     kprint(", senal de lo que no entiende: max ");
     if (err_rssi_max > -1000) escribe_con_signo(err_rssi_max); else kputc('?');
     kprint(" dB, media ");

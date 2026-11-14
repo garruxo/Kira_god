@@ -248,10 +248,10 @@ if gcc:
 
 # ---- v3.52: esperas medidas con el reloj del kernel, reloj de la radio y señal de lo que no entiende ----
 ok("medir_esperas" in RC and "timer_tics()" in RC and "por_ms" in RC, "las esperas se miden con el temporizador del kernel")
-ok("mhz_radio" in RC and "debe ser 44" in RC, "mide el reloj de la radio (44 MHz)")
+ok("mhz_radio" in RC and "debe ser 44" in RC and "rdtsc" in RC and "pll_leido" in RC, "mide el reloj de la radio (44 MHz)")
 s52 = S0_GUARDADO
 ok("antenas de la EEPROM: comun 0x12345678" in s52, "enseña los valores de antena de la EEPROM")
-ok(re.search(r"diag 2: reloj de la radio \?, senal de lo que no entiende: max 40 dB", s52) is not None,
+ok(re.search(r"diag 2: reloj de la radio \?.*PLL.*senal de lo que no entiende: max 40 dB", s52) is not None,
    "enseña la señal más fuerte de lo que no entiende")
 
 # ---- v3.51: la cadena de PUENTES PCI (tu WiFi va en el bus 2, detrás de un puente del chipset) ----
