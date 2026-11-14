@@ -29,7 +29,7 @@ Kira es un asistente personal para Android, hecho con Python y Kivy y compilado 
   - Seguimiento: `gh run list -R garruxo/Kira_god`.
   - El APK sale en el artefacto **kira-apk**, un .zip. El dueño lo descarga, lo extrae con la app Archivos y pulsa Actualizar.
   - El repositorio debe estar en **público** para compilar; en privado falla por facturación.
-- **Versión:** subir `version` en `buildozer.spec` en cada entrega.
+- **Versión:** subir `version` en `buildozer.spec` (y `VERSION` en `version_kira.py`) en cada entrega. **Decisión del dueño:** tras la 3.99 NO se pasa a la 4.00: viene la **3.1.1**, luego 3.1.2, 3.1.3… (Android lo acepta: p4a hace el versionCode por grupos de 100 → 3.99 = 399, 3.1.1 = 30101, sigue subiendo). En Kira las versiones solo se comparan por igualdad, nunca como números.
 - **Código Java:** va en `android_src/` (`ServicioKira`, `CamaraKira`). Usa clases anónimas, sin lambdas, y compila con `--release 8`.
 - **Clases de Java desde Python:** búscalas con `autoclass` en el hilo principal, no en hilos secundarios.
 
