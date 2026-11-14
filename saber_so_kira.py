@@ -4204,6 +4204,7 @@ _RADIO_H = r"""/* radio.h — WiFi W2: escuchar y listar las redes de alrededor 
 #define RADIO_H
 int radio_escanear(void);     /* devuelve cuántas redes ha oído, o <0 si no ha podido */
 void radio_probar(void);      /* lo de la etapa 17: lo escribe en pantalla */
+int radio_interruptor(int vigilar);   /* el interruptor de la radio (solo lee); 1 si está apagada */
 int radio_sintonizar(int canal);   /* ajusta la radio en un canal SIN escuchar; <0 si no ha podido */
 uint32_t radio_reg(uint32_t r);    /* lee un registro de la tarjeta */
 uint32_t radio_reg_lento(uint32_t r);            /* lo mismo, despacio (analógicos) */
@@ -5008,6 +5009,7 @@ int radio_escanear(void) {
         }
         kprint("\n  version de la radio por el bus analogico: "); kprint_hex(radio_rev); kputc('\n');
     }
+    radio_interruptor(0);
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)
@@ -5048,6 +5050,48 @@ int radio_escanear(void) {
 }
 
 void radio_probar(void) { radio_escanear(); }
+
+/* v3.60: el INTERRUPTOR de la radio (W_DISABLE / «rfsilent»). La v3.59 vio que NINGUNA escritura analógica entra
+   (en 9 condiciones) y que el bus analógico no contesta: es lo que pasa si el portátil tiene la radio APAGADA por
+   hardware (la tecla de la WiFi, o el controlador del portátil que no la enciende hasta que lo hace Linux).
+   Pista: en la comparación con Linux, la entrada GPIO 0 de la tarjeta (0x4048, bit 11) sale 1 con Linux y 0
+   con Kira. Aquí SOLO SE LEE: el ajuste «rfSilent» de la EEPROM (qué GPIO es el interruptor y su polaridad,
+   como hace ath9k) y el estado de las entradas; con «interruptor» vigila 20 s por si pulsas la tecla de la WiFi. */
+static uint32_t gpio_entradas(void) { return (R(0x4048) >> 11) & 0x3FF; }   /* AR9287_GPIO_IN_VAL */
+int radio_interruptor(int vigilar) {
+    struct wifi_info w;
+    if (wifi_leer(&w) != 1) { kprint("WiFi interruptor: no puedo leer la tarjeta\n"); return -1; }
+    const uint8_t *e = wifi_eeprom();
+    uint32_t rs = (uint32_t)e[20] | ((uint32_t)e[21] << 8);       /* baseEepHeader.rfSilent */
+    int activo = rs & 1, pol = (rs >> 1) & 1, g = (rs >> 2) & 7;
+    uint32_t ent = gpio_entradas();
+    int val = (ent >> g) & 1;
+    int apagada = activo && val == pol;                            /* ath_is_rfkill_set */
+    kprint("WiFi interruptor: EEPROM rfSilent "); kprint_hex(rs);
+    if (activo) { kprint(" (GPIO "); kprint_dec((uint32_t)g); kprint(", apagada si vale "); kprint_dec((uint32_t)pol); kputc(')'); }
+    else kprint(" (la EEPROM no usa interruptor)");
+    kprint(". Entradas GPIO ahora "); kprint_hex(ent); kprint(" (con Linux eran 0x6FF; GPIO 0: Linux 1, Kira ");
+    kprint_dec(ent & 1); kprint(")\n");
+    if (activo) kprint(apagada ? "  -> la radio esta APAGADA por el interruptor del portatil (por eso no oye nada)\n"
+                               : "  -> el interruptor dice ENCENDIDA\n");
+    if (vigilar) {
+        kprint("  Pulsa ahora la tecla de la WiFi (Fn + la tecla con la antena) una o dos veces. Miro 20 segundos");
+        uint32_t antes = ent;
+        int cambios = 0;
+        for (int i = 0; i < 40; i++) {
+            espera_us(500000);
+            uint32_t ahora = gpio_entradas();
+            if (ahora != antes) {
+                kprint("\n  cambio: "); kprint_hex(antes); kprint(" -> "); kprint_hex(ahora);
+                if (activo) kprint(((ahora >> g) & 1) == (uint32_t)pol ? " (APAGADA)" : " (ENCENDIDA)");
+                antes = ahora; cambios++;
+            } else if ((i & 3) == 3) kputc('.');
+        }
+        kprint(cambios ? "\n  Ha cambiado: deja la WiFi ENCENDIDA y escribe redes\n"
+                       : "\n  No ha cambiado nada con la tecla\n");
+    }
+    return apagada;
+}
 
 /* ---- para la orden «compara»: deja la radio ajustada en un canal (como para escuchar, pero SIN escuchar:
    la recepción sigue apagada y no se da permiso de DMA) y deja leer sus registros ---- */
@@ -5337,10 +5381,12 @@ _D17 = _D16 + r"""#include "radio.h"
 
 static void o_redes(const char *a) { (void)a; radio_escanear(); }
 static void o_compara(const char *a) { compara_orden(a); }
+static void o_interruptor(const char *a) { (void)a; radio_interruptor(1); }
 """
 _C17 = _C16 + "    radio_probar();\n"
 _O17 = _O16 + '    shell_orden("redes", "escucha y lista las redes WiFi de alrededor (sin transmitir)", o_redes);\n' + \
-    '    shell_orden("compara", "compara mis registros de la WiFi con los de Linux (compara 2 = pagina 2)", o_compara);\n'
+    '    shell_orden("compara", "compara mis registros de la WiFi con los de Linux (compara 2 = pagina 2)", o_compara);\n' + \
+    '    shell_orden("interruptor", "mira si el portatil tiene la radio WiFi apagada y vigila la tecla 20 s", o_interruptor);\n'
 
 _K11 = _k_shell("etapa 11: consola propia", _D11, _C11, "")
 _K12 = _k_shell("etapa 12: multitarea", _D12, _C12, _O12)

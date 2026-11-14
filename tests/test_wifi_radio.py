@@ -272,6 +272,12 @@ ok(m58 is not None and int(m58.group(2)) > 30 and m58.group(1) == m58.group(2) a
    + (m58.group(0) if m58 else "?"))
 ok("diag 4 (prueba de escritura analogica" in s52 and s52.count(" bloque s") == 2 and "version de la radio" in s52,
    "v3.59: diag 4 prueba en qué condición se queda una escritura analógica (en el simulador, todas)")
+ok("WiFi interruptor: EEPROM rfSilent" in s52 and "Entradas GPIO ahora" in s52,
+   "v3.60: redes dice cómo está el interruptor de la radio (EEPROM rfSilent + entradas GPIO)")
+_ri = RC.split("int radio_interruptor(int vigilar) {")[1].split("\n}\n")[0]
+ok("W(" not in _ri and "wifi_escribe" not in _ri and "pon(" not in _ri, "el interruptor SOLO lee: ninguna escritura")
+import saber_so_kira as _sk
+ok('shell_orden("interruptor"' in _sk._O17, "orden «interruptor» en la consola")
 ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],
    "la prueba analógica no toca nada de transmitir")
 
