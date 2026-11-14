@@ -73,6 +73,32 @@ def _ahora():
     return time.strftime("%Y-%m-%d %H:%M")
 
 
+GRUB_PC = os.environ.get("KIRA_GRUB_PC") or "/usr/lib/grub/i386-pc"
+
+
+def grub_cfg(espera=10):
+    """El menú de arranque del USB. Puro."""
+    return (f"set timeout={int(espera)}\nset default=0\nterminal_output console\n\n"
+            "menuentry \"Kernel de Kira\" {\n    multiboot /boot/kernel.bin\n    boot\n}\n\n"
+            "menuentry \"Reiniciar\" {\n    reboot\n}\n")
+
+
+def usbs_de_lsblk(texto):
+    """De `lsblk -J -d -o NAME,RM,TRAN,SIZE,MODEL,TYPE`: solo los discos USB extraíbles. Puro."""
+    try:
+        datos = json.loads(texto or "{}")
+    except ValueError:
+        return []
+    fuera = []
+    for d in datos.get("blockdevices") or []:
+        rm = str(d.get("rm")).lower() in ("1", "true")
+        if d.get("type") == "disk" and str(d.get("tran") or "").lower() == "usb" and rm and \
+                re.fullmatch(r"sd[a-z]{1,2}", str(d.get("name") or "")):
+            fuera.append({"dispositivo": "/dev/" + d["name"], "modelo": str(d.get("model") or "").strip(),
+                          "tamano": str(d.get("size") or "?")})
+    return fuera
+
+
 def errores_cortos(salida, maximo=25):
     """De la salida del compilador, las líneas que importan (errores primero). Puro."""
     lineas = [l for l in str(salida or "").splitlines() if l.strip()]
@@ -319,9 +345,31 @@ class Taller:
         avisos = errores_cortos("\n".join(salidas), 8)
         return True, ("Compila bien." + (" Avisos:\n" + avisos if avisos else ""))
 
+    @property
+    def ruta_disco(self):
+        return os.path.join(self.base, "disco.img")
+
+    def asegurar_disco(self):
+        """El disco de PRUEBAS (1 MB) que ve el kernel en QEMU, con la firma «KIRADISK» en el sector 0: es el único
+        disco en el que su driver se atreve a escribir."""
+        if os.path.isfile(self.ruta_disco) and os.path.getsize(self.ruta_disco) == 1024 * 1024:
+            return self.ruta_disco
+        os.makedirs(self.base, exist_ok=True)
+        cab = "KIRADISK: el disco de pruebas de Kira (QEMU)".encode()
+        with open(self.ruta_disco, "wb") as f:
+            f.write(cab + b"\0" * (512 - len(cab)))
+            f.write(b"\0" * (1024 * 1024 - 512))
+        return self.ruta_disco
+
+    def _aparatos(self):
+        """Lo que se le enchufa al ordenador de mentira: el disco de pruebas y una tarjeta de red e1000 con la red de
+        QEMU AISLADA (restrict=on: ni internet ni tu casa; solo su router virtual 10.0.2.2)."""
+        return ["-drive", f"file={self.asegurar_disco()},format=raw,if=ide,index=0,media=disk",
+                "-netdev", "user,id=red0,restrict=on", "-device", "e1000,netdev=red0"]
+
     def orden_qemu(self, con_pantalla=False):
-        args = ["qemu-system-i386", "-kernel", os.path.join(self.base, "kernel.bin"), "-m", "128", "-nic", "none",
-                "-no-reboot"]
+        args = ["qemu-system-i386", "-kernel", os.path.join(self.base, "kernel.bin"), "-m", "128",
+                "-no-reboot"] + self._aparatos()
         if con_pantalla:
             return args + ["-serial", "null", "-name", "Kernel de Kira"]
         return args + ["-display", "none", "-serial", "stdio", "-monitor", "none",
@@ -337,6 +385,12 @@ class Taller:
         if not os.path.isfile(os.path.join(self.base, "kernel.bin")):
             return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
                     "motivo": "No hay kernel.bin: compila antes."}
+        return self._correr_qemu(self.orden_qemu(), espera, segundos)
+
+    def _correr_qemu(self, args, espera, segundos):
+        if not self.which("qemu-system-i386"):
+            return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
+                    "motivo": self.texto_faltan(["qemu-system-i386"])}
         log = os.path.join(self.base, "qemu.log")
         try:
             os.remove(log)
@@ -344,7 +398,7 @@ class Taller:
             pass
         serie = ""
         try:
-            p = self.popen(self.orden_qemu(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            p = self.popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            stdin=subprocess.DEVNULL, cwd=self.base)
         except Exception as e:                       # noqa: BLE001
             return {"ok": False, "serie": "", "reinicio": False, "excepciones": [], "faltan": espera,
@@ -423,6 +477,81 @@ class Taller:
             return False, f"No pude abrir la ventana de QEMU: {e}"
         return True, ("Te abro mi kernel en una ventana de QEMU (un ordenador de mentira, sin red ni discos). "
                       "Ciérrala cuando quieras.")
+
+    # ---------------- arrancar desde un USB (v3.36) ----------------
+    @property
+    def ruta_iso(self):
+        return os.path.join(self.base, "kira_kernel.iso")
+
+    def faltan_iso(self):
+        falta = [h for h in ("grub-mkrescue", "xorriso") if not self.which(h)]
+        if not os.path.isdir(GRUB_PC) and "grub-mkrescue" not in falta:
+            falta.append("grub-pc-bin")
+        return falta
+
+    def hacer_iso(self, espera=10):
+        """Mete el kernel en una imagen arrancable con GRUB (sirve para un pendrive USB o un CD). (ok, texto)."""
+        ok, sal = self.compilar()
+        if not ok:
+            return False, "No compila, así que no hago el USB:\n" + sal
+        falta = self.faltan_iso()
+        if falta:
+            paq = sorted({"grub-mkrescue": "grub-common", "xorriso": "xorriso", "grub-pc-bin": "grub-pc-bin"}[x]
+                         for x in falta)
+            return False, ("Para preparar el USB me falta: " + ", ".join(falta) + ". En la Terminal:  sudo apt install "
+                           + " ".join(paq + ["mtools"]) + "  (o «instala " + paq[0] + "» si ya me diste el permiso).")
+        carpeta = os.path.join(self.base, "iso")
+        shutil.rmtree(carpeta, ignore_errors=True)
+        os.makedirs(os.path.join(carpeta, "boot", "grub"))
+        shutil.copy2(os.path.join(self.base, "kernel.bin"), os.path.join(carpeta, "boot", "kernel.bin"))
+        with open(os.path.join(carpeta, "boot", "grub", "grub.cfg"), "w", encoding="utf-8") as f:
+            f.write(grub_cfg(espera))
+        try:
+            rc, salida = self.correr(["grub-mkrescue", "-o", self.ruta_iso, carpeta], cwd=self.base, timeout=300)
+        except Exception as e:                       # noqa: BLE001
+            return False, f"No pude hacer la imagen: {e}"
+        if rc != 0 or not os.path.isfile(self.ruta_iso):
+            return False, "grub-mkrescue falló:\n" + errores_cortos(salida, 10)
+        mb = os.path.getsize(self.ruta_iso) / 1024 / 1024
+        return True, f"Imagen arrancable lista: {self.ruta_iso} ({mb:.1f} MB)."
+
+    def probar_iso(self, espera=None, segundos=40):
+        """Arranca la IMAGEN en QEMU como si fuera el USB (BIOS → GRUB → kernel): comprueba el camino real."""
+        espera = list(espera or ["KERNEL_LISTO"])
+        if not os.path.isfile(self.ruta_iso):
+            return {"ok": False, "motivo": "No hay imagen: hazla antes.", "serie": ""}
+        args = ["qemu-system-i386", "-cdrom", self.ruta_iso, "-boot", "d", "-m", "128", "-no-reboot",
+                "-display", "none", "-serial", "stdio", "-monitor", "none"] + self._aparatos()
+        return self._correr_qemu(args, espera, segundos)
+
+    def usbs(self):
+        """Los pendrives USB conectados (solo discos USB extraíbles). [] si no hay o no está lsblk."""
+        try:
+            rc, salida = self.correr(["lsblk", "-J", "-d", "-o", "NAME,RM,TRAN,SIZE,MODEL,TYPE"], timeout=20)
+        except Exception:                            # noqa: BLE001
+            return []
+        return usbs_de_lsblk(salida) if rc == 0 else []
+
+    def texto_usb(self, ok_iso, texto_iso):
+        if not ok_iso:
+            return "[x] " + texto_iso
+        usbs = self.usbs()
+        lin = [texto_iso + " Dentro va tu kernel con un menú de GRUB: «Kernel de Kira» o «Reiniciar».", ""]
+        if usbs:
+            lin.append("Pendrives que veo conectados: " + "; ".join(
+                f"{u['dispositivo']} ({u['modelo'] or 'sin nombre'}, {u['tamano']})" for u in usbs) + ".")
+        else:
+            lin.append("No veo ningún pendrive conectado. Conéctalo y dime «busca mi USB».")
+        lin += ["",
+                "Para GRABARLO en el pendrive (¡BORRA todo lo que tenga!) lo haces TÚ, no yo: yo nunca escribo en un "
+                "disco. En la Terminal escribe  cd kira_god/kira_portatil  (Intro) y luego  bash grabar_usb  (Intro; "
+                "con Tab se completa). Te enseña los pendrives, eliges el número, escribes SI y te pide TU contraseña.",
+                "",
+                "Para arrancarlo: reinicia, pulsa F12 al encender, elige el USB y luego «Kernel de Kira». Con Esc se "
+                "reinicia y vuelves a KiraOS. Linux y tus archivos no se tocan.",
+                "Si al arrancar la pantalla se queda en negro: tu portátil está arrancando en modo UEFI; en la BIOS "
+                "(F2) pon el arranque en «Legacy». Así se ve la pantalla de texto del kernel."]
+        return "\n".join(lin)
 
     # ---------------- programar con el cerebro ----------------
     def _relevantes(self, tarea, maximo=2600):
@@ -628,6 +757,9 @@ def orden(texto):
     """(accion, carga) o None. Puro."""
     t = re.sub(r"^\s*(?:oye\s+|hola\s+)?kira\b[\s,:;.!¡]*", "", str(texto or ""), flags=re.I).strip()
     low = so._norm(t).rstrip(" .!?¿¡")
+    if re.match(r"^(?:busca|ve|mira|que|cuales\s+son)\s+(?:mi|mis|el|los|tengo)?\s*(?:usb|pendrives?|memorias?\s+usb)"
+                r"(?:\s+(?:tengo|hay|conectados?))?$", low):
+        return ("usbs", "")
     if "kernel" not in low:
         return None
     m = re.match(r"^(?:programa(?:me)?|mejora|cambia|modifica|anade|haz|ponle|arregla)\s+(?:en\s+)?" + _K +
@@ -638,6 +770,10 @@ def orden(texto):
         t2 = t.rstrip(" .!?¿¡")
         carga = t2[m.start(1):].strip() if len(t2) == len(low) else m.group(1)
         return ("programar", carga)
+    if re.match(r"^(?:prepara|haz|crea|graba|pon)(?:me)?\s+(?:el\s+|un\s+)?(?:usb|pendrive|iso)\s+(?:del|de\s+tu|de\s+mi|con\s+el|para\s+el)\s+"
+                r"kernel$|^(?:prepara|pon)(?:me)?\s+" + _K + r"\s+(?:en|para\s+(?:arrancar\s+(?:desde|en|con)\s+)?)\s*(?:un\s+|el\s+)?"
+                r"(?:usb|pendrive)$|^(?:haz|crea)(?:me)?\s+la\s+iso\s+" + _K + r"$", low):
+        return ("usb", "")
     if re.match(r"^compila(?:me)?\s+" + _K + r"$", low):
         return ("compilar", "")
     if re.match(r"^(?:ensename|muestrame|abre|ensenamelo)\s+" + _K + r"\s+(?:funcionando|en\s+(?:una\s+)?ventana|en\s+qemu)$",
@@ -703,6 +839,15 @@ def hacer(taller, accion, carga="", preguntar=None, al_paso=None, parar=None, ay
             return {"texto": (f"Puesta la etapa {e['n']} ({e['titulo']}). " +
                               ("Funciona ✓. Puerto serie:\n" + r.get("serie", "").strip()[-900:] if r["ok"] else
                                f"Pero aquí falla ({r['fase']}): {r['texto'][:600]}"))}
+        if accion == "usb":
+            paso(0.3, "Meto el kernel en una imagen arrancable con GRUB…")
+            ok, txt = taller.hacer_iso()
+            return {"texto": taller.texto_usb(ok, txt), **({} if ok else {"ok": False})}
+        if accion == "usbs":
+            us = taller.usbs()
+            return {"texto": ("Pendrives conectados: " + "; ".join(f"{u['dispositivo']} ({u['modelo'] or 'sin nombre'}, "
+                                                                  f"{u['tamano']})" for u in us) + "."
+                              if us else "No veo ningún pendrive USB conectado.")}
         if accion == "deshacer":
             q = taller.deshacer()
             return {"texto": f"Deshecho: he vuelto a como estaba {q}." if q else "No tengo cambios que deshacer."}
@@ -717,7 +862,7 @@ def hacer(taller, accion, carga="", preguntar=None, al_paso=None, parar=None, ay
         return {"ok": False, "texto": f"[x] {e}"}
 
 
-def probar_etapas(base, salida=None):
+def probar_etapas(base, salida=None, probar_usb=False):
     """Para el flujo de GitHub: pone cada etapa, la compila y la arranca de verdad en QEMU. Devuelve True si todas
     funcionan. Escribe un informe en `salida` si se da."""
     t = Taller(base=base)
@@ -729,6 +874,12 @@ def probar_etapas(base, salida=None):
         informe.append(f"== Etapa {e['n']}: {e['titulo']} → {'OK' if r['ok'] else 'FALLA'} ({r['fase']}: "
                        f"{r['texto'][:300]})\n{r.get('serie', '').strip()}\n" +
                        ("Excepciones: " + "; ".join(r.get("excepciones", [])) + "\n" if r.get("excepciones") else ""))
+    if probar_usb:
+        ok_i, txt_i = t.hacer_iso(espera=0)
+        r = t.probar_iso(so.ETAPAS[-1]["espera"]) if ok_i else {"ok": False, "motivo": txt_i, "serie": ""}
+        todo = todo and r["ok"]
+        informe.append(f"== USB (BIOS → GRUB → kernel): {'OK' if r['ok'] else 'FALLA'} ({r.get('motivo', '')[:300]})\n"
+                       f"{r.get('serie', '').strip()[-1500:]}\n")
     texto = "\n".join(informe)
     if salida:
         with open(salida, "w", encoding="utf-8") as f:
@@ -743,12 +894,23 @@ if __name__ == "__main__":
     ap.add_argument("--base", default=None)
     ap.add_argument("--probar-etapas", action="store_true")
     ap.add_argument("--informe", default=None)
+    ap.add_argument("--usb", action="store_true", help="con --probar-etapas: también la imagen USB en QEMU")
     ap.add_argument("--etapa", type=int)
     ap.add_argument("--probar", action="store_true")
     ap.add_argument("--ver", action="store_true")
+    ap.add_argument("--usbs", action="store_true", help="lista los pendrives USB (para grabar_usb.sh)")
     a = ap.parse_args()
+    if a.usbs:
+        if os.environ.get("KIRA_LSBLK_JSON"):
+            with open(os.environ["KIRA_LSBLK_JSON"], encoding="utf-8") as f:
+                lista = usbs_de_lsblk(f.read())
+        else:
+            lista = Taller(base=a.base).usbs()
+        for i, u in enumerate(lista, 1):
+            print(f"{i}) {u['dispositivo']}  {u['modelo'] or 'sin nombre'}  {u['tamano']}")
+        sys.exit(0)
     if a.probar_etapas:
-        sys.exit(0 if probar_etapas(a.base or BASE, a.informe) else 1)
+        sys.exit(0 if probar_etapas(a.base or BASE, a.informe, probar_usb=a.usb) else 1)
     tl = Taller(base=a.base)
     if a.etapa:
         print(hacer(tl, "etapa", str(a.etapa))["texto"])

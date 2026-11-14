@@ -6,6 +6,7 @@ mentira (falla, corrige, acierta; o falla siempre y deja el kernel como estaba) 
 las marcas que el kernel lleva dentro. Con --qemu-real (en el flujo probar_kernel.yml) usa QEMU de verdad.
 """
 import ast
+import json
 import os
 import shutil
 import subprocess
@@ -17,6 +18,8 @@ T = tempfile.mkdtemp()
 os.environ["HOME"] = T
 os.environ["KIRA_DATA_DIR"] = T
 os.environ["KIRA_KERNEL"] = os.path.join(T, "kernel_nucleo")
+if "--qemu-real" not in sys.argv:
+    os.environ["KIRA_GRUB_PC"] = T                  # finge que están los módulos de GRUB para BIOS
 sys.path.insert(0, RAIZ)
 sys.path.insert(0, os.path.join(RAIZ, "kira_portatil"))
 import saber_so_kira as so          # noqa: E402
@@ -36,13 +39,21 @@ def ok(c, m):
 
 # ---------------- el saber ----------------
 ok(len(so.fichas()) >= 15 and all(len(x) > 150 for _t, x in so.fichas()), "fichas de SO por dentro, con chicha")
-ok([e["n"] for e in so.ETAPAS] == [1, 2, 3, 4, 5], "5 etapas")
+ok([e["n"] for e in so.ETAPAS] == [1, 2, 3, 4, 5, 6, 7, 8], "8 etapas")
 ok(all("KERNEL_LISTO" in e["espera"] for e in so.ETAPAS), "todas esperan KERNEL_LISTO")
 ok(all({"boot.s", "linker.ld", "kernel.c"} <= set(e["archivos"]) for e in so.ETAPAS), "cada etapa trae su base")
 ok(so.etapa_para("añade la GDT")["n"] == 2 and so.etapa_para("pon las interrupciones")["n"] == 3 and
    so.etapa_para("que funcione el teclado")["n"] == 4 and so.etapa_para("activa la paginación")["n"] == 5,
    "lo pedido → su etapa")
 ok(so.etapa_para("que imprima mi nombre") is None, "algo que no es una etapa → None (lo hace el cerebro)")
+ok(so.etapa_para("lista los aparatos del bus pci")["n"] == 6 and so.etapa_para("hazle un driver de disco")["n"] == 7 and
+   so.etapa_para("que use la tarjeta de red")["n"] == 8, "PCI → 6, disco → 7, red → 8")
+DISCO_C = so.etapa(7)["archivos"]["disco.c"]
+ok(DISCO_C.index('igual(sector, "KIRADISK", 8)') < DISCO_C.index("disco_escribir(1"),
+   "el driver de disco SOLO escribe si el sector 0 dice KIRADISK (nunca en el disco de tu portátil)")
+CONSOLA = so.etapa(1)["archivos"]["consola.c"]
+ok("serie_ok" in CONSOLA and "i < 100000" in CONSOLA, "sin puerto serie (portátil de verdad) no se queda esperando")
+ok("0xFE" in so.etapa(4)["archivos"]["teclado.c"], "Esc reinicia (para volver a KiraOS desde el USB)")
 ok("GDT" in so.fichas_para("añade la gdt")[0][0], "la ficha que toca")
 ok("[✓] 2." in so.texto_etapas(2) and "[ ] 3." in so.texto_etapas(2), "texto de etapas con las hechas")
 
@@ -78,11 +89,12 @@ ok(tk.errores_cortos("a.c:1: warning: x\na.c:2: error: y").startswith("a.c:2: er
 
 # ---------------- QEMU de mentira: imprime las marcas que el kernel lleva dentro ----------------
 MARCAS = ["Hola desde mi SO!", "Multiboot OK", "GDT OK", "IDT OK", "punto de ruptura", "Excepciones OK", "PIC OK",
-          "Teclado OK", "TIMER OK", "MARCOS OK", "PAGINACION OK", "HEAP OK", "KERNEL_LISTO", "SEGUNDOS OK"]
+          "Teclado OK", "TIMER OK", "MARCOS OK", "PAGINACION OK", "HEAP OK", "PCI OK", "DISCO OK: leo y escribo",
+          "Red: tarjeta e1000", "RED OK", "KERNEL_LISTO", "SEGUNDOS OK"]
 FALSO = r'''
 import sys, os
 args = sys.argv[1:]
-binario = args[args.index("-kernel") + 1]
+binario = args[args.index("-kernel") + 1] if "-kernel" in args else args[args.index("-cdrom") + 1]
 log = args[args.index("-D") + 1] if "-D" in args else None
 datos = open(binario, "rb").read()
 if b"CUELGATE" in datos:
@@ -99,6 +111,19 @@ with open(RUTA_FALSO, "w") as f:
     f.write(FALSO)
 
 
+def correr_falso(args, cwd=None, timeout=120):
+    if args and args[0] == "grub-mkrescue":          # imagen de mentira: copia el kernel (el QEMU falso lo lee)
+        salida, carpeta = args[args.index("-o") + 1], args[-1]
+        shutil.copy(os.path.join(carpeta, "boot", "kernel.bin"), salida)
+        return 0, ""
+    if args and args[0] == "lsblk":
+        return 0, json.dumps({"blockdevices": [
+            {"name": "sda", "rm": False, "tran": "sata", "size": "223,6G", "model": "WDC", "type": "disk"},
+            {"name": "sdb", "rm": True, "tran": "usb", "size": "14,9G", "model": "SanDisk Cruzer", "type": "disk"},
+            {"name": "sr0", "rm": True, "tran": "usb", "size": "1G", "model": "DVD", "type": "rom"}]})
+    return tk._correr_defecto(args, cwd=cwd, timeout=timeout)
+
+
 def popen_falso(args, **kw):
     if args and args[0] == "qemu-system-i386":
         args = [sys.executable, RUTA_FALSO] + list(args[1:])
@@ -109,15 +134,17 @@ hay_compilador = bool(shutil.which("gcc") and shutil.which("nasm") and shutil.wh
 if QEMU_REAL:
     which = shutil.which
     popen = subprocess.Popen
+    correr = None
 else:
-    which = (lambda h: "/usr/bin/" + h if h == "qemu-system-i386" else shutil.which(h))
+    which = (lambda h: "/usr/bin/" + h if h in ("qemu-system-i386", "grub-mkrescue", "xorriso") else shutil.which(h))
     popen = popen_falso
+    correr = correr_falso
 
 if not hay_compilador:
     print("  (sin gcc/nasm aquí: me salto las pruebas que compilan)")
 else:
     base = os.path.join(T, "kernel")
-    t = tk.Taller(base=base, popen=popen, which=which)
+    t = tk.Taller(base=base, popen=popen, which=which, correr=correr)
     ok("Aún no he empezado" in t.texto_estado(), "estado sin empezar")
     for e in so.ETAPAS:
         t.poner_etapa(e["n"], copiar=False)
@@ -136,8 +163,52 @@ else:
     ok(not os.path.exists(os.path.join(T, "fuera.c")), "nada fuera de la carpeta del kernel")
 
     # ---- plantilla: «añade la IDT» desde la etapa 1 ----
+    # ---- el ordenador de mentira: disco de pruebas y red AISLADA ----
+    oq = " ".join(t.orden_qemu())
+    ok("restrict=on" in oq and "e1000" in oq and "disco.img" in oq and "-nic none" not in oq,
+       "QEMU con disco de pruebas y tarjeta e1000 con la red AISLADA (restrict=on)")
+    with open(t.ruta_disco, "rb") as f:
+        ok(f.read(8) == b"KIRADISK" and os.path.getsize(t.ruta_disco) == 1024 * 1024, "disco de pruebas con su firma")
+
+    # ---- USB: imagen con GRUB, probarla como si arrancara del pendrive ----
+    ok("multiboot /boot/kernel.bin" in tk.grub_cfg(5) and "timeout=5" in tk.grub_cfg(5) and "Reiniciar" in tk.grub_cfg(5),
+       "menú de GRUB del USB")
+    ok(tk.usbs_de_lsblk(correr_falso(["lsblk"])[1]) == [{"dispositivo": "/dev/sdb", "modelo": "SanDisk Cruzer",
+                                                        "tamano": "14,9G"}],
+       "solo ofrece pendrives USB extraíbles (ni el disco del sistema ni el lector de DVD)")
+    ok(tk.orden("prepara el usb del kernel") == ("usb", "") and tk.orden("busca mi usb") == ("usbs", ""), "órdenes del USB")
+    if not QEMU_REAL:
+        r = tk.hacer(t, "usb")
+        ok(r.get("ok") is not False and "Imagen arrancable lista" in r["texto"] and "/dev/sdb (SanDisk Cruzer" in r["texto"]
+           and "bash grabar_usb" in r["texto"] and "F12" in r["texto"] and "Legacy" in r["texto"] and
+           "yo nunca escribo en un" in r["texto"], "«prepara el USB del kernel»: imagen + pendrives + cómo grabarlo TÚ")
+        ok(t.probar_iso(so.ETAPAS[-1]["espera"])["ok"], "la imagen arranca (QEMU falso)")
+        t_sin = tk.Taller(base=base, popen=popen, correr=correr,
+                          which=lambda h: None if h in ("grub-mkrescue", "xorriso") else which(h))
+        ok("sudo apt install" in t_sin.hacer_iso()[1] and "xorriso" in t_sin.hacer_iso()[1], "sin GRUB/xorriso dice cómo")
+        # grabar_usb.sh de verdad, con un dd de mentira
+        lsb = os.path.join(T, "lsblk.json")
+        with open(lsb, "w") as f:
+            f.write(correr_falso(["lsblk"])[1])
+        mont = os.path.join(T, "montajes.txt")
+        open(mont, "w").close()
+        env = dict(os.environ, KIRA_KERNEL=base, KIRA_LSBLK_JSON=lsb, KIRA_DD="echo GRABARIA", KIRA_UMOUNT="true",
+                   KIRA_MONTAJES=mont, KIRA_PRUEBA="1")
+        guion = os.path.join(RAIZ, "kira_portatil", "grabar_usb.sh")
+        g = subprocess.run(["bash", guion], input="1\nSI\n", capture_output=True, text=True, env=env, timeout=60)
+        ok("GRABARIA if=" + t.ruta_iso + " of=/dev/sdb" in g.stdout and "F12" in g.stdout,
+           "grabar_usb: eliges el 1, escribes SI → graba en /dev/sdb")
+        g = subprocess.run(["bash", guion], input="1\nno\n", capture_output=True, text=True, env=env, timeout=60)
+        ok("GRABARIA" not in g.stdout and "no grabo" in g.stdout, "sin SI no graba nada")
+        g = subprocess.run(["bash", guion], input="7\n", capture_output=True, text=True, env=env, timeout=60)
+        ok("GRABARIA" not in g.stdout and "no está en la lista" in g.stdout, "un número que no está → nada")
+        with open(mont, "w") as f:
+            f.write("/\n")
+        g = subprocess.run(["bash", guion], input="1\nSI\n", capture_output=True, text=True, env=env, timeout=60)
+        ok("GRABARIA" not in g.stdout and "No lo toco" in g.stdout, "el disco con el sistema: se niega")
+
     shutil.rmtree(base)
-    t = tk.Taller(base=base, popen=popen, which=which)
+    t = tk.Taller(base=base, popen=popen, which=which, correr=correr)
     r = tk.hacer(t, "programar", "añade la IDT para las excepciones", preguntar=None)
     ok(r.get("ok") is not False and "plantilla probada" in r["texto"] and t.estado()["etapa"] == 3,
        "«añade la IDT» usa la plantilla probada (sin cerebro) y la prueba")
@@ -193,7 +264,8 @@ else:
         ok(rr.get("ok") is not False and "compila y arranca" in rr["texto"], "«prueba el kernel»")
 
     # ---- sin QEMU: lo dice con cómo instalarlo ----
-    t2 = tk.Taller(base=os.path.join(T, "k2"), which=lambda h: None if h == "qemu-system-i386" else shutil.which(h))
+    t2 = tk.Taller(base=os.path.join(T, "k2"), which=lambda h: None if h == "qemu-system-i386" else shutil.which(h),
+                   correr=correr)
     t2.asegurar()
     ok(t2.compilar()[0] and "sudo apt install qemu-system-x86" in t2.arrancar()["motivo"],
        "sin QEMU: compila y explica cómo instalarlo")

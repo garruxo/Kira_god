@@ -177,7 +177,8 @@ if [ "$PRUEBA" = "0" ]; then
     openssh-client tigervnc-viewer >/dev/null 2>&1 || \
     echo "  (no pude instalar QEMU ahora; la máquina de Kira esperará a la próxima vez)"
   # v3.35: el TALLER DE KERNEL (Kira programa un sistema operativo y lo arranca en QEMU): nasm + gcc/ld.
-  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq nasm build-essential >/dev/null 2>&1 || \
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq nasm build-essential grub-pc-bin grub-common \
+    xorriso mtools >/dev/null 2>&1 || \
     echo "  (no pude instalar nasm ahora; el taller de kernel te dirá cómo cuando lo uses)"
   if getent group kvm >/dev/null; then
     $SUDO usermod -aG kvm "$USER" || true                # para que vaya rápida (KVM) sin ser administrador
@@ -351,6 +352,13 @@ KIRAPIENSA
 exec bash "$AQUI/permiso_apps.sh" "\$@"
 KIRAPERMISO
   $SUDO chmod +x /usr/local/bin/kira-permiso
+  # v3.36: grabar el kernel de Kira en un pendrive USB (lo haces tú; pide SI y tu contraseña).
+  $SUDO tee /usr/local/bin/kira-usb >/dev/null <<KIRAUSB
+#!/usr/bin/env bash
+# Graba el kernel de Kira en un pendrive USB para arrancarlo en el portátil (BORRA el pendrive; pide confirmación).
+exec bash "$AQUI/grabar_usb.sh" "\$@"
+KIRAUSB
+  $SUDO chmod +x /usr/local/bin/kira-usb
   # v2.88: KiraOS controla la WiFi del portátil (con nmcli; la clave solo se escribe en el portátil).
   $SUDO tee /usr/local/bin/kira-wifi >/dev/null <<KIRAWIFI
 #!/usr/bin/env bash

@@ -173,3 +173,12 @@ Para que al encender NO se vea Xubuntu (ni su logo al arrancar ni su escritorio)
   «config deepseek <clave>»…). Si Kira falla dos veces seguidas con un código, les pregunta, prueba lo que dicen
   (el kernel en QEMU, los programas en su máquina virtual) y se queda con lo que funciona. «qué IA tengo»,
   «desactiva la ayuda de otras IA».
+
+## v3.36: el kernel con drivers y arrancarlo desde un USB
+
+- Etapas nuevas: «pon la etapa 6 del kernel» (lista los aparatos PCI), 7 (driver de disco: solo escribe en su
+  disco de pruebas), 8 (driver de red e1000: habla con el router virtual, con la red aislada).
+- **Probarlo en tu portátil de verdad:** dile «prepara el USB del kernel». Luego, en la Terminal:
+  `cd kira_god/kira_portatil` y `bash grabar_usb` (te enseña los pendrives, eliges el número, escribes SI y tu
+  contraseña; BORRA el pendrive). Reinicia, F12, elige el USB y «Kernel de Kira». Esc = reiniciar y volver a KiraOS.
+  Si la pantalla se queda negra: en la BIOS (F2) arranque en «Legacy».
