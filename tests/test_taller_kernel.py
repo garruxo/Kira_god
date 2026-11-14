@@ -39,7 +39,7 @@ def ok(c, m):
 
 # ---------------- el saber ----------------
 ok(len(so.fichas()) >= 15 and all(len(x) > 150 for _t, x in so.fichas()), "fichas de SO por dentro, con chicha")
-ok([e["n"] for e in so.ETAPAS] == list(range(1, 17)), "16 etapas")
+ok([e["n"] for e in so.ETAPAS] == list(range(1, 18)), "17 etapas")
 ok(all("KERNEL_LISTO" in e["espera"] for e in so.ETAPAS), "todas esperan KERNEL_LISTO")
 ok(all({"boot.s", "linker.ld", "kernel.c"} <= set(e["archivos"]) for e in so.ETAPAS), "cada etapa trae su base")
 ok(so.etapa_para("añade la GDT")["n"] == 2 and so.etapa_para("pon las interrupciones")["n"] == 3 and
@@ -124,7 +124,7 @@ MARCAS = ["Hola desde mi SO!", "Multiboot OK", "GDT OK", "IDT OK", "punto de rup
           "Red: tarjeta e1000", "RED OK", "AHCI OK", "Tabla MBR", "Tabla GPT", "KERNEL_LISTO", "SEGUNDOS OK",
           "EXT4: particion Linux", "Hola desde el disco de Kira", "EXT4 OK", "kira:", "Ordenes:", "Memoria libre",
           "MULTITAREA OK", "contador A", "Hola desde el modo usuario (anillo 3)", "lo cierro. El sistema sigue.",
-          "MODO USUARIO OK", "Hola desde un programa cargado del disco", "PROGRAMA OK", "DHCP OK", "WIFI W1:"]
+          "MODO USUARIO OK", "Hola desde un programa cargado del disco", "PROGRAMA OK", "DHCP OK", "WIFI W1:", "WIFI W2:"]
 FALSO = r'''
 import sys, os
 args = sys.argv[1:]

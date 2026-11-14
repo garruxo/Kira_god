@@ -4085,12 +4085,603 @@ static void o_wifi(const char *a) { (void)a; wifi_probar(); }
 _C16 = _C15 + "    wifi_probar();\n"
 _O16 = _O15 + '    shell_orden("wifi", "despierta la WiFi Atheros y lee su EEPROM (solo leer)", o_wifi);\n'
 
+# ---------------- etapa 17: WiFi W2 — encender la radio SOLO PARA ESCUCHAR y listar las redes ----------------
+# Portado de Linux (ath9k, licencia ISC de Atheros): ath9k_hw_reset para AR9287 a 2,4 GHz HT20, con las tablas
+# de wifi_tablas_kira.py. NUNCA transmite: no se toca AR_Q_TXE ni se da ningún descriptor de envío, y la tarjeta
+# tiene apagadas las respuestas automáticas (AR_DIAG_ACK_DIS y AR_DIAG_CTS_DIS).
+from wifi_tablas_kira import AR9287_TABLAS_H as _AR9287_TABLAS_H
+
+_WIFI2_H = r"""/* wifi.h (v2, etapa 17+) — WiFi Atheros AR9287: leer el chip (W1) y piezas para la radio (W2) */
+#ifndef WIFI_H
+#define WIFI_H
+#include <stdint.h>
+
+struct wifi_info {
+    int      hay;
+    uint16_t aparato;
+    uint32_t srev;
+    uint32_t version, revision;
+    int      despierta;
+    int      eeprom_ok;
+    uint16_t magia;
+    uint16_t largo, suma, version_eeprom;
+    int      suma_ok;
+    uint8_t  mac[6];
+    uint16_t region[2];
+    uint8_t  antenas_rx, antenas_tx, capacidades, tipo;
+};
+
+int wifi_leer(struct wifi_info *w);
+void wifi_probar(void);
+uint32_t wifi_lee(uint32_t reg);                 /* registros de la tarjeta (para radio.c) */
+void wifi_escribe(uint32_t reg, uint32_t valor);
+const uint8_t *wifi_eeprom(void);                /* la EEPROM leída (desde la palabra 128) */
+void wifi_dma(int si);                           /* la tarjeta puede escribir en la RAM (para recibir) o no */
+
+#endif
+"""
+
+_WIFI2_C = (_WIFI_C
+            .replace("/* wifi.c — etapa W1", "/* wifi.c (v2, etapa 17+) — etapa W1 + piezas para W2")
+            .replace('#include "wifi.h"\n#include "consola.h"\n',
+                     '#include "wifi.h"\n#include "consola.h"\n')
+            .replace("static uint16_t datos[MAX_PALABRAS];",
+                     "static uint16_t datos[MAX_PALABRAS];\n"
+                     "#ifndef WIFI_SIMULADA\nstatic struct pci_disp disp;\nstatic int hay_disp = 0;\n#endif\n")
+            .replace("    w->aparato = d.aparato;\n",
+                     "    w->aparato = d.aparato;\n    disp = d; hay_disp = 1;\n")
+            + r"""
+uint32_t wifi_lee(uint32_t reg) { return lee(reg); }
+void wifi_escribe(uint32_t reg, uint32_t valor) { escribe(reg, valor); }
+const uint8_t *wifi_eeprom(void) { return (const uint8_t *)datos; }
+
+void wifi_dma(int si) {                       /* bit 2 del registro de órdenes PCI = bus master */
+#ifndef WIFI_SIMULADA
+    if (!hay_disp) return;
+    uint32_t orden = pci_leer(disp.bus, disp.disp, disp.func, 0x04);
+    pci_escribir(disp.bus, disp.disp, disp.func, 0x04, si ? (orden | 0x06) : ((orden | 0x02) & ~0x04u));
+#else
+    (void)si;
+#endif
+}
+""")
+
+_RADIO_H = r"""/* radio.h — WiFi W2: escuchar y listar las redes de alrededor (solo recibir) */
+#ifndef RADIO_H
+#define RADIO_H
+int radio_escanear(void);     /* devuelve cuántas redes ha oído, o <0 si no ha podido */
+void radio_probar(void);      /* lo de la etapa 17: lo escribe en pantalla */
+#endif
+"""
+
+_RADIO_C = r"""/* radio.c — etapa W2 de la WiFi Atheros AR9287: enciende la radio SOLO PARA ESCUCHAR, recorre los canales
+   1 a 13 de 2,4 GHz y apunta las redes que oye (nombre, canal, señal, seguridad) por sus «balizas» (beacons).
+
+   Portado de Linux (driver ath9k, licencia ISC de Atheros Communications): es la secuencia de
+   ath9k_hw_reset() para la AR9287 a 2,4 GHz HT20 (reinicio del chip, PLL, tablas de ajuste, canal, valores de
+   la placa sacados de la EEPROM, DMA, calibración AGC y ruido) más la recepción de ar9002 (descriptores
+   ar5416_desc). Se quita lo que solo sirve para TRANSMITIR (potencia, calibración del amplificador) y lo que
+   no hace falta para escuchar (ahorro de energía, cifrado, spur mitigation).
+
+   SEGURIDAD: NUNCA transmite. No se activa ninguna cola de envío (AR_Q_TXE) ni se da ningún descriptor de
+   envío; las respuestas automáticas de la tarjeta (ACK y CTS) se APAGAN (AR_DIAG_ACK_DIS | AR_DIAG_CTS_DIS);
+   la tarjeta solo puede escribir en la RAM (DMA) mientras escucha y al acabar se le quita el permiso.
+   Todas las esperas tienen tiempo máximo. Tu región es «mundial»: en 2,4 GHz se escucha en los canales 1-13. */
+#include <stdint.h>
+#include "wifi.h"
+#include "radio.h"
+#include "consola.h"
+#include "ar9287_tablas.h"
+
+#ifdef WIFI_SIMULADA
+void sim_paso(uint32_t us);
+uintptr_t radio_base_sim;
+static void espera_us(uint32_t n) { sim_paso(n); }
+#else
+#include "io.h"
+static void espera_us(uint32_t n) { while (n--) io_wait(); }
+#endif
+
+/* ---- registros (familia AR9002; nombres de reg.h / ar9002_phy.h de Linux) ---- */
+#define AR_CR                  0x0008
+#define AR_CR_RXE              0x00000004
+#define AR_CR_RXD              0x00000020
+#define AR_RXDP                0x000C
+#define AR_CFG                 0x0014
+#define AR_IER                 0x0024
+#define AR_TXCFG               0x0030
+#define AR_RXCFG               0x0034
+#define AR_GTXTO               0x0064
+#define AR_CST                 0x006C
+#define AR_ISR                 0x0080
+#define AR_IMR                 0x00A0
+#define AR_RC                  0x4000
+#define AR_RC_AHB              0x00000001
+#define AR_RC_HOSTIF           0x00000100
+#define AR_AHB_MODE            0x4024
+#define AR_INTR_SYNC_CAUSE     0x4028
+#define AR_INTR_SYNC_ENABLE    0x402C
+#define AR_INTR_ASYNC_ENABLE   0x403C
+#define AR_GPIO_INPUT_EN_VAL   0x4054
+#define AR_OBS                 0x4080
+#define AR_RTC_RC              0x7000
+#define AR_RTC_PLL_CONTROL     0x7014
+#define AR_RTC_RESET           0x7040
+#define AR_RTC_STATUS          0x7044
+#define AR_RTC_SLEEP_CLK       0x7048
+#define AR_RTC_FORCE_WAKE      0x704C
+#define AR_STA_ID0             0x8000
+#define AR_STA_ID1             0x8004
+#define AR_BSS_ID0             0x8008
+#define AR_BSS_ID1             0x800C
+#define AR_RSSI_THR            0x8018
+#define AR_RX_FILTER           0x803C
+#define AR_DIAG_SW             0x8048
+#define AR_DIAG_ACK_DIS        0x00000002
+#define AR_DIAG_CTS_DIS        0x00000004
+#define AR_DIAG_RX_DIS         0x00000020
+#define AR_DIAG_RX_ABORT       0x02000000
+#define AR_DEF_ANTENNA         0x8058
+#define AR_BSSMSKL             0x80E0
+#define AR_BSSMSKU             0x80E4
+#define AR_PHY_ERR             0x810C
+#define AR_RXFIFO_CFG          0x8114
+#define AR_2040_MODE           0x8318
+#define AR_SELFGEN_MASK        0x832C
+#define AR_PCU_TXBUF_CTRL      0x8340
+#define AR_PCU_MISC_MODE2      0x8344
+#define AR_PHY_BASE            0x9800
+#define AR_PHY_TURBO           0x9804
+#define AR_PHY_TIMING3         0x9814
+#define AR_PHY_ACTIVE          0x981C
+#define AR_PHY_RF_CTL2         0x9824
+#define AR_PHY_RF_CTL3         0x9828
+#define AR_PHY_ADC_SERIAL_CTL  0x9830
+#define AR_PHY_RF_CTL4         0x9834
+#define AR_PHY_SETTLING        0x9844
+#define AR_PHY_RXGAIN          0x9848
+#define AR_PHY_DESIRED_SZ      0x9850
+#define AR_PHY_AGC_CONTROL     0x9860
+#define AR_PHY_CCA             0x9864
+#define AR_PHY_SYNTH_CONTROL   0x9874
+#define AR_PHY_RX_DELAY        0x9914
+#define AR_PHY_TIMING_CTRL4    0x9920
+#define AR_PHY_SWITCH_CHAIN_0  0x9960
+#define AR_PHY_SWITCH_COM      0x9964
+#define AR_PHY_RX_CHAINMASK    0x99A4
+#define AR_PHY_EXT_CCA0        0x99B8
+#define AR_PHY_HALFGI          0x99D0
+#define AR_PHY_MODE            0xA200
+#define AR_PHY_GAIN_2GHZ       0xA20C
+#define AR_PHY_CAL_CHAINMASK   0xA39C
+#define AR9287_AN_RF2G3_CH0    0x7808
+#define AR9287_AN_RF2G3_CH1    0x785C
+#define AR9287_AN_TOP2         0x78B4
+
+#define AGC_CAL        0x00000001
+#define AGC_NF         0x00000002
+#define AGC_ENABLE_NF  0x00008000
+#define AGC_FLTR_CAL   0x00010000
+#define AGC_NO_UPDATE  0x00020000
+
+#define ESPERA_MAX     100000          /* AH_WAIT_TIMEOUT de Linux: 100 ms */
+
+static uint32_t R(uint32_t r) { return wifi_lee(r); }
+static void W(uint32_t r, uint32_t v) { wifi_escribe(r, v); }
+static void pon(uint32_t r, uint32_t b) { W(r, R(r) | b); }
+static void quita(uint32_t r, uint32_t b) { W(r, R(r) & ~b); }
+static void campo(uint32_t r, uint32_t mascara, int s, uint32_t v) { W(r, (R(r) & ~mascara) | ((v << s) & mascara)); }
+static void analogica(uint32_t r, uint32_t v) { W(r, v); espera_us(100); }      /* analog_shift_regwrite */
+static void analogica_campo(uint32_t r, uint32_t mascara, int s, uint32_t v) {
+    analogica(r, (R(r) & ~mascara) | ((v << s) & mascara));
+}
+static int esperar(uint32_t r, uint32_t mascara, uint32_t valor, uint32_t us) {
+    for (uint32_t t = 0; t < us; t += 10) {
+        if ((R(r) & mascara) == valor) return 1;
+        espera_us(10);
+    }
+    return 0;
+}
+static void tabla(const uint32_t (*t)[2], int n) {
+    for (int i = 0; i < n; i++) {
+        W(t[i][0], t[i][1]);
+        if (t[i][0] >= 0x7800 && t[i][0] < 0x78A0) espera_us(100);   /* registros analógicos: despacio */
+        if ((i & 63) == 63) espera_us(1);
+    }
+}
+static uint32_t le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
+
+/* ---- reinicio del chip (ath9k_hw_set_reset / set_reset_power_on / setpower / init_pll) ---- */
+static int encendido_hecho = 0;
+
+static int reinicio(int frio) {
+    W(AR_RTC_FORCE_WAKE, 0x3);
+    if (R(AR_INTR_SYNC_CAUSE) & (0x2000 | 0x1000)) {      /* LOCAL_TIMEOUT | RADM_CPL_TIMEOUT */
+        W(AR_INTR_SYNC_ENABLE, 0);
+        W(AR_RC, AR_RC_HOSTIF | AR_RC_AHB);
+    } else {
+        W(AR_RC, AR_RC_AHB);
+    }
+    W(AR_RTC_RC, frio ? 0x3 : 0x1);                        /* MAC_WARM (| MAC_COLD) */
+    espera_us(100);
+    W(AR_RTC_RC, 0);
+    if (!esperar(AR_RTC_RC, 0x3, 0, ESPERA_MAX)) return 0;
+    W(AR_RC, 0);
+    return 1;
+}
+
+static int encendido(void) {
+    W(AR_RTC_FORCE_WAKE, 0x3);
+    W(AR_RC, AR_RC_AHB);
+    W(AR_RTC_RESET, 0);
+    espera_us(2);
+    W(AR_RC, 0);
+    W(AR_RTC_RESET, 1);
+    if (!esperar(AR_RTC_STATUS, 0xF, 0x2, ESPERA_MAX)) return 0;
+    return reinicio(0);
+}
+
+static int despierta(void) {
+    W(AR_RTC_FORCE_WAKE, 0x3);
+    espera_us(50);
+    return esperar(AR_RTC_STATUS, 0xF, 0x2, ESPERA_MAX);
+}
+
+/* ---- coeficiente «delta slope» (ath9k_hw_get_delta_slope_vals) ---- */
+static void delta_vals(uint32_t escala, uint32_t *man, uint32_t *ex) {
+    uint32_t e;
+    for (e = 31; e > 0; e--) if ((escala >> e) & 1) break;
+    e = 14 - (e - 24);
+    uint32_t m = escala + (1u << (24 - e - 1));
+    *man = m >> (24 - e);
+    *ex = e - 16;
+}
+
+static uint8_t rx_mask = 3;
+
+/* ---- lo que hace ath9k_hw_reset para un canal de 2,4 GHz HT20 (solo lo necesario para ESCUCHAR) ---- */
+static int preparar(int canal, int *cal_ok) {
+    const uint8_t *e = wifi_eeprom();
+    const uint8_t *m = e + 96;                             /* modalHeader de la EEPROM de la AR9287 */
+    uint32_t freq = 2407 + 5 * (uint32_t)canal;
+    uint32_t ant = R(AR_DEF_ANTENNA);
+    if (!ant) ant = 1;
+
+    W(AR_PHY_ACTIVE, 0);                                   /* mark_phy_inactive */
+    if (!encendido_hecho) {
+        if (!encendido()) return -1;
+        encendido_hecho = 1;
+    } else if (!reinicio(1)) {
+        return -1;
+    }
+    if (!despierta()) return -2;
+    W(AR_RTC_PLL_CONTROL, (5 << 10) | 0x2C);               /* ar9002_hw_compute_pll_control: refdiv 5, div 0x2c */
+    espera_us(100);
+    W(AR_RTC_SLEEP_CLK, 0x2);                              /* AR_RTC_FORCE_DERIVED_CLK */
+    pon(AR_GPIO_INPUT_EN_VAL, 0x00020000);                 /* AR_GPIO_JTAG_DISABLE */
+
+    /* process_ini (ar5008_hw_process_ini, columna 2G HT20) */
+    W(AR_PHY_BASE, 0x00000007);
+    W(AR_PHY_ADC_SERIAL_CTL, 1);
+    W(AR_PHY_ADC_SERIAL_CTL, 0);
+    tabla(ar9287_modes, AR9287_MODES_N);
+    tabla(ar9287_rx_gain, AR9287_RX_GAIN_N);
+    tabla(ar9287_tx_gain, AR9287_TX_GAIN_N);
+    tabla(ar9287_common, AR9287_COMMON_N);
+    pon(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);    /* override_ini */
+    W(AR_PCU_MISC_MODE2, (R(AR_PCU_MISC_MODE2) & ~(0x40u | 0x00100000u | 0x02000000u)) | 0x80);
+    W(AR_PHY_TURBO, 0x40 | 0x80 | 0x200 | 0x100 | (R(AR_PHY_TURBO) & 0x800));   /* set_channel_regs, HT20 */
+    W(AR_2040_MODE, 0);
+    W(AR_GTXTO, 25u << 16);
+    W(AR_CST, 0xFu << 16);
+    W(AR_PHY_RX_CHAINMASK, rx_mask);                       /* init_chain_masks */
+    W(AR_PHY_CAL_CHAINMASK, rx_mask);
+    W(AR_SELFGEN_MASK, rx_mask);
+
+    W(AR_PHY_MODE, 0x04);                                  /* set_rfmode: AR_PHY_MODE_DYNAMIC */
+
+    uint32_t man, ex, escala = 0x64000000u / freq;         /* set_delta_slope */
+    delta_vals(escala, &man, &ex);
+    campo(AR_PHY_TIMING3, 0xFFFE0000u, 17, man);
+    campo(AR_PHY_TIMING3, 0x0001E000u, 13, ex);
+    escala = (9 * escala) / 10;
+    delta_vals(escala, &man, &ex);
+    campo(AR_PHY_HALFGI, 0x0007FFF0u, 4, man);
+    campo(AR_PHY_HALFGI, 0x0000000Fu, 0, ex);
+
+    /* set_board_values (eeprom_9287.c), con los valores de TU tarjeta */
+    W(AR_PHY_SWITCH_COM, le32(m + 8));
+    for (int i = 0; i < 2; i++) {
+        uint32_t off = (uint32_t)i * 0x1000;
+        W(AR_PHY_SWITCH_CHAIN_0 + off, le32(m + 4 * i));
+        uint32_t iq_i = (uint32_t)(int32_t)(int8_t)m[28 + i], iq_q = (uint32_t)(int32_t)(int8_t)m[30 + i];
+        W(AR_PHY_TIMING_CTRL4 + off, (R(AR_PHY_TIMING_CTRL4 + off) & ~(0x01Fu | 0x7E0u)) |
+                                     ((iq_i << 5) & 0x7E0u) | (iq_q & 0x01Fu));
+        campo(AR_PHY_GAIN_2GHZ + off, 0x0001F000u, 12, m[39 + i]);    /* bswMargin */
+        campo(AR_PHY_GAIN_2GHZ + off, 0x0000003Fu, 0, m[37 + i]);     /* bswAtten */
+        campo(AR_PHY_RXGAIN + off, 0x00003F80u, 7, m[15 + i]);        /* txRxAtten */
+        campo(AR_PHY_RXGAIN + off, 0x001FC000u, 14, m[17 + i]);       /* rxTxMargin */
+    }
+    campo(AR_PHY_SETTLING, 0x00003F80u, 7, m[14]);                    /* switchSettling */
+    campo(AR_PHY_DESIRED_SZ, 0x000000FFu, 0, (uint32_t)(int32_t)(int8_t)m[19]);
+    W(AR_PHY_RF_CTL4, (((uint32_t)m[20] << 16) & 0x00FF0000u) | ((uint32_t)m[20] << 24) |
+                      (m[22] & 0xFFu) | (((uint32_t)m[22] << 8) & 0xFF00u));
+    campo(AR_PHY_RF_CTL3, 0x00FF0000u, 16, m[21]);
+    campo(AR_PHY_CCA, 0x000FF000u, 12, m[23]);                        /* thresh62 */
+    campo(AR_PHY_EXT_CCA0, 0x000000FFu, 0, m[23]);
+    for (int i = 0; i < 2; i++) {
+        uint32_t reg = i ? AR9287_AN_RF2G3_CH1 : AR9287_AN_RF2G3_CH0;
+        uint32_t v = R(reg) & ~(0xE0000000u | 0x1C000000u | 0x03800000u | 0x00700000u | 0x000E0000u | 0x0001C000u);
+        v |= (((uint32_t)m[43] << 29) & 0xE0000000u) | (((uint32_t)m[44] << 26) & 0x1C000000u) |
+             (((uint32_t)m[45] << 23) & 0x03800000u) | (((uint32_t)m[46] << 20) & 0x00700000u) |
+             (((uint32_t)m[47] << 17) & 0x000E0000u) | (((uint32_t)m[48] << 14) & 0x0001C000u);
+        analogica(reg, v);
+    }
+    campo(AR_PHY_RF_CTL2, 0x000000FFu, 0, m[34]);
+    campo(AR_PHY_RF_CTL2, 0x0000FF00u, 8, m[35]);
+    analogica_campo(AR9287_AN_TOP2, 0xC0000000u, 30, m[33]);
+
+    /* reset_opmode: estación, con TU MAC (de la EEPROM) */
+    const uint8_t *mac = e + 12;
+    W(AR_STA_ID1, (R(AR_STA_ID1) & 0xFFFFu) | 0x00800000u);          /* RTS_USE_DEF */
+    W(AR_STA_ID0, le32(mac));
+    W(AR_STA_ID1, (R(AR_STA_ID1) & ~0xFFFFu) | mac[4] | (mac[5] << 8));
+    W(AR_BSSMSKL, 0xFFFFFFFFu);
+    W(AR_BSSMSKU, 0xFFFFu);
+    W(AR_DEF_ANTENNA, ant);
+    W(AR_BSS_ID0, 0);
+    W(AR_BSS_ID1, 0);
+    W(AR_ISR, 0xFFFFFFFFu);
+    W(AR_RSSI_THR, 0x700);
+    W(AR_STA_ID1, (R(AR_STA_ID1) & ~(0x00010000u | 0x00020000u)) | 0x10000000u);   /* modo estación + KSRCH */
+    quita(AR_CFG, 0x20);
+
+    /* el canal (ar9002_hw_set_channel, 2 GHz, modo fraccional) */
+    tabla(ar9287_cck_fir, AR9287_CCK_FIR_N);
+    uint32_t sel = (freq * 0x10000u) / 15;                 /* CHANSEL_2G */
+    W(AR_PHY_SYNTH_CONTROL, (R(AR_PHY_SYNTH_CONTROL) & 0xC0000000u) | (1u << 29) | (1u << 28) | sel);
+
+    W(AR_IMR, 0);                                          /* sin interrupciones: miramos nosotros */
+    W(AR_IER, 0);
+    W(AR_INTR_ASYNC_ENABLE, 0);
+    W(AR_INTR_SYNC_ENABLE, 0);
+
+    pon(AR_AHB_MODE, 0x4);                                 /* set_dma */
+    campo(AR_TXCFG, 0x7, 0, 5);
+    campo(AR_RXCFG, 0x7, 0, 5);
+    W(AR_RXFIFO_CFG, 0x200);
+    W(AR_PCU_TXBUF_CTRL, 0x700);
+    W(AR_OBS, 8);
+
+    uint32_t retardo = R(AR_PHY_RX_DELAY) & 0x3FFF;        /* init_bb */
+    W(AR_PHY_ACTIVE, 1);
+    espera_us(retardo / 10 + 100);
+
+    pon(AR_PHY_AGC_CONTROL, AGC_FLTR_CAL);                 /* init_cal: calibración AGC */
+    W(AR_PHY_AGC_CONTROL, R(AR_PHY_AGC_CONTROL) | AGC_CAL);
+    *cal_ok = esperar(AR_PHY_AGC_CONTROL, AGC_CAL, 0, ESPERA_MAX);
+    quita(AR_PHY_AGC_CONTROL, AGC_FLTR_CAL);
+    pon(AR_PHY_AGC_CONTROL, AGC_ENABLE_NF);                /* start_nfcal: calibración del ruido */
+    quita(AR_PHY_AGC_CONTROL, AGC_NO_UPDATE);
+    pon(AR_PHY_AGC_CONTROL, AGC_NF);
+
+    W(AR_PHY_RX_CHAINMASK, rx_mask);                       /* restore_chainmask */
+    W(AR_PHY_CAL_CHAINMASK, rx_mask);
+    return 1;
+}
+
+/* ---- recepción: descriptores ar5416_desc en anillo ---- */
+#define NDESC    16
+#define TAM_BUF  3872                                     /* el que usa Linux (cabe en AR_BufLen) */
+struct desc { uint32_t link, data, ctl0, ctl1, st[9]; } __attribute__((packed));
+static volatile struct desc anillo[NDESC] __attribute__((aligned(64)));
+static uint8_t buf[NDESC][4096] __attribute__((aligned(64)));
+static int actual = 0;
+
+static uint32_t fisica(const volatile void *p) {
+#ifdef WIFI_SIMULADA
+    return (uint32_t)((uintptr_t)p - radio_base_sim);
+#else
+    return (uint32_t)p;                                    /* memoria del kernel: mapa identidad */
+#endif
+}
+
+static void montar_anillo(void) {
+#ifdef WIFI_SIMULADA
+    radio_base_sim = (uintptr_t)anillo < (uintptr_t)buf ? (uintptr_t)anillo : (uintptr_t)buf;
+#endif
+    for (int i = 0; i < NDESC; i++) {
+        anillo[i].link = fisica(&anillo[(i + 1) % NDESC]);
+        anillo[i].data = fisica(buf[i]);
+        anillo[i].ctl0 = 0;
+        anillo[i].ctl1 = TAM_BUF & 0xFFF;
+        for (int k = 0; k < 9; k++) anillo[i].st[k] = 0;
+    }
+    actual = 0;
+}
+
+static void parar_rx(void) {
+    pon(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
+    W(AR_CR, AR_CR_RXD);
+    esperar(AR_CR, AR_CR_RXE, 0, 10000);
+}
+
+/* ---- las redes oídas ---- */
+#define MAX_REDES 40
+struct red { uint8_t bssid[6]; char ssid[33]; int canal, rssi, seg, veces; };
+static struct red redes[MAX_REDES];
+static int nredes = 0;
+static uint32_t tramas = 0, errores = 0;
+
+static void apuntar(const uint8_t *f, int n, int rssi, int canal) {
+    if (n < 24 + 12 + 4) return;
+    if (f[0] != 0x80 && f[0] != 0x50) return;              /* baliza (beacon) o respuesta de sondeo */
+    n -= 4;                                                /* el final es la suma de control (FCS) */
+    const uint8_t *bssid = f + 16;
+    uint32_t cap = f[34] | (f[35] << 8);
+    const uint8_t *ssid = 0;
+    int lssid = 0, ch = canal, seg = 0;
+    for (int i = 36; i + 2 <= n; ) {
+        int id = f[i], l = f[i + 1];
+        if (i + 2 + l > n) break;
+        const uint8_t *v = f + i + 2;
+        if (id == 0 && l <= 32) { ssid = v; lssid = l; }
+        else if (id == 3 && l >= 1) ch = v[0];
+        else if (id == 48) seg = 3;                        /* RSN = WPA2/WPA3 */
+        else if (id == 221 && l >= 4 && v[0] == 0x00 && v[1] == 0x50 && v[2] == 0xF2 && v[3] == 1 && seg < 2) seg = 2;
+        i += 2 + l;
+    }
+    if (!seg && (cap & 0x10)) seg = 1;                     /* privacidad sin WPA = WEP */
+    if (ch < 1 || ch > 14) ch = canal;
+    int k;
+    for (k = 0; k < nredes; k++) {
+        int igual = 1;
+        for (int j = 0; j < 6; j++) if (redes[k].bssid[j] != bssid[j]) igual = 0;
+        if (igual) break;
+    }
+    if (k == nredes) {
+        if (nredes >= MAX_REDES) return;
+        nredes++;
+        for (int j = 0; j < 6; j++) redes[k].bssid[j] = bssid[j];
+        redes[k].rssi = -1000;
+        redes[k].veces = 0;
+    }
+    struct red *r = &redes[k];
+    int vacio = 1;
+    for (int j = 0; j < lssid; j++) if (ssid[j]) vacio = 0;
+    int j = 0;
+    if (!vacio) for (; j < lssid; j++) r->ssid[j] = (ssid[j] >= 32 && ssid[j] < 127) ? (char)ssid[j] : '?';
+    r->ssid[j] = 0;
+    r->canal = ch;
+    r->seg = seg;
+    if (rssi > r->rssi) r->rssi = rssi;
+    r->veces++;
+}
+
+static int saltando = 0;                                   /* trozos de una trama larga: se saltan */
+
+static void revisar(int canal) {
+    for (int vueltas = 0; vueltas < NDESC; vueltas++) {
+        volatile struct desc *d = &anillo[actual];
+        uint32_t s8 = d->st[8];
+        if (!(s8 & 1)) return;                             /* AR_RxDone */
+        uint32_t s1 = d->st[1], s4 = d->st[4];
+        int largo = (int)(s1 & 0xFFF);
+        int mas = (s1 & 0x1000) != 0;                      /* AR_RxMore */
+        if (!saltando && !mas && (s8 & 2) && largo <= TAM_BUF) {   /* AR_RxFrameOK */
+            int rssi = (int)(int8_t)(uint8_t)(s4 >> 24);   /* AR_RxRSSICombined */
+            if (s8 & 0x40000) rssi = -128;                 /* AR_PostDelimCRCErr */
+            tramas++;
+            if (rssi > -128) apuntar(buf[actual], largo, rssi, canal);
+        } else if (!(s8 & 2)) {
+            errores++;
+        }
+        saltando = mas;
+        for (int k = 0; k < 9; k++) d->st[k] = 0;          /* el descriptor vuelve a estar libre */
+        d->ctl1 = TAM_BUF & 0xFFF;
+        actual = (actual + 1) % NDESC;
+    }
+}
+
+static void escuchar(int canal, uint32_t ms) {
+    montar_anillo();
+    saltando = 0;
+    pon(AR_DIAG_SW, AR_DIAG_ACK_DIS | AR_DIAG_CTS_DIS);    /* NUNCA contestar nada */
+    W(AR_RX_FILTER, 0x01 | 0x02 | 0x04 | 0x10);            /* UCAST | MCAST | BCAST | BEACON */
+    W(AR_PHY_ERR, 0);
+    quita(AR_RXCFG, 0x10);                                 /* AR_RXCFG_ZLFDMA */
+    W(AR_RXDP, fisica(&anillo[0]));
+    W(AR_CR, AR_CR_RXE);
+    quita(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
+    for (uint32_t t = 0; t < ms * 10; t++) {               /* cada 100 microsegundos */
+        revisar(canal);
+        espera_us(100);
+    }
+    revisar(canal);
+    parar_rx();
+}
+
+static void escribe_senal(int rssi) {                      /* rssi = dB sobre el ruido; ruido típico -95 dBm */
+    int dbm = rssi - 95;
+    if (dbm < 0) { kputc('-'); kprint_dec((uint32_t)(-dbm)); } else kprint_dec((uint32_t)dbm);
+    kprint(" dBm");
+}
+
+static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4]); kputc(h[v & 0xF]); }
+
+int radio_escanear(void) {
+    struct wifi_info w;
+    nredes = 0; tramas = 0; errores = 0;
+    if (wifi_leer(&w) != 1) {
+        if (!w.hay) { kprint("WIFI W2: sin tarjeta (en QEMU es normal: solo esta en tu Packard Bell)\n"); return -1; }
+        kprint("WIFI W2: no he podido leer la tarjeta (W1 fallo): no enciendo la radio\n");
+        return -2;
+    }
+    if (w.version != 0x180) {
+        kprint("WIFI W2: no es una AR9287: mis tablas son solo para ella, no enciendo la radio\n");
+        return -3;
+    }
+    rx_mask = w.antenas_rx;
+    if (rx_mask != 1 && rx_mask != 2 && rx_mask != 3) rx_mask = 3;
+    wifi_dma(1);                                           /* la tarjeta puede escribir lo que oye en la RAM */
+    kprint("WiFi: enciendo la radio SOLO PARA ESCUCHAR (sin transmitir nada) y recorro los canales 1-13");
+    int calibrados = 0, fallos = 0;
+    for (int canal = 1; canal <= 13; canal++) {
+        int cal_ok = 0;
+        int r = preparar(canal, &cal_ok);
+        if (r < 0) { fallos++; kputc('x'); continue; }
+        if (cal_ok) calibrados++;
+        escuchar(canal, 220);                              /* una baliza sale cada ~102 ms: oímos 2 */
+        kputc('.');
+    }
+    kputc('\n');
+    parar_rx();
+    wifi_dma(0);                                           /* ya no puede escribir en la RAM */
+    kprint("WiFi: tramas oidas "); kprint_dec(tramas);
+    kprint(", con errores "); kprint_dec(errores);
+    kprint(", canales calibrados "); kprint_dec((uint32_t)calibrados); kprint(" de 13\n");
+    if (fallos == 13) { kprint("WIFI W2: el chip no se dejo reiniciar en ningun canal\n"); return -4; }
+    /* de la señal más fuerte a la más débil */
+    for (int a = 0; a < nredes; a++)
+        for (int b = a + 1; b < nredes; b++)
+            if (redes[b].rssi > redes[a].rssi) { struct red t = redes[a]; redes[a] = redes[b]; redes[b] = t; }
+    static const char *segs[] = {"abierta", "WEP", "WPA", "WPA2"};
+    for (int i = 0; i < nredes; i++) {
+        kprint("  canal "); kprint_dec((uint32_t)redes[i].canal);
+        if (redes[i].canal < 10) kputc(' ');
+        kprint("  "); escribe_senal(redes[i].rssi);
+        kprint("  "); kprint(segs[redes[i].seg]);
+        kprint("  "); kprint(redes[i].ssid[0] ? redes[i].ssid : "(red oculta)");
+        kprint("  ("); for (int j = 0; j < 6; j++) { if (j) kputc(':'); hex2(redes[i].bssid[j]); } kprint(")\n");
+    }
+    if (!nredes) {
+        kprint("WIFI W2: no he oido ninguna red. La radio y la calibracion han ido, pero no llega nada: puede que\n"
+               "  falte algun ajuste de Linux que me he saltado. Hazme una foto de esto y lo miramos.\n");
+        return 0;
+    }
+    kprint("WIFI W2 OK: "); kprint_dec((uint32_t)nredes);
+    kprint(nredes == 1 ? " red encontrada" : " redes encontradas");
+    kprint(" (solo escuchando: no he transmitido nada)\n");
+    return nredes;
+}
+
+void radio_probar(void) { radio_escanear(); }
+"""
+
+_D17 = _D16 + r"""#include "radio.h"
+
+static void o_redes(const char *a) { (void)a; radio_escanear(); }
+"""
+_C17 = _C16 + "    radio_probar();\n"
+_O17 = _O16 + '    shell_orden("redes", "escucha y lista las redes WiFi de alrededor (sin transmitir)", o_redes);\n'
+
 _K11 = _k_shell("etapa 11: consola propia", _D11, _C11, "")
 _K12 = _k_shell("etapa 12: multitarea", _D12, _C12, _O12)
 _K13 = _k_shell("etapa 13: modo usuario", _D13, _C13, _O13)
 _K14 = _k_shell("etapa 14: programas desde el disco", _D14, _C14, _O14)
 _K15 = _k_shell("etapa 15: red con DHCP", _D15, _C15, _O15)
 _K16 = _k_shell("etapa 16: WiFi Atheros, despertar y leer la EEPROM", _D16, _C16, _O16)
+_K17 = _k_shell("etapa 17: WiFi Atheros, escuchar las redes", _D17, _C17, _O17)
 
 _BASE = {"boot.s": _BOOT, "linker.ld": _LINKER, "io.h": _IO_H, "consola.h": _CONSOLA_H, "consola.c": _CONSOLA_C}
 _E2 = {"gdt.c": _GDT_C, "gdt_asm.s": _GDT_S}
@@ -4109,6 +4700,8 @@ _E13 = {"gdt.c": _GDT2_C, "usuario.h": _USUARIO_H, "usuario.c": _USUARIO_C, "usu
 _E14 = {"programa.h": _PROGRAMA_H, "programa.c": _PROGRAMA_C}
 _E15 = {"red.h": _RED2_H, "red.c": _RED2_C, "ip.h": _IP_H, "ip.c": _IP_C}
 _E16 = {"wifi.h": _WIFI_H, "wifi.c": _WIFI_C}
+_E17 = {"wifi.h": _WIFI2_H, "wifi.c": _WIFI2_C, "radio.h": _RADIO_H, "radio.c": _RADIO_C,
+        "ar9287_tablas.h": _AR9287_TABLAS_H}
 
 
 def _junta(*partes):
@@ -4208,10 +4801,18 @@ ETAPAS = [
      "entrada": "wifi\n",
      "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _E10, _E11, _E12, _E13, _E14, _E15, _E16,
                         {"kernel.c": _K16})},
+    {"n": 17, "titulo": "WiFi W2: escuchar y listar las redes",
+     "que": "Enciende la radio de la AR9287 SOLO PARA ESCUCHAR (portado de Linux ath9k), recorre los canales 1-13 y "
+            "lista las redes: nombre, canal, senal y seguridad. Nunca transmite. Solo se prueba en tu portatil.",
+     "claves": "wifi redes escuchar escanear escanea buscar radio balizas beacons canales ssid lista",
+     "espera": ["WIFI W2:", "KERNEL_LISTO", "kira:"],
+     "entrada": "redes\n",
+     "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _E10, _E11, _E12, _E13, _E14, _E15, _E17,
+                        {"kernel.c": _K17})},
 ]
 
 SIGUIENTES = ("pantalla gráfica (dibujar píxeles)", "escribir en un disco propio (sistema de archivos con escritura)",
-              "TCP y un navegador de texto", "WiFi W2: escuchar y listar las redes (solo escuchar)", "WiFi W3: conectarse a una red abierta",
+              "TCP y un navegador de texto", "WiFi W3: conectarse a una red abierta",
               "WiFi W4: WPA2", "driver de la red por cable Broadcom (necesita probarse en el portátil)",
               "USB (teclado y pendrives)", "sonido")
 

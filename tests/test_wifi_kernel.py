@@ -26,7 +26,7 @@ ok("& ~0x04u" in W, "no activa el bus master (sin DMA)")
 for prohibido in ("AR_PHY", "TXDP", "AR_CR", "0x0008", "AR_DIAG", "AR_STA_ID"):
     ok(prohibido not in W, f"no toca registros de radio/envío ({prohibido})")
 ok("wifi.c" not in so.etapa(15)["archivos"], "las etapas anteriores no cambian")
-ok(any("W2" in s for s in so.SIGUIENTES), "lo siguiente (W2 escuchar redes) está apuntado")
+ok(any("W3" in s for s in so.SIGUIENTES) and so.etapa(17) is not None, "W2 hecha (etapa 17) y lo siguiente (W3) apuntado")
 
 SIM = r'''
 #include <stdio.h>
