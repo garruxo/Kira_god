@@ -10,6 +10,7 @@ import saber_so_kira as so
 import wifi_tablas_kira as wt
 
 FALLOS = []
+S0_GUARDADO = ""
 def ok(c, m):
     print(("OK   " if c else "FALLA ") + m)
     if not c: FALLOS.append(m)
@@ -229,6 +230,7 @@ if gcc:
             ok("La radio esta sorda" in s and "recibiendo 0% del tiempo" in s and "RESULTADO=0" in s,
                "chip sordo: el diagnóstico lo dice (no nota nada en el aire)")
             s0 = corre(0)
+            S0_GUARDADO = s0
             ok("RESULTADO=5" in s0 and re.search(r"errores: 0 de radio, \d+ con la suma mal", s0),
                "cuenta aparte los errores de radio y las tramas con la suma mal")
             s = corre(6)
@@ -243,6 +245,14 @@ if gcc:
             s = corre(4)
             ok("no se dejo reiniciar" in s and "BUCLE_INFINITO" not in s and "VECES_RXE=0" in s,
                "chip que no se deja reiniciar: para, sin colgarse ni escuchar")
+
+# ---- v3.52: esperas medidas con el reloj del kernel, reloj de la radio y señal de lo que no entiende ----
+ok("medir_esperas" in RC and "timer_tics()" in RC and "por_ms" in RC, "las esperas se miden con el temporizador del kernel")
+ok("mhz_radio" in RC and "debe ser 44" in RC, "mide el reloj de la radio (44 MHz)")
+s52 = S0_GUARDADO
+ok("antenas de la EEPROM: comun 0x12345678" in s52, "enseña los valores de antena de la EEPROM")
+ok(re.search(r"diag 2: reloj de la radio \?, senal de lo que no entiende: max 40 dB", s52) is not None,
+   "enseña la señal más fuerte de lo que no entiende")
 
 # ---- v3.51: la cadena de PUENTES PCI (tu WiFi va en el bus 2, detrás de un puente del chipset) ----
 W = E["archivos"]["wifi.c"]

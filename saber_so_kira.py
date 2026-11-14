@@ -4232,7 +4232,25 @@ uintptr_t radio_base_sim;
 static void espera_us(uint32_t n) { sim_paso(n); }
 #else
 #include "io.h"
-static void espera_us(uint32_t n) { while (n--) io_wait(); }
+#include "timer.h"
+/* io_wait (escribir en el puerto 0x80) tarda «más o menos» 1 microsegundo, pero depende del chipset. La radio
+   necesita esperas de verdad (el PLL y los registros analógicos), así que se MIDE con el temporizador del kernel
+   (100 tics por segundo) cuántas io_wait caben en un milisegundo y se espera siempre un poco de más. */
+static uint32_t por_ms = 0;                               /* io_wait en 1 ms (0 = sin medir: 1 por microsegundo) */
+static void espera_us(uint32_t n) {
+    uint32_t vueltas = por_ms ? (n / 1000u) * por_ms + ((n % 1000u) * por_ms) / 1000u + 1 : n;
+    while (vueltas--) io_wait();
+}
+static void medir_esperas(void) {
+    uint32_t t = timer_tics();
+    uint32_t limite = 3000000u;
+    while (timer_tics() == t && limite--) ;               /* empezar justo en un tic */
+    t = timer_tics();
+    uint32_t n = 0;
+    limite = 20000000u;
+    while (timer_tics() < t + 10 && limite--) { io_wait(); n++; }   /* 10 tics = 100 ms */
+    if (timer_tics() >= t + 10 && n > 1000) por_ms = n / 100 + n / 1000;   /* +10 % de margen */
+}
 #endif
 
 /* ---- registros (familia AR9002; nombres de reg.h / ar9002_phy.h de Linux) ---- */
@@ -4399,6 +4417,7 @@ static void delta_vals(uint32_t escala, uint32_t *man, uint32_t *ex) {
 }
 
 static uint8_t rx_mask = 3;
+static uint32_t mhz_radio = 0;
 
 /* ---- cargar el ruido de fondo (ath9k_hw_loadnf): primero el valor nominal de la AR9287 (-112) y, cuando el
    chip lo ha cogido, el tope -50 para la siguiente calibración. Las tablas dejan aquí un 0 (0 dBm): con eso el chip
@@ -4621,6 +4640,8 @@ struct red { uint8_t bssid[6]; char ssid[33]; int canal, rssi, seg, veces; };
 static struct red redes[MAX_REDES];
 static int nredes = 0;
 static uint32_t tramas = 0, errores = 0, err_radio = 0, err_suma = 0;
+static int err_rssi_max = -1000;                          /* la señal más fuerte que NO se pudo entender */
+static uint32_t err_rssi_suma = 0, err_rssi_n = 0;
 static uint32_t err_codigo[40];                           /* errores de radio por código (ATH9K_PHYERR_*) */
 
 static void apuntar(const uint8_t *f, int n, int rssi, int canal) {
@@ -4685,6 +4706,11 @@ static void revisar(int canal) {
             if (rssi > -128) apuntar(buf[actual], largo, rssi, canal);
         } else if (!(s8 & 2)) {
             errores++;
+            int r = (int)(int8_t)(uint8_t)(s4 >> 24);
+            if (r != -128) {
+                if (r > err_rssi_max) err_rssi_max = r;
+                if (r > 0) { err_rssi_suma += (uint32_t)r; err_rssi_n++; }
+            }
             if (s8 & 0x10) {                               /* AR_PHYErr: la radio oyó algo y no lo entendió */
                 err_radio++;
                 uint32_t c = (s8 >> 8) & 0xFF;
@@ -4736,6 +4762,7 @@ static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4
 int radio_escanear(void) {
     struct wifi_info w;
     nredes = 0; tramas = 0; errores = 0; err_radio = 0; err_suma = 0;
+    err_rssi_max = -1000; err_rssi_suma = 0; err_rssi_n = 0;
     for (int k = 0; k < 40; k++) err_codigo[k] = 0;
     d_ciclos = d_ocupado = d_recibe = d_isr = d_diag = d_cr = 0;
     d_rxdp_movido = 0; d_nf_min = 1000; d_nf_max = -1000;
@@ -4758,6 +4785,19 @@ int radio_escanear(void) {
         if (pu_on) { kprint(" ("); kprint_dec((uint32_t)pu_on); kprint(" sin permiso de DMA: se lo doy mientras escucho)\n"); }
         else kprint(" (ya tenian permiso de DMA)\n");
     }
+#ifndef WIFI_SIMULADA
+    medir_esperas();
+    kprint("WiFi: esperas medidas con el reloj del kernel: ");
+    if (por_ms) { kprint_dec(por_ms); kprint(" io_wait por milisegundo (lo normal: unas 1000)\n"); }
+    else kprint("no se pudo medir (uso 1 por microsegundo)\n");
+#endif
+    {
+        const uint8_t *m = wifi_eeprom() + 96;
+        kprint("WiFi: antenas de la EEPROM: comun "); kprint_hex(le32(m + 8));
+        kprint(", cadena 0 "); kprint_hex(le32(m)); kprint(", cadena 1 "); kprint_hex(le32(m + 4));
+        kprint(", atenuacion "); kprint_dec(m[15]); kputc('/'); kprint_dec(m[16]);
+        kprint(", margen "); kprint_dec(m[17]); kputc('/'); kprint_dec(m[18]); kputc('\n');
+    }
     kprint("WiFi: enciendo la radio SOLO PARA ESCUCHAR (sin transmitir nada) y recorro los canales 1-13");
     int calibrados = 0, fallos = 0;
     for (int canal = 1; canal <= 13; canal++) {
@@ -4765,6 +4805,19 @@ int radio_escanear(void) {
         int r = preparar(canal, &cal_ok);
         if (r < 0) { fallos++; kputc('x'); continue; }
         if (cal_ok) calibrados++;
+#ifndef WIFI_SIMULADA
+        if (canal == 1) {                                  /* ¿el reloj de la radio va a su velocidad? (44 MHz) */
+            uint32_t t = timer_tics(), lim = 3000000u;
+            while (timer_tics() == t && lim--) ;
+            t = timer_tics();
+            W(AR_MIBC, AR_MIBC_FMC); W(AR_CCCNT, 0); W(AR_MIBC, 0);
+            lim = 20000000u;
+            while (timer_tics() < t + 10 && lim--) ;
+            W(AR_MIBC, AR_MIBC_FMC);
+            mhz_radio = R(AR_CCCNT) / 100000u;             /* ciclos en 100 ms -> MHz */
+            W(AR_MIBC, 0);
+        }
+#endif
         escuchar(canal, 220);                              /* una baliza sale cada ~102 ms: oímos 2 */
         kputc('.');
     }
@@ -4799,6 +4852,13 @@ int radio_escanear(void) {
     kprint(", DIAG "); kprint_hex(d_diag); kprint(", CR "); kprint_hex(d_cr);
     kprint(d_rxdp_movido ? ", RXDP se movio" : ", RXDP quieto");
     kprint(", PCI "); kprint_hex(pci); kprint(", SYNC "); kprint_hex(sync); kputc('\n');
+    kprint("WiFi diag 2: reloj de la radio ");
+    if (mhz_radio) { kprint_dec(mhz_radio); kprint(" MHz (debe ser 44)"); } else kprint("?");
+    kprint(", senal de lo que no entiende: max ");
+    if (err_rssi_max > -1000) escribe_con_signo(err_rssi_max); else kputc('?');
+    kprint(" dB, media ");
+    if (err_rssi_n) kprint_dec(err_rssi_suma / err_rssi_n); else kputc('?');
+    kprint(" dB (sobre el ruido)\n");
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)
