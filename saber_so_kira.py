@@ -3842,11 +3842,253 @@ _C15 = _C14 + "    demo_red();\n"
 _O15 = _O14 + ('    shell_orden("red", "pide direccion IP (DHCP) y hace ping al router", o_red);\n'
                '    shell_orden("ip", "mi direccion IP", o_ip);\n')
 
+_WIFI_H = r"""/* wifi.h — WiFi Atheros AR9287 (la del Packard Bell, driver ath9k en Linux). Etapa W1: SOLO LEER */
+#ifndef WIFI_H
+#define WIFI_H
+#include <stdint.h>
+
+struct wifi_info {
+    int      hay;              /* 1 si hay tarjeta Atheros */
+    uint16_t aparato;          /* 0x002e = AR9287 */
+    uint32_t srev;             /* registro de versión del chip */
+    uint32_t version, revision;
+    int      despierta;        /* el chip contestó «encendido» */
+    int      eeprom_ok;        /* se pudo leer su EEPROM */
+    uint16_t magia;            /* 0xa55a si la EEPROM está bien */
+    uint16_t largo, suma, version_eeprom;
+    int      suma_ok;
+    uint8_t  mac[6];
+    uint16_t region[2];
+    uint8_t  antenas_rx, antenas_tx, capacidades, tipo;
+};
+
+int wifi_leer(struct wifi_info *w);   /* despierta el chip y lee su EEPROM; 1 si todo bien */
+void wifi_probar(void);               /* lo de la etapa 16: lo escribe en pantalla */
+
+#endif
+"""
+
+_WIFI_C = r"""/* wifi.c — etapa W1 de la WiFi Atheros AR9287 (PCI 168c:002e, en Linux el driver ath9k, que es ABIERTO y no
+   necesita firmware cerrado). Lo que hace:
+     1. la busca en el bus PCI y abre su zona de registros (64 KB, BAR0);
+     2. la despierta (RTC_FORCE_WAKE y, si estaba apagada del todo, el encendido que hace Linux);
+     3. lee su versión (registro SREV: 0x180 = AR9287);
+     4. LEE su EEPROM palabra a palabra por la ventana 0x2000 (como ath_pci_eeprom_read de Linux):
+        MAC, región, antenas, versión y la suma de control.
+   SEGURIDAD: NUNCA escribe en la EEPROM (no hay ni una escritura en la ventana 0x2000), no enciende la radio,
+   no envía nada por el aire y no usa DMA (no activa el bus master). Las únicas escrituras son las de despertar el
+   chip (lo mismo que hace Linux cada vez que arranca). */
+#include <stdint.h>
+#include "wifi.h"
+#include "consola.h"
+#ifndef WIFI_SIMULADA
+#include "pci.h"
+#include "memoria.h"
+#include "io.h"
+#endif
+
+#define AR_RC                 0x4000
+#define AR_RC_AHB             0x00000001
+#define AR_SREV               0x4020
+#define AR_SREV_ID            0x000000FF
+#define AR_SREV_VERSION2      0xFFFC0000
+#define AR_SREV_VERSION2_S    18
+#define AR_SREV_REVISION2     0x00000F00
+#define AR_SREV_REVISION2_S   8
+#define AR_SREV_VERSION_9287  0x180
+#define EEPROM_VENTANA        0x2000          /* leer aquí la palabra N = leer 0x2000 + N*4 */
+#define AR_EEPROM_STATUS_DATA 0x407C          /* familia AR9002 (la AR9287 es de ella) */
+#define EEPROM_DATO           0x0000FFFF
+#define EEPROM_OCUPADA        0x00010000
+#define EEPROM_PROTEGIDA      0x00040000
+#define AR_RTC_RESET          0x7040
+#define AR_RTC_STATUS         0x7044
+#define AR_RTC_STATUS_M       0x0000000F
+#define AR_RTC_STATUS_APAGADO 0x1
+#define AR_RTC_STATUS_ON      0x2
+#define AR_RTC_FORCE_WAKE     0x704C
+#define FORCE_WAKE_EN         0x00000001
+#define FORCE_WAKE_ON_INT     0x00000002
+#define EEPROM_MAGIA          0xA55A
+#define AR9287_EEP_INICIO     128              /* la EEPROM de la AR9287 empieza en la palabra 128 */
+#define MAX_PALABRAS          1024
+
+#ifdef WIFI_SIMULADA
+uint32_t sim_lee(uint32_t reg);
+void sim_escribe(uint32_t reg, uint32_t v);
+static uint32_t lee(uint32_t reg) { return sim_lee(reg); }
+static void escribe(uint32_t reg, uint32_t v) { sim_escribe(reg, v); }
+static void espera_us(uint32_t n) { (void)n; }
+int sim_buscar(uint16_t *aparato);
+#else
+static uint32_t base = 0;
+static uint32_t lee(uint32_t reg) { return *(volatile uint32_t *)(base + reg); }
+static void escribe(uint32_t reg, uint32_t v) { *(volatile uint32_t *)(base + reg) = v; }
+static void espera_us(uint32_t n) { while (n--) io_wait(); }   /* cada io_wait ~1 microsegundo */
+#endif
+
+static uint16_t datos[MAX_PALABRAS];
+
+static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4]); kputc(h[v & 0xF]); }
+static void hex4(uint16_t v) { hex2(v >> 8); hex2(v & 0xFF); }
+
+static int esperar(uint32_t reg, uint32_t mascara, uint32_t valor) {   /* como ath9k_hw_wait: hasta ~100 ms */
+    for (int i = 0; i < 10000; i++) {
+        if ((lee(reg) & mascara) == valor) return 1;
+        espera_us(10);
+    }
+    return 0;
+}
+
+static int despertar(void) {
+    escribe(AR_RTC_FORCE_WAKE, FORCE_WAKE_EN | FORCE_WAKE_ON_INT);
+    espera_us(50);
+    if (esperar(AR_RTC_STATUS, AR_RTC_STATUS_M, AR_RTC_STATUS_ON)) return 1;
+    /* estaba apagada del todo: el encendido de ath9k_hw_set_reset_power_on */
+    escribe(AR_RC, AR_RC_AHB);
+    escribe(AR_RTC_RESET, 0);
+    espera_us(2);
+    escribe(AR_RC, 0);
+    escribe(AR_RTC_RESET, 1);
+    if (!esperar(AR_RTC_STATUS, AR_RTC_STATUS_M, AR_RTC_STATUS_ON)) return 0;
+    escribe(AR_RTC_FORCE_WAKE, FORCE_WAKE_EN | FORCE_WAKE_ON_INT);
+    return 1;
+}
+
+static int palabra(uint32_t n, uint16_t *dato) {       /* SOLO LECTURA: leer la ventana pide la palabra */
+    (void)lee(EEPROM_VENTANA + (n << 2));
+    if (!esperar(AR_EEPROM_STATUS_DATA, EEPROM_OCUPADA | EEPROM_PROTEGIDA, 0)) return 0;
+    *dato = (uint16_t)(lee(AR_EEPROM_STATUS_DATA) & EEPROM_DATO);
+    return 1;
+}
+
+static uint16_t giro(uint16_t v) { return (uint16_t)((v >> 8) | (v << 8)); }
+
+int wifi_leer(struct wifi_info *w) {
+    for (uint32_t i = 0; i < sizeof(*w); i++) ((uint8_t *)w)[i] = 0;
+#ifdef WIFI_SIMULADA
+    if (!sim_buscar(&w->aparato)) return 0;
+#else
+    struct pci_disp d;
+    if (!pci_buscar(0x168C, 0x002E, &d)) {
+        if (!pci_buscar_clase(0x02, 0x80, &d) || d.vendedor != 0x168C) return 0;   /* otra Atheros */
+    }
+    w->aparato = d.aparato;
+    uint32_t bar = d.bar0;
+    if (bar & 1) return -1;                                       /* zona de puertos: no es lo esperado */
+    if ((bar & 0x6) == 0x4 && pci_leer(d.bus, d.disp, d.func, 0x14) != 0) return -2;   /* por encima de 4 GB */
+    uint32_t orden = pci_leer(d.bus, d.disp, d.func, 0x04);
+    pci_escribir(d.bus, d.disp, d.func, 0x04, (orden | 0x02) & ~0x04u);   /* memoria sí; bus master (DMA) NO */
+    base = bar & 0xFFFFFFF0u;
+    paginacion_mapear(base, 0x10000);
+#endif
+    w->hay = 1;
+    w->despierta = despertar();
+    w->srev = lee(AR_SREV);
+    if ((w->srev & AR_SREV_ID) == 0xFF) {
+        w->version = (w->srev & AR_SREV_VERSION2) >> AR_SREV_VERSION2_S;
+        w->revision = (w->srev & AR_SREV_REVISION2) >> AR_SREV_REVISION2_S;
+    } else {
+        w->version = (w->srev & 0xF0) >> 4;
+        w->revision = w->srev & 0x0F;
+    }
+    if (!w->despierta) return 0;
+    if (!palabra(0, &w->magia)) return 0;
+    int girar = (w->magia == giro(EEPROM_MAGIA));
+    uint16_t largo;
+    if (!palabra(AR9287_EEP_INICIO, &largo)) return 0;
+    if (girar) largo = giro(largo);
+    uint32_t n = largo / 2;
+    if (n < 32 || n > MAX_PALABRAS) n = 32;                       /* largo raro: leo solo la cabecera */
+    for (uint32_t i = 0; i < n; i++) {
+        if (!palabra(AR9287_EEP_INICIO + i, &datos[i])) return 0;
+        if (girar) datos[i] = giro(datos[i]);
+    }
+    w->eeprom_ok = 1;
+    w->largo = largo;
+    uint16_t x = 0;
+    for (uint32_t i = 0; i < n; i++) x ^= datos[i];
+    w->suma = datos[1];
+    w->suma_ok = (n == largo / 2) && (x == 0xFFFF);
+    w->version_eeprom = datos[2];
+    const uint8_t *b = (const uint8_t *)datos;                    /* cabecera base de la AR9287 (64 bytes) */
+    w->capacidades = b[6];
+    w->region[0] = (uint16_t)(b[8] | (b[9] << 8));
+    w->region[1] = (uint16_t)(b[10] | (b[11] << 8));
+    for (int i = 0; i < 6; i++) w->mac[i] = b[12 + i];
+    w->antenas_rx = b[18];
+    w->antenas_tx = b[19];
+    w->tipo = b[30];
+    return 1;
+}
+
+static int bits(uint8_t v) { int n = 0; while (v) { n += v & 1; v >>= 1; } return n; }
+
+static const char *nombre_region(uint16_t r) {
+    if (r & 0x8000) {                                             /* código de país (ISO 3166 numérico) */
+        switch (r & 0x3FFF) {
+        case 724: return "pais: Espana";
+        case 840: return "pais: Estados Unidos";
+        case 826: return "pais: Reino Unido";
+        case 250: return "pais: Francia";
+        case 276: return "pais: Alemania";
+        default:  return "codigo de pais";
+        }
+    }
+    switch (r) {
+    case 0x10: return "FCC (America)";
+    case 0x37: return "ETSI (Europa)";
+    case 0x60: return "mundial";
+    default:   return "dominio de radio";
+    }
+}
+
+void wifi_probar(void) {
+    struct wifi_info w;
+    kprint("WiFi: busco la Atheros AR9287 (168c:002e)...\n");
+    int r = wifi_leer(&w);
+    if (!w.hay) {
+        kprint("WiFi: no encuentro la tarjeta Atheros (en QEMU es normal: solo esta en tu Packard Bell)\n");
+        kprint("WIFI W1: sin tarjeta\n");
+        return;
+    }
+    if (r == -1 || r == -2) { kprint("WIFI W1: su zona de registros no es la esperada; no sigo\n"); return; }
+    kprint("WiFi: tarjeta Atheros 168c:"); hex4(w.aparato);
+    kprint(", chip version 0x"); kprint_hex(w.version); kprint(" revision "); kprint_dec(w.revision);
+    kprint(w.version == AR_SREV_VERSION_9287 ? " (AR9287)\n" : " (no es una AR9287: cuidado)\n");
+    if (!w.despierta) { kprint("WIFI W1: el chip no despierta (no contesta ON). No toco nada mas\n"); return; }
+    kprint("WiFi: chip despierto\n");
+    if (!w.eeprom_ok) { kprint("WIFI W1: no he podido leer su EEPROM (no contesta)\n"); return; }
+    kprint("WiFi: EEPROM magia 0x"); hex4(w.magia);
+    kprint(w.magia == EEPROM_MAGIA ? " (correcta)" : " (rara)");
+    kprint(", largo "); kprint_dec(w.largo); kprint(" bytes, version "); kprint_dec(w.version_eeprom >> 12);
+    kputc('.'); kprint_dec(w.version_eeprom & 0x0FFF);
+    kprint(w.suma_ok ? ", suma de control correcta\n" : ", la suma no cuadra (solo leo: no pasa nada)\n");
+    kprint("WiFi: MAC ");
+    for (int i = 0; i < 6; i++) { if (i) kputc(':'); hex2(w.mac[i]); }
+    kprint("  (comparala en Xubuntu con: ip link)\n");
+    kprint("WiFi: region 0x"); hex4(w.region[0]); kprint(" ("); kprint(nombre_region(w.region[0])); kprint(")\n");
+    kprint("WiFi: antenas para recibir "); kprint_dec((uint32_t)bits(w.antenas_rx));
+    kprint(", para emitir "); kprint_dec((uint32_t)bits(w.antenas_tx));
+    kprint((w.capacidades & 0x02) ? ", banda 2,4 GHz" : "");
+    kprint((w.capacidades & 0x01) ? " y 5 GHz\n" : "\n");
+    kprint("WIFI W1 OK: chip despierto y EEPROM leida (sin escribir nada y sin encender la radio)\n");
+}
+"""
+
+_D16 = _D15 + r"""#include "wifi.h"
+
+static void o_wifi(const char *a) { (void)a; wifi_probar(); }
+"""
+_C16 = _C15 + "    wifi_probar();\n"
+_O16 = _O15 + '    shell_orden("wifi", "despierta la WiFi Atheros y lee su EEPROM (solo leer)", o_wifi);\n'
+
 _K11 = _k_shell("etapa 11: consola propia", _D11, _C11, "")
 _K12 = _k_shell("etapa 12: multitarea", _D12, _C12, _O12)
 _K13 = _k_shell("etapa 13: modo usuario", _D13, _C13, _O13)
 _K14 = _k_shell("etapa 14: programas desde el disco", _D14, _C14, _O14)
 _K15 = _k_shell("etapa 15: red con DHCP", _D15, _C15, _O15)
+_K16 = _k_shell("etapa 16: WiFi Atheros, despertar y leer la EEPROM", _D16, _C16, _O16)
 
 _BASE = {"boot.s": _BOOT, "linker.ld": _LINKER, "io.h": _IO_H, "consola.h": _CONSOLA_H, "consola.c": _CONSOLA_C}
 _E2 = {"gdt.c": _GDT_C, "gdt_asm.s": _GDT_S}
@@ -3864,6 +4106,7 @@ _E12 = {"idt.h": _IDT2_H, "idt.c": _IDT2_C, "isr.s": _ISR2_S, "tareas.h": _TAREA
 _E13 = {"gdt.c": _GDT2_C, "usuario.h": _USUARIO_H, "usuario.c": _USUARIO_C, "usuario_demo.s": _USUARIO_DEMO_S}
 _E14 = {"programa.h": _PROGRAMA_H, "programa.c": _PROGRAMA_C}
 _E15 = {"red.h": _RED2_H, "red.c": _RED2_C, "ip.h": _IP_H, "ip.c": _IP_C}
+_E16 = {"wifi.h": _WIFI_H, "wifi.c": _WIFI_C}
 
 
 def _junta(*partes):
@@ -3955,10 +4198,19 @@ ETAPAS = [
      "espera": ["DHCP OK", "KERNEL_LISTO", "kira:"],
      "entrada": "ip\n",
      "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _E10, _E11, _E12, _E13, _E14, _E15, {"kernel.c": _K15})},
+    {"n": 16, "titulo": "WiFi W1: despertar la Atheros y leer su EEPROM",
+     "que": "La WiFi AR9287 del Packard Bell: despertar el chip, su version y LEER su EEPROM (MAC, region, antenas). "
+            "Sin escribir nada y sin encender la radio. En QEMU no existe: se prueba en tu portatil.",
+     "claves": "wifi inalambrica atheros ar9287 ath9k eeprom radio wireless",
+     "espera": ["WIFI W1:", "KERNEL_LISTO", "kira:"],
+     "entrada": "wifi\n",
+     "archivos": _junta(_BASE, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _E10, _E11, _E12, _E13, _E14, _E15, _E16,
+                        {"kernel.c": _K16})},
 ]
 
 SIGUIENTES = ("pantalla gráfica (dibujar píxeles)", "escribir en un disco propio (sistema de archivos con escritura)",
-              "TCP y un navegador de texto", "driver de la red por cable Broadcom (necesita probarse en el portátil)",
+              "TCP y un navegador de texto", "WiFi W2: escuchar y listar las redes (solo escuchar)", "WiFi W3: conectarse a una red abierta",
+              "WiFi W4: WPA2", "driver de la red por cable Broadcom (necesita probarse en el portátil)",
               "USB (teclado y pendrives)", "sonido")
 
 
