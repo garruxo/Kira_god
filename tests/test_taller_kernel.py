@@ -57,6 +57,9 @@ ok(all(x not in AHCI_C.lower() for x in ("0x35", "0xca", "0x30,", "0x3d", "0x61"
    "el driver AHCI (v3.40) SOLO LEE: ni una orden de escritura, el descriptor siempre «disco → memoria»")
 ok(so.etapa_para("lee las particiones del disco sata")["n"] == 9 and so.etapa_para("driver ahci")["n"] == 9,
    "particiones / AHCI → 9")
+ok("escribir_texto((const uint8_t *)nm, nl)" in so._EXT4_C and "kputc('@')" in so._EXT4_C,
+   "ls enseña bien las tildes (Música) y marca los enlaces con @ (visto en el Packard Bell)")
+ok("«ls/home»" in so._SHELL_C, "«ls/home» sin espacio también vale (visto en el Packard Bell)")
 A2 = so.etapa(10)["archivos"]["ahci.c"]
 ok(all(x not in A2.lower() for x in ("0x35", "0xca", "0x30,", "0x3d", "0x61")) and "1u << 6" not in A2,
    "AHCI v2 (etapa 10+) sigue SIN órdenes de escritura")

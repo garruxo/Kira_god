@@ -1965,6 +1965,8 @@ static uint32_t bloque_de(const uint8_t *ino, uint32_t lb) {
 static uint32_t tam_de(const uint8_t *ino) { return u32(ino + 4); }   /* hasta 4 GB: suficiente aquí */
 static int es_carpeta(const uint8_t *ino) { return (u16(ino) & 0xF000) == 0x4000; }
 
+static void escribir_texto(const uint8_t *t, uint32_t n);
+
 /* recorre una carpeta; si nombre != 0 devuelve el inodo de esa entrada; si no, las escribe */
 static uint32_t carpeta(const uint8_t *ino, const char *nombre, int largo, int escribir, int *cuantas) {
     uint32_t total = tam_de(ino), bloques = (total + tam_bloque - 1) / tam_bloque, col = 0;
@@ -1992,9 +1994,10 @@ static uint32_t carpeta(const uint8_t *ino, const char *nombre, int largo, int e
                     if (cuantas) (*cuantas)++;
                     if (escribir) {
                         if (col + nl + 3 > 76) { kputc('\n'); col = 0; }
-                        kprint(col ? "  " : "  ");
-                        for (int i = 0; i < nl; i++) kputc(nm[i]);
+                        kprint("  ");
+                        escribir_texto((const uint8_t *)nm, nl);     /* «Música» bien, no «M├║sica» */
                         if (tipo == 2) kputc('/');
+                        else if (tipo == 7) kputc('@');              /* enlace (como bin -> usr/bin) */
                         col += nl + 3;
                     }
                 }
@@ -2527,6 +2530,18 @@ static void ejecutar(char *l) {
     char *args = l;
     while (*args && *args != ' ') args++;
     if (*args) { *args++ = 0; while (*args == ' ') args++; }
+    else {                                       /* «ls/home» o «cd..»: la orden son las letras del principio */
+        char *p = l;
+        while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) p++;
+        if (*p && p > l) {
+            static char resto[MAX_LINEA];
+            int i = 0;
+            for (char *q = p; *q && i < MAX_LINEA - 1; q++) resto[i++] = *q;
+            resto[i] = 0;
+            *p = 0;
+            args = resto;
+        }
+    }
     for (char *f = args + largo(args); f > args && f[-1] == ' '; ) *--f = 0;
     for (int i = 0; i < nordenes; i++) if (igual(ordenes[i].nombre, l)) { ordenes[i].f(args); return; }
     kprint("No conozco la orden \""); kprint(l); kprint("\". Escribe ayuda.\n");
