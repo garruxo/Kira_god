@@ -4370,12 +4370,34 @@ static int esperar(uint32_t r, uint32_t mascara, uint32_t valor, uint32_t us) {
     }
     return 0;
 }
+/* v3.58: diagnóstico de los analógicos — ¿se quedan al escribirlos (eco) y en qué paso se pierden? */
+static int eco_ok = 0, eco_total = 0;
+static uint32_t eco_primero_reg = 0, eco_primero_esc = 0, eco_primero_leido = 0;
+static int paso_an[4] = {-1, -1, -1, -1};                  /* tras tablas, tras placa, tras canal, tras calibrar */
+static int paso_an_total = 0;
 static void tabla(const uint32_t (*t)[2], int n) {
     for (int i = 0; i < n; i++) {
         W(t[i][0], t[i][1]);
-        if (t[i][0] >= 0x7800 && t[i][0] < 0x78A0) espera_us(100);   /* registros analógicos: despacio */
+        if (t[i][0] >= 0x7800 && t[i][0] < 0x78A0) {
+            espera_us(100);                                /* registros analógicos: despacio */
+            uint32_t leido = R(t[i][0]);                   /* eco: ¿se ha quedado lo que acabo de escribir? */
+            eco_total++;
+            if (leido == t[i][1]) eco_ok++;
+            else if (!eco_primero_reg) { eco_primero_reg = t[i][0]; eco_primero_esc = t[i][1]; eco_primero_leido = leido; }
+        }
         if ((i & 63) == 63) espera_us(1);
     }
+}
+static int an_iguales(void) {                             /* analógicos de mis tablas que se leen igual ahora */
+    int ig = 0, tot = 0;
+    for (uint32_t a = 0x7800; a < 0x78A0; a += 4) {
+        uint32_t v;
+        if (a == 0x7808 || a == 0x785C || !radio_valor_tabla(a, &v)) continue;
+        tot++;
+        if (R(a) == v) ig++;
+    }
+    paso_an_total = tot;
+    return ig;
 }
 static uint32_t le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
 
@@ -4531,6 +4553,7 @@ static int preparar(int canal, int *cal_ok) {
     tabla(ar9287_rx_gain, AR9287_RX_GAIN_N);
     tabla(ar9287_tx_gain, AR9287_TX_GAIN_N);
     tabla(ar9287_common, AR9287_COMMON_N);
+    paso_an[0] = an_iguales();
     pon(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);    /* override_ini */
     W(AR_PCU_MISC_MODE2, (R(AR_PCU_MISC_MODE2) & ~(0x40u | 0x00100000u | 0x02000000u)) | 0x80);
     W(AR_PHY_TURBO, 0x40 | 0x80 | 0x200 | 0x100 | (R(AR_PHY_TURBO) & 0x800));   /* set_channel_regs, HT20 */
@@ -4583,6 +4606,7 @@ static int preparar(int canal, int *cal_ok) {
     campo(AR_PHY_RF_CTL2, 0x000000FFu, 0, m[34]);
     campo(AR_PHY_RF_CTL2, 0x0000FF00u, 8, m[35]);
     analogica_campo(AR9287_AN_TOP2, 0xC0000000u, 30, m[33]);
+    paso_an[1] = an_iguales();
 
     /* reset_opmode: estación, con TU MAC (de la EEPROM) */
     const uint8_t *mac = e + 12;
@@ -4604,6 +4628,7 @@ static int preparar(int canal, int *cal_ok) {
     uint32_t sel = (freq * 0x10000u) / 15;                 /* CHANSEL_2G */
     W(AR_PHY_SYNTH_CONTROL, (R(AR_PHY_SYNTH_CONTROL) & 0xC0000000u) | (1u << 29) | (1u << 28) | sel);
 
+    paso_an[2] = an_iguales();
     W(AR_IMR, 0);                                          /* sin interrupciones: miramos nosotros */
     W(AR_IER, 0);
     W(AR_INTR_ASYNC_ENABLE, 0);
@@ -4631,6 +4656,7 @@ static int preparar(int canal, int *cal_ok) {
 
     W(AR_PHY_RX_CHAINMASK, rx_mask);                       /* restore_chainmask */
     W(AR_PHY_CAL_CHAINMASK, rx_mask);
+    paso_an[3] = an_iguales();
     return 1;
 }
 
@@ -4799,6 +4825,8 @@ static void escribe_senal(int rssi) {                      /* rssi = dB sobre el
 static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4]); kputc(h[v & 0xF]); }
 
 int radio_escanear(void) {
+    eco_ok = eco_total = 0; eco_primero_reg = 0;
+    for (int i = 0; i < 4; i++) paso_an[i] = -1;
     struct wifi_info w;
     nredes = 0; tramas = 0; errores = 0; err_radio = 0; err_suma = 0;
     err_rssi_max = -1000; err_rssi_suma = 0; err_rssi_n = 0;
@@ -4905,6 +4933,18 @@ int radio_escanear(void) {
     kprint(" dB, media ");
     if (err_rssi_n) kprint_dec(err_rssi_suma / err_rssi_n); else kputc('?');
     kprint(" dB (sobre el ruido)\n");
+    kprint("WiFi diag 3: analogicos que se quedan al escribirlos (eco) ");
+    kprint_dec((uint32_t)eco_ok); kprint(" de "); kprint_dec((uint32_t)eco_total);
+    kprint("; iguales a mi tabla tras tablas "); kprint_dec((uint32_t)(paso_an[0] < 0 ? 0 : paso_an[0]));
+    kprint(", tras placa "); kprint_dec((uint32_t)(paso_an[1] < 0 ? 0 : paso_an[1]));
+    kprint(", tras canal "); kprint_dec((uint32_t)(paso_an[2] < 0 ? 0 : paso_an[2]));
+    kprint(", tras calibrar "); kprint_dec((uint32_t)(paso_an[3] < 0 ? 0 : paso_an[3]));
+    kprint(" (de "); kprint_dec((uint32_t)paso_an_total); kputc(')');
+    if (eco_primero_reg) {
+        kprint(". Primero que no se queda: "); kprint_hex(eco_primero_reg);
+        kprint(" escribo "); kprint_hex(eco_primero_esc); kprint(" leo "); kprint_hex(eco_primero_leido);
+    }
+    kputc('\n');
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)

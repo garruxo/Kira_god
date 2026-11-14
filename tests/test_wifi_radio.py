@@ -265,6 +265,11 @@ s52 = S0_GUARDADO
 ok("antenas de la EEPROM: comun 0x12345678" in s52, "enseña los valores de antena de la EEPROM")
 ok(re.search(r"diag 2: reloj de la radio \?.*PLL.*senal de lo que no entiende: max 40 dB", s52) is not None,
    "enseña la señal más fuerte de lo que no entiende")
+m58 = re.search(r"diag 3: analogicos que se quedan al escribirlos \(eco\) (\d+) de (\d+); iguales a mi tabla tras tablas (\d+), "
+                r"tras placa (\d+), tras canal (\d+), tras calibrar (\d+) \(de (\d+)\)", s52)
+ok(m58 is not None and int(m58.group(2)) > 30 and m58.group(1) == m58.group(2) and m58.group(3) == m58.group(7),
+   "v3.58: diag 3 dice si los analógicos se quedan al escribirlos y en qué paso se pierden: "
+   + (m58.group(0) if m58 else "?"))
 
 # ---- v3.51: la cadena de PUENTES PCI (tu WiFi va en el bus 2, detrás de un puente del chipset) ----
 W = E["archivos"]["wifi.c"]
