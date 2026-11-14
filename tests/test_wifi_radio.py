@@ -270,6 +270,10 @@ m58 = re.search(r"diag 3: analogicos que se quedan al escribirlos \(eco\) (\d+) 
 ok(m58 is not None and int(m58.group(2)) > 30 and m58.group(1) == m58.group(2) and m58.group(3) == m58.group(7),
    "v3.58: diag 3 dice si los analógicos se quedan al escribirlos y en qué paso se pierden: "
    + (m58.group(0) if m58 else "?"))
+ok("diag 4 (prueba de escritura analogica" in s52 and s52.count(" bloque s") == 2 and "version de la radio" in s52,
+   "v3.59: diag 4 prueba en qué condición se queda una escritura analógica (en el simulador, todas)")
+ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],
+   "la prueba analógica no toca nada de transmitir")
 
 # ---- v3.51: la cadena de PUENTES PCI (tu WiFi va en el bus 2, detrás de un puente del chipset) ----
 W = E["archivos"]["wifi.c"]

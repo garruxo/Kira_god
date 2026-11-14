@@ -4524,6 +4524,57 @@ static uint32_t por_ciento(uint32_t parte, uint32_t total) { return total >= 100
 static void escribe_con_signo(int v) { if (v < 0) { kputc('-'); kprint_dec((uint32_t)(-v)); } else kprint_dec((uint32_t)v); }
 
 /* ---- lo que hace ath9k_hw_reset para un canal de 2,4 GHz HT20 (solo lo necesario para ESCUCHAR) ---- */
+/* v3.59: PRUEBA de escritura analógica con distintas condiciones, UNA vez (el primer canal). La v3.58 vio que
+   la mayoría de analógicos NO se quedan ni al momento (eco 182 de 507): la escritura ni entra. Aquí se prueba
+   en qué condición SÍ entra, con dos registros que se ven claros (0x7818 y 0x7848). Todo son registros de
+   ajuste de la radio que luego se reescriben igual; nada transmite. */
+static int diag4_hecho = 0;
+static uint8_t diag4[2][9];                                /* por registro: base, 2a lectura, 5ms, phy0, activo,
+                                                              doble, sin derivado, adc, bloque */
+static uint32_t diag4_leido[2] = {0, 0};
+static uint32_t radio_rev = 0;
+static int prueba_un_analogico(uint32_t r, uint32_t v, int caso) {
+    uint32_t l;
+    switch (caso) {
+    case 0: W(r, v); espera_us(100); l = R(r); break;                          /* como siempre */
+    case 1: W(r, v); espera_us(100); (void)R(r); espera_us(100); l = R(r); break;   /* la 2.ª lectura */
+    case 2: W(r, v); espera_us(5000); l = R(r); break;                         /* esperar 5 ms */
+    case 3: W(AR_PHY_BASE, 7); espera_us(10); W(r, v); espera_us(100); l = R(r); break;  /* AR_PHY(0)=7 justo antes */
+    case 4: W(AR_PHY_ACTIVE, 1); espera_us(100); W(r, v); espera_us(100); l = R(r);
+            W(AR_PHY_ACTIVE, 0); break;                                         /* con la radio «activa» */
+    case 5: W(r, v); espera_us(100); W(r, v); espera_us(100); l = R(r); break;   /* escribirlo dos veces */
+    case 6: W(AR_RTC_SLEEP_CLK, 0); espera_us(100); W(r, v); espera_us(100); l = R(r);
+            W(AR_RTC_SLEEP_CLK, 0x2); espera_us(100); break;                    /* sin el reloj derivado */
+    case 7: W(AR_PHY_ADC_SERIAL_CTL, 1); espera_us(10); W(r, v); espera_us(100); l = R(r);
+            W(AR_PHY_ADC_SERIAL_CTL, 0); break;                                  /* con el bus de la radio externa */
+    default: {                                                                   /* el bloque entero en orden */
+            for (uint32_t a = 0x7800; a <= r; a += 4) {
+                uint32_t t;
+                if (radio_valor_tabla(a, &t)) { W(a, t); espera_us(100); }
+            }
+            l = R(r);
+        }
+    }
+    return l == v;
+}
+static void prueba_analogicos(void) {
+    static const uint32_t regs[2] = {0x7818, 0x7848};
+    for (int k = 0; k < 2; k++) {
+        uint32_t v;
+        if (!radio_valor_tabla(regs[k], &v)) continue;
+        for (int c = 0; c < 9; c++) {
+            if (c == 0) { W(regs[k], v); espera_us(100); diag4_leido[k] = R(regs[k]); diag4[k][0] = diag4_leido[k] == v; continue; }
+            diag4[k][c] = (uint8_t)prueba_un_analogico(regs[k], v, c);
+        }
+    }
+    /* la versión de la radio por el bus analógico (ar9002_hw_get_radiorev): si sale 0, el bus no contesta */
+    W(AR_PHY_BASE, 7);
+    W(AR_PHY_BASE + 4u * 0x36, 0x00007058);
+    for (int i = 0; i < 8; i++) W(AR_PHY_BASE + 4u * 0x20, 0x00010000);
+    radio_rev = (R(AR_PHY_BASE + 4u * 256) >> 24) & 0xFF;
+    diag4_hecho = 1;
+}
+
 static int preparar(int canal, int *cal_ok) {
     const uint8_t *e = wifi_eeprom();
     const uint8_t *m = e + 96;                             /* modalHeader de la EEPROM de la AR9287 */
@@ -4554,6 +4605,7 @@ static int preparar(int canal, int *cal_ok) {
     tabla(ar9287_tx_gain, AR9287_TX_GAIN_N);
     tabla(ar9287_common, AR9287_COMMON_N);
     paso_an[0] = an_iguales();
+    if (!diag4_hecho) { prueba_analogicos(); tabla(ar9287_modes, AR9287_MODES_N); tabla(ar9287_common, AR9287_COMMON_N); }
     pon(AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);    /* override_ini */
     W(AR_PCU_MISC_MODE2, (R(AR_PCU_MISC_MODE2) & ~(0x40u | 0x00100000u | 0x02000000u)) | 0x80);
     W(AR_PHY_TURBO, 0x40 | 0x80 | 0x200 | 0x100 | (R(AR_PHY_TURBO) & 0x800));   /* set_channel_regs, HT20 */
@@ -4825,7 +4877,7 @@ static void escribe_senal(int rssi) {                      /* rssi = dB sobre el
 static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4]); kputc(h[v & 0xF]); }
 
 int radio_escanear(void) {
-    eco_ok = eco_total = 0; eco_primero_reg = 0;
+    eco_ok = eco_total = 0; eco_primero_reg = 0; diag4_hecho = 0;
     for (int i = 0; i < 4; i++) paso_an[i] = -1;
     struct wifi_info w;
     nredes = 0; tramas = 0; errores = 0; err_radio = 0; err_suma = 0;
@@ -4945,6 +4997,17 @@ int radio_escanear(void) {
         kprint(" escribo "); kprint_hex(eco_primero_esc); kprint(" leo "); kprint_hex(eco_primero_leido);
     }
     kputc('\n');
+    if (diag4_hecho) {
+        static const char *casos[9] = {"normal", "2a lectura", "5 ms", "phy0", "activa", "doble", "sin derivado",
+                                       "adc", "bloque"};
+        static const uint32_t regs[2] = {0x7818, 0x7848};
+        kprint("WiFi diag 4 (prueba de escritura analogica, s = se queda):");
+        for (int k = 0; k < 2; k++) {
+            kprint("\n  "); kprint_hex(regs[k]); kprint(" lee "); kprint_hex(diag4_leido[k]); kputc(':');
+            for (int c = 0; c < 9; c++) { kputc(' '); kprint(casos[c]); kputc(' '); kputc(diag4[k][c] ? 's' : 'n'); }
+        }
+        kprint("\n  version de la radio por el bus analogico: "); kprint_hex(radio_rev); kputc('\n');
+    }
     /* de la señal más fuerte a la más débil */
     for (int a = 0; a < nredes; a++)
         for (int b = a + 1; b < nredes; b++)
