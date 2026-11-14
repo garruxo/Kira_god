@@ -249,6 +249,8 @@ ok(r["ok"] and pedidas[0] == "https://raw.githubusercontent.com/torvalds/linux/v
 ok(os.path.isfile(os.path.join(TMP, "estudio", "tg3", "tg3.h")) and
    os.path.isfile(os.path.join(TMP, "estudio", "tg3", "resumen.txt")), "lo guarda con su resumen")
 ok("2 registros" in r["texto"], "cuenta los registros")
+ok("drivers/net/wireless/ath/ath9k/ar9287_initvals.h" in hw.FUENTES_LINUX["ath9k"] and
+   "drivers/net/wireless/ath/ath9k/eeprom_9287.c" in hw.FUENTES_LINUX["ath9k"], "v3.46: lo de la WiFi AR9287 del Packard Bell")
 ok(not hw.estudiar_codigo("desconocido", abrir=abrir_linux)["ok"], "driver que no conoce: lo dice")
 for f, esperado in (("haz ingeniería inversa del portátil", ("fondo", "")), ("estudia el código del driver tg3", ("fondo", "tg3")),
                     ("estudia el driver de tu red por cable", ("fondo", "red")), ("estudia a fondo tu hardware", ("fondo", ""))):

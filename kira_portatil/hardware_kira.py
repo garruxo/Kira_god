@@ -178,7 +178,13 @@ ESTUDIO = os.environ.get("KIRA_ESTUDIO_DRIVERS", os.path.expanduser("~/kira_port
 # el código ABIERTO de Linux de cada driver (para aprender cómo habla con su chip): lo que le sirve al kernel de Kira
 FUENTES_LINUX = {
     "tg3": ["drivers/net/ethernet/broadcom/tg3.h", "drivers/net/ethernet/broadcom/tg3.c"],
-    "ath9k": ["drivers/net/wireless/ath/ath9k/reg.h", "drivers/net/wireless/ath/ath9k/hw.h"],
+    # v3.46: la WiFi Atheros AR9287 (168c:002e) del Packard Bell: ath9k NO necesita firmware cerrado; esto es lo que
+    # hace falta para despertar el chip, leer su EEPROM (MAC, país, calibración), las tablas de la radio y recibir.
+    "ath9k": ["drivers/net/wireless/ath/ath9k/reg.h", "drivers/net/wireless/ath/ath9k/hw.h",
+              "drivers/net/wireless/ath/ath9k/mac.h", "drivers/net/wireless/ath/ath9k/eeprom.h",
+              "drivers/net/wireless/ath/ath9k/eeprom_9287.c", "drivers/net/wireless/ath/ath9k/ar9287_initvals.h",
+              "drivers/net/wireless/ath/ath9k/ar9002_phy.h", "drivers/net/wireless/ath/ath9k/ar9002_hw.c",
+              "drivers/net/wireless/ath/ath9k/hw.c"],
     "ahci": ["drivers/ata/ahci.h"],
     "e1000e": ["drivers/net/ethernet/intel/e1000e/regs.h", "drivers/net/ethernet/intel/e1000e/defines.h"],
     "e1000": ["drivers/net/ethernet/intel/e1000/e1000_hw.h"],
