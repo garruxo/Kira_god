@@ -4205,6 +4205,7 @@ _RADIO_H = r"""/* radio.h — WiFi W2: escuchar y listar las redes de alrededor 
 int radio_escanear(void);     /* devuelve cuántas redes ha oído, o <0 si no ha podido */
 void radio_probar(void);      /* lo de la etapa 17: lo escribe en pantalla */
 int radio_interruptor(int vigilar);   /* el interruptor de la radio (solo lee); 1 si está apagada */
+int radio_encender(void);     /* enciende la radio como Linux: SOLO el bit 0 del byte 0xBB del EC */
 int radio_sintonizar(int canal);   /* ajusta la radio en un canal SIN escuchar; <0 si no ha podido */
 uint32_t radio_reg(uint32_t r);    /* lee un registro de la tarjeta */
 uint32_t radio_reg_lento(uint32_t r);            /* lo mismo, despacio (analógicos) */
@@ -5072,7 +5073,8 @@ int radio_interruptor(int vigilar) {
     else kprint(" (la EEPROM no usa interruptor)");
     kprint(". Entradas GPIO ahora "); kprint_hex(ent); kprint(" (con Linux eran 0x6FF; GPIO 0: Linux 1, Kira ");
     kprint_dec(ent & 1); kprint(")\n");
-    if (activo) kprint(apagada ? "  -> la radio esta APAGADA por el interruptor del portatil (por eso no oye nada)\n"
+    if (activo) kprint(apagada ? "  -> la radio esta APAGADA por el interruptor del portatil (por eso no oye nada).\n"
+                                 "     Escribe enciende y la enciendo como Linux (solo un bit del controlador)\n"
                                : "  -> el interruptor dice ENCENDIDA\n");
     if (vigilar) {
         kprint("  Pulsa ahora la tecla de la WiFi (Fn + la tecla con la antena) una o dos veces. Miro 20 segundos");
@@ -5091,6 +5093,106 @@ int radio_interruptor(int vigilar) {
                        : "\n  No ha cambiado nada con la tecla\n");
     }
     return apagada;
+}
+
+/* v3.62: ENCENDER la radio como Linux. En Xubuntu (estudiar_interruptor.sh, v3.61) se vio que al apagar y encender
+   la WiFi con el interruptor «acer-wireless» SOLO cambia, de lo que no es un contador, el byte 0xBB del controlador
+   del portátil (EC): 0x45 -> 0x44 -> 0x45 (el bit 0), y con él la entrada GPIO 0 de la tarjeta (0x6FF -> 0x7FE -> 0x7FF).
+   Linux lo hace por ACPI/WMI, que acaba escribiendo ese bit en el EC. Aquí se hace lo mismo con el protocolo
+   estándar del EC (puertos 0x62 datos / 0x66 órdenes; 0x80 leer, 0x81 escribir), con mucho cuidado porque el EC
+   también lleva la batería y el ventilador: solo con la orden «enciende», solo si la radio está apagada, solo si
+   el EC contesta igual dos veces, solo el BIT 0 del byte 0xBB (los demás bits se escriben como estaban) y, si la
+   radio no se enciende en 3 s, se vuelve a dejar el byte EXACTAMENTE como estaba. Ningún otro byte del EC. */
+#ifdef WIFI_SIMULADA
+uint8_t sim_inb(uint16_t p);
+void sim_outb(uint16_t p, uint8_t v);
+__attribute__((weak)) uint8_t sim_inb(uint16_t p) { (void)p; return 0xFF; }
+__attribute__((weak)) void sim_outb(uint16_t p, uint8_t v) { (void)p; (void)v; }
+#define EC_IN(p) sim_inb(p)
+#define EC_OUT(p, v) sim_outb(p, v)
+#else
+#define EC_IN(p) inb(p)
+#define EC_OUT(p, v) outb(p, v)
+#endif
+#define EC_DATO 0x62
+#define EC_ORDEN 0x66
+#define EC_IBF 0x02          /* el EC aún no ha cogido lo último que le mandé */
+#define EC_OBF 0x01          /* el EC tiene un dato para mí */
+#define EC_WIFI 0xBB         /* el byte que cambia Linux; bit 0 = radio WiFi */
+static int ec_libre(void) {                                 /* como mucho ~200 ms */
+    for (int i = 0; i < 20000; i++) { if (!(EC_IN(EC_ORDEN) & EC_IBF)) return 1; espera_us(10); }
+    return 0;
+}
+static int ec_hay_dato(void) {
+    for (int i = 0; i < 20000; i++) { if (EC_IN(EC_ORDEN) & EC_OBF) return 1; espera_us(10); }
+    return 0;
+}
+static int ec_leer(uint8_t dir, uint8_t *v) {
+    for (int i = 0; i < 16 && (EC_IN(EC_ORDEN) & EC_OBF); i++) (void)EC_IN(EC_DATO);   /* vaciar lo viejo */
+    if (!ec_libre()) return -1;
+    EC_OUT(EC_ORDEN, 0x80);
+    if (!ec_libre()) return -1;
+    EC_OUT(EC_DATO, dir);
+    if (!ec_hay_dato()) return -1;
+    *v = EC_IN(EC_DATO);
+    return 0;
+}
+static int ec_escribir_bit_wifi(uint8_t v) {                /* SOLO el byte 0xBB: no hay otra forma de escribir */
+    if (!ec_libre()) return -1;
+    EC_OUT(EC_ORDEN, 0x81);
+    if (!ec_libre()) return -1;
+    EC_OUT(EC_DATO, EC_WIFI);
+    if (!ec_libre()) return -1;
+    EC_OUT(EC_DATO, v);
+    if (!ec_libre()) return -1;
+    return 0;
+}
+int radio_encender(void) {
+    struct wifi_info w;
+    if (wifi_leer(&w) != 1) { kprint("WiFi enciende: no encuentro la tarjeta; no toco nada\n"); return -1; }
+    if (w.version != 0x180) { kprint("WiFi enciende: no es una AR9287; no toco nada\n"); return -1; }
+    const uint8_t *e = wifi_eeprom();
+    uint32_t rs = (uint32_t)e[20] | ((uint32_t)e[21] << 8);
+    int activo = rs & 1, pol = (rs >> 1) & 1, g = (rs >> 2) & 7;
+    if (!activo) { kprint("WiFi enciende: la EEPROM no usa interruptor; no toco nada\n"); return 0; }
+    if (((gpio_entradas() >> g) & 1) != (uint32_t)pol) {
+        kprint("WiFi enciende: la radio ya esta ENCENDIDA. Escribe redes\n"); return 1;
+    }
+    if (EC_IN(EC_ORDEN) == 0xFF) {
+        kprint("WiFi enciende: no encuentro el controlador del portatil (EC); no toco nada\n"); return -2;
+    }
+    uint8_t a = 0, b = 0;
+    if (ec_leer(EC_WIFI, &a) || ec_leer(EC_WIFI, &b) || a != b) {
+        kprint("WiFi enciende: el controlador del portatil no contesta bien; no toco nada\n"); return -3;
+    }
+    kprint("WiFi enciende: controlador byte 0xBB = "); kprint_hex(a);
+    if (a & 1) {
+        kprint(" (el bit de la WiFi ya esta a 1 y la radio sigue apagada: no toco nada mas)\n"); return -4;
+    }
+    kprint(" -> pongo SOLO el bit 0, como hace Linux\n");
+    if (ec_escribir_bit_wifi((uint8_t)(a | 1))) {
+        kprint("WiFi enciende: el controlador no me deja escribir; lo intento dejar como estaba\n");
+        ec_escribir_bit_wifi(a);
+        return -5;
+    }
+    int encendida = 0;
+    for (int i = 0; i < 30 && !encendida; i++) {
+        espera_us(100000);
+        encendida = ((gpio_entradas() >> g) & 1) != (uint32_t)pol;
+    }
+    uint8_t c = 0;
+    ec_leer(EC_WIFI, &c);
+    if (encendida) {
+        kprint("WiFi enciende: radio ENCENDIDA (GPIO ahora "); kprint_hex(gpio_entradas());
+        kprint(", controlador "); kprint_hex(c); kprint("). Escribe redes\n");
+        return 1;
+    }
+    ec_escribir_bit_wifi(a);                               /* no ha servido: tal y como estaba */
+    uint8_t d = 0;
+    ec_leer(EC_WIFI, &d);
+    kprint("WiFi enciende: la radio NO se ha encendido en 3 s. He dejado el controlador como estaba (");
+    kprint_hex(d); kprint(d == a ? ", igual que antes). Hazme una foto\n" : ", OJO: no es igual que antes). Hazme una foto\n");
+    return -6;
 }
 
 /* ---- para la orden «compara»: deja la radio ajustada en un canal (como para escuchar, pero SIN escuchar:
@@ -5382,11 +5484,13 @@ _D17 = _D16 + r"""#include "radio.h"
 static void o_redes(const char *a) { (void)a; radio_escanear(); }
 static void o_compara(const char *a) { compara_orden(a); }
 static void o_interruptor(const char *a) { (void)a; radio_interruptor(1); }
+static void o_enciende(const char *a) { (void)a; radio_encender(); }
 """
 _C17 = _C16 + "    radio_probar();\n"
 _O17 = _O16 + '    shell_orden("redes", "escucha y lista las redes WiFi de alrededor (sin transmitir)", o_redes);\n' + \
     '    shell_orden("compara", "compara mis registros de la WiFi con los de Linux (compara 2 = pagina 2)", o_compara);\n' + \
-    '    shell_orden("interruptor", "mira si el portatil tiene la radio WiFi apagada y vigila la tecla 20 s", o_interruptor);\n'
+    '    shell_orden("interruptor", "mira si el portatil tiene la radio WiFi apagada y vigila la tecla 20 s", o_interruptor);\n' + \
+    '    shell_orden("enciende", "enciende la radio WiFi como Linux (solo un bit del controlador del portatil)", o_enciende);\n'
 
 _K11 = _k_shell("etapa 11: consola propia", _D11, _C11, "")
 _K12 = _k_shell("etapa 12: multitarea", _D12, _C12, _O12)

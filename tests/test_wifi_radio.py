@@ -164,6 +164,30 @@ void sim_paso(uint32_t us) {
     recibir(datos, 60, 40, 0);                             /* y una con la suma mal */
 }
 
+/* v3.62: el controlador del portátil (EC) en los puertos 0x62/0x66. modo 10: el bit 0 de 0xBB enciende la radio
+   (GPIO 0); 11: el EC acepta la escritura pero la radio no se enciende; 12: no hay EC (0xFF); 13: EC atascado. */
+static uint8_t ec_ram[256]; static int ec_est = 0, ec_dir = 0, ec_obf = 0, ec_esc = 0, ec_esc_otro = 0;
+static uint8_t ec_sal = 0;
+uint8_t sim_inb(uint16_t p) {
+    if (modo == 12) return 0xFF;
+    if (p == 0x66) return (uint8_t)((modo == 13 ? 0x02 : 0) | (ec_obf ? 1 : 0));
+    if (p == 0x62) { ec_obf = 0; return ec_sal; }
+    return 0xFF;
+}
+void sim_outb(uint16_t p, uint8_t v) {
+    if (modo == 12 || modo == 13) return;
+    if (p == 0x66) { ec_est = v == 0x80 ? 1 : v == 0x81 ? 2 : 0; return; }
+    if (p != 0x62) return;
+    if (ec_est == 1) { ec_sal = ec_ram[v]; ec_obf = 1; ec_est = 0; }
+    else if (ec_est == 2) { ec_dir = v; ec_est = 3; }
+    else if (ec_est == 3) {
+        ec_ram[ec_dir] = v; ec_esc++; if (ec_dir != 0xBB) ec_esc_otro++;
+        if (ec_dir == 0xBB && modo == 10) {
+            if (v & 1) regs[0x4048 / 4] |= 1u << 11; else regs[0x4048 / 4] &= ~(1u << 11);
+        }
+        ec_est = 0;
+    }
+}
 #include "wifi.h"
 #include "radio.h"
 int main(int argc, char **argv) {
@@ -181,9 +205,20 @@ int main(int argc, char **argv) {
     uint8_t *m = b + 96;                                   /* modalHeader */
     m[0] = 0x10; m[4] = 0x20; m[8] = 0x78; m[9] = 0x56; m[10] = 0x34; m[11] = 0x12;   /* antCtrlCommon 0x12345678 */
     m[14] = 0x2d; m[23] = 0x38;
+    if (modo >= 10) b[20] = 0x01;                          /* rfSilent: GPIO 0, apagada si vale 0 */
     uint16_t x = 0;
     for (int i = 0; i < n; i++) x ^= eep[128 + i];
     eep[129] = x ^ 0xFFFF;
+    if (modo >= 10) {
+        for (int i = 0; i < 256; i++) ec_ram[i] = (uint8_t)(0x30 + i);
+        ec_ram[0xBB] = 0x44;
+        int e = radio_encender();
+        printf("ENCENDER=%d EC_BB=%02x ESCRITURAS=%d OTRO=%d GPIO0=%u\n", e, ec_ram[0xBB], ec_esc, ec_esc_otro,
+               (regs[0x4048 / 4] >> 11) & 1);
+        int e2 = radio_encender();
+        printf("OTRA_VEZ=%d ESCRITURAS=%d\n", e2, ec_esc);
+        return 0;
+    }
     int r = radio_escanear();
     printf("RESULTADO=%d\n", r);
     printf("SWITCH_COM=0x%08x\n", regs[0x9964 / 4]);
@@ -199,9 +234,12 @@ int main(int argc, char **argv) {
 '''
 
 gcc = shutil.which("gcc")
+SIMPROG = None
 ok(gcc is not None, "hay gcc para compilar el driver de verdad")
 if gcc:
-    with tempfile.TemporaryDirectory() as d:
+    _dsim = tempfile.mkdtemp()
+    if True:
+        d = _dsim
         for nombre in ("wifi.c", "wifi.h", "radio.c", "radio.h", "ar9287_tablas.h"):
             open(os.path.join(d, nombre), "w").write(E["archivos"][nombre])
         open(os.path.join(d, "consola.h"), "w").write(
@@ -212,6 +250,7 @@ if gcc:
                             os.path.join(d, "sim.c"), os.path.join(d, "wifi.c"), os.path.join(d, "radio.c")],
                            capture_output=True, text=True)
         ok(c.returncode == 0, "radio.c + wifi.c compilan sin avisos con el chip simulado " + c.stderr[:400])
+        if c.returncode == 0: SIMPROG = prog
         def corre(m):
             return subprocess.run([prog, str(m)], capture_output=True, text=True, timeout=300).stdout
         if c.returncode == 0:
@@ -278,6 +317,25 @@ _ri = RC.split("int radio_interruptor(int vigilar) {")[1].split("\n}\n")[0]
 ok("W(" not in _ri and "wifi_escribe" not in _ri and "pon(" not in _ri, "el interruptor SOLO lee: ninguna escritura")
 import saber_so_kira as _sk
 ok('shell_orden("interruptor"' in _sk._O17, "orden «interruptor» en la consola")
+ok('shell_orden("enciende"' in _sk._O17, "v3.62: orden «enciende» en la consola")
+_re = RC.split("int radio_encender(void) {")[1].split("\n}\n")[0]
+ok("W(" not in _re and "wifi_escribe" not in _re and "pon(" not in _re, "encender no escribe NADA en la tarjeta")
+ok(RC.count("EC_OUT(EC_DATO, EC_WIFI)") == 1 and "0x81" in RC and RC.count("EC_OUT(EC_ORDEN, 0x81)") == 1,
+   "la única escritura al EC posible es al byte 0xBB")
+ok("Escribe enciende" in RC, "si la radio está apagada, dice que escriba «enciende»")
+if gcc and SIMPROG:
+    def corre2(m): return subprocess.run([SIMPROG, str(m)], capture_output=True, text=True, timeout=300).stdout
+    s10 = corre2(10); print(s10)
+    ok("radio ENCENDIDA" in s10 and "ENCENDER=1 EC_BB=45 ESCRITURAS=1 OTRO=0 GPIO0=1" in s10,
+       "v3.62: pone SOLO el bit 0 de 0xBB (0x44 -> 0x45), una escritura, y la radio se enciende")
+    ok("OTRA_VEZ=1 ESCRITURAS=1" in s10, "si ya está encendida no vuelve a tocar el EC")
+    s11 = corre2(11); print(s11)
+    ok("ENCENDER=-6 EC_BB=44 ESCRITURAS=2 OTRO=0" in s11 and "igual que antes" in s11,
+       "si la radio no se enciende, deja el byte EXACTAMENTE como estaba (0x44)")
+    s12 = corre2(12)
+    ok("ENCENDER=-2" in s12 and "no toco nada" in s12, "sin controlador (EC) no toca nada")
+    s13 = corre2(13)
+    ok("ENCENDER=-3" in s13 and "ESCRITURAS=0" in s13, "con el EC atascado no se cuelga ni escribe nada")
 ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],
    "la prueba analógica no toca nada de transmitir")
 
@@ -338,5 +396,6 @@ if gcc:
                "al acabar la tarjeta pierde el permiso y guarda el «rechazo» para el diagnóstico")
             ok("FUERA=0" in s, "solo toca el registro de órdenes (0x04), nada más de la configuración PCI")
 
+if gcc: shutil.rmtree(_dsim, ignore_errors=True)
 print("\n" + ("TODO BIEN" if not FALLOS else f"{len(FALLOS)} FALLOS"))
 sys.exit(1 if FALLOS else 0)
