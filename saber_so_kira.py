@@ -3589,8 +3589,11 @@ int ip_dhcp(void) {
         if (dhcp_esperar(5, ok, servidor) == 1) {          /* ACK */
             copia(mi_ip, ok, 4);
             con_ip = 1;
+            static const uint8_t nada[4] = {0, 0, 0, 0};
+            if (iguales(router_ip, nada, 4)) copia(router_ip, servidor, 4);   /* sin router anunciado (QEMU aislado): el servidor */
+            if (iguales(dns_ip, nada, 4)) copia(dns_ip, servidor, 4);
             kprint("DHCP OK: mi IP es "); escribe_ip(mi_ip);
-            kprint(", router "); escribe_ip(router_ip); kprint(", DNS "); escribe_ip(dns_ip); kputc('\n');
+            kprint(", router "); escribe_ip(router_ip); kputc('\n');
             return 1;
         }
     }

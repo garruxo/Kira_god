@@ -57,6 +57,23 @@ ok(all(x not in AHCI_C.lower() for x in ("0x35", "0xca", "0x30,", "0x3d", "0x61"
    "el driver AHCI (v3.40) SOLO LEE: ni una orden de escritura, el descriptor siempre «disco → memoria»")
 ok(so.etapa_para("lee las particiones del disco sata")["n"] == 9 and so.etapa_para("driver ahci")["n"] == 9,
    "particiones / AHCI → 9")
+A2 = so.etapa(10)["archivos"]["ahci.c"]
+ok(all(x not in A2.lower() for x in ("0x35", "0xca", "0x30,", "0x3d", "0x61")) and "1u << 6" not in A2,
+   "AHCI v2 (etapa 10+) sigue SIN órdenes de escritura")
+ok("ext4_probar" in so.etapa(10)["archivos"]["kernel.c"] and "0xF30A" in so._EXT4_C, "etapa 10: ext4 con extents")
+SH = so.etapa(11)["archivos"]["shell.c"]
+ok(all(f'"{o}"' in SH for o in ("ayuda", "ls", "cd", "cat", "aparatos", "discos", "memoria", "reiniciar")),
+   "etapa 11: la consola trae sus órdenes")
+ok(all(ord(ch) < 128 for linea in SH.splitlines() if "kprint(" in linea for ch in linea),
+   "lo que escribe la consola es ASCII (la pantalla de texto no tiene UTF-8)")
+ok("mov esp, eax" in so.etapa(12)["archivos"]["isr.s"] and "isr.s" not in so._E2 and
+   so.etapa(11)["archivos"]["isr.s"] == so._ISR_S, "multitarea: el cambio de pila solo desde la etapa 12")
+G2, U = so.etapa(13)["archivos"]["gdt.c"], so.etapa(13)["archivos"]["usuario.c"]
+ok("tss.iomap = sizeof(tss)" in G2 and "0xFA" in G2 and "idt_poner_usuario(128)" in U and "en_zona" in U,
+   "modo usuario: sin puertos para el usuario, int 0x80 abierta y punteros comprobados")
+ok("en_zona(va, msz)" in so.etapa(14)["archivos"]["programa.c"], "el cargador no deja escribir fuera de la zona de usuario")
+ok("hola.c" in so.PROGRAMAS and "0x00800000" in so.PROGRAMA_LD and "hola.c" not in so.etapa(14)["archivos"],
+   "hola.c es un programa APARTE (no va dentro del kernel)")
 CONSOLA = so.etapa(1)["archivos"]["consola.c"]
 ok("serie_ok" in CONSOLA and "i < 100000" in CONSOLA, "sin puerto serie (portátil de verdad) no se queda esperando")
 ok("0xFE" in so.etapa(4)["archivos"]["teclado.c"], "Esc reinicia (para volver a KiraOS desde el USB)")
@@ -168,9 +185,18 @@ else:
         t.poner_etapa(e["n"], copiar=False)
         c, sal = t.compilar()
         ok(c and "error" not in sal.lower(), f"la etapa {e['n']} COMPILA de verdad (gcc + nasm + ld)")
-        r = t.probar(e["espera"])
+        r = t.probar(e["espera"], e.get("entrada"))
         ok(r["ok"], f"la etapa {e['n']} arranca y saca sus marcas ({'QEMU real' if QEMU_REAL else 'QEMU falso'}): "
            + r["texto"][:120])
+    elfs = t.compilar_programas()
+    ok(any(x.endswith("hola.elf") for x in elfs) and os.path.isfile(os.path.join(base, "programas", "hola.elf")),
+       "el taller compila hola.elf aparte y lo deja en programas/ (ahí lo busca el kernel del USB)")
+    if shutil.which("mke2fs"):
+        ext = t.contenido_ext4()
+        ok(ext and ext[1024 + 56:1024 + 58] == b"\x53\xef" and b"Hola desde el disco de Kira" in ext and
+           b"Hola desde un programa cargado del disco" in ext, "el disco de pruebas lleva un ext4 de verdad con kira.txt y hola.elf")
+        g = tk.disco_gpt(ext)
+        ok(g[4096 * 512 + 1024 + 56:4096 * 512 + 1024 + 58] == b"\x53\xef", "el ext4 va dentro de la partición Linux del disco GPT")
     # nunca escribe fuera de .c/.h/.s
     for malo in ("Makefile", "../fuera.c", "linker.ld", "a b.c"):
         try:
