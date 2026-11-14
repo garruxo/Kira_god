@@ -4,7 +4,7 @@ del RTC, calibración, el canal en AR_PHY_SYNTH_CONTROL y una recepción por DMA
 descriptores ar5416 del anillo. Se comprueba que oye las redes (nombre, canal, señal, seguridad, red oculta), que
 no se cuelga si el chip no se deja reiniciar o la calibración no acaba, y sobre todo que NUNCA transmite: ni cola
 de envío, ni descriptor de envío, ni EEPROM, y con las respuestas automáticas (ACK/CTS) apagadas al escuchar."""
-import os, re, shutil, subprocess, sys, tempfile
+import os, re, re, shutil, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import saber_so_kira as so
 import wifi_tablas_kira as wt
@@ -73,7 +73,11 @@ uint32_t sim_lee(uint32_t r) {
     if (r == 0x80F8) return 9680000;                       /* ciclos: el reloj de la radio va */
     return regs[r / 4];
 }
+static uint32_t serdes_log[16]; static int serdes_n = 0, serdes_cargado = 0, serdes_antes_ini = 1;
 void sim_escribe(uint32_t r, uint32_t v) {
+    if (r == 0x4040 && serdes_n < 16) serdes_log[serdes_n++] = v;
+    if (r == 0x4044 && serdes_n == 9 && v == 0) serdes_cargado = 1;
+    if (r >= 0x7800 && r < 0x78A0 && !serdes_cargado) serdes_antes_ini = 0;
     if (r >= 0x2000 && r < 0x3000) escritura_eeprom++;
     if (r == 0x0840 && v) escritura_txe++;
     if (r >= 0x0800 && r < 0x0840 && v) escritura_txdp++;
@@ -185,6 +189,9 @@ int main(int argc, char **argv) {
     printf("SWITCH_COM=0x%08x\n", regs[0x9964 / 4]);
     printf("STA_ID0=0x%08x\n", regs[0x8000 / 4]);
     printf("RUIDO=0x%03x,0x%03x\n", regs[0x9864 / 4] & 0x1FF, regs[0xA864 / 4] & 0x1FF);
+    printf("SERDES=%d", serdes_n); for (int i = 0; i < serdes_n; i++) printf(" %08x", serdes_log[i]);
+    printf(" CARGADO=%d ANTES_ANALOG=%d WA=%08x PM=%08x\n", serdes_cargado, serdes_antes_ini,
+           regs[0x4004 / 4], regs[0x4014 / 4]);
     printf("EEPROM=%d TXE=%d TXDP=%d SIN_ACK_DIS=%d VECES_RXE=%d RXE_AL_FINAL=%d DIAG_RX_DIS=%d\n", escritura_eeprom,
            escritura_txe, escritura_txdp, rxe_sin_ack_dis, veces_rxe, rxe, (regs[0x8048 / 4] & 0x20) ? 1 : 0);
     return 0;
@@ -222,6 +229,11 @@ if gcc:
             ok("canales calibrados 13 de 13" in s and "con errores" in s, "calibra los 13 canales y cuenta los errores")
             ok("WiFi diag:" in s and "RXDP" in s.split("WiFi diag:")[1].splitlines()[0], "línea de diagnóstico (contadores, ruido, ISR, DIAG, CR, RXDP)")
             ok("RUIDO=0x19c,0x19c" in s, "ruido cargado en las dos cadenas: -112 y después el tope -50, como Linux")
+            ok("SERDES=9 9248fd00 24924924 a8000019 13160820 e5980560 c01dcffd 1aaabe41 be105554 00043007 CARGADO=1 "
+               "ANTES_ANALOG=1 WA=004a05cb PM=00080000" in s,
+               "v3.57: la conexión PCIe como Linux (9 escrituras de SerDes + cargar, AR_WA y PM_CTRL), ANTES de los analógicos: "
+               + (re.search(r"SERDES=.*", s).group(0) if re.search(r"SERDES=.*", s) else "?"))
+            ok(s.count("conexion PCIe preparada") == 1, "la SerDes se prepara UNA vez, no en cada canal")
             ok("SWITCH_COM=0x12345678" in s, "pone los valores de antena de TU EEPROM (set_board_values)")
             ok("STA_ID0=0x539d651c" in s, "usa tu MAC de la EEPROM")
             ok("EEPROM=0 TXE=0 TXDP=0 SIN_ACK_DIS=0" in s, "NUNCA: escribir la EEPROM, cola de envío, descriptor de envío, ni escuchar con ACK/CTS encendidos")

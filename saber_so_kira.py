@@ -4415,6 +4415,29 @@ static int despierta(void) {
     return esperar(AR_RTC_STATUS, 0xF, 0x2, ESPERA_MAX);
 }
 
+/* ---- la conexión PCIe como la deja Linux (ar9002_hw_configpcipowersave(ah, false), que Linux hace al arrancar
+   cuando el portátil tiene ASPM; la comparación con Linux lo confirmó: AR_WA 0x004A05CB y PM_CTRL con el bit 19).
+   Según el propio Linux, la SerDes «va por el MISMO registro de desplazamiento de 288 bits que los demás registros
+   analógicos»: son 9 escrituras + «cargar» (0x4044 = 0). Sin esto, mis analógicos (0x7800...) no se quedaban.
+   Valores de ar9280PciePhy_clkreq_always_on_L1_9280 (ar9002_initvals.h, licencia ISC de Atheros). ---- */
+#define AR_PCIE_SERDES         0x4040
+#define AR_PCIE_SERDES2        0x4044
+#define AR_WA                  0x4004
+#define AR_PCIE_PM_CTRL        0x4014
+static int pcie_hecho = 0;
+static void preparar_pcie(void) {
+    static const uint32_t serdes[9] = {
+        0x9248fd00, 0x24924924, 0xa8000019, 0x13160820, 0xe5980560,
+        0xc01dcffd, 0x1aaabe41, 0xbe105554, 0x00043007 };
+    for (int i = 0; i < 9; i++) W(AR_PCIE_SERDES, serdes[i]);
+    W(AR_PCIE_SERDES2, 0);                                 /* «Load the new settings» */
+    espera_us(1000);
+    W(AR_WA, (0x004a050bu & ~(1u << 14)) | (1u << 6) | (1u << 7));   /* AR9285_WA_DEFAULT + WAR de ASPM */
+    pon(AR_PCIE_PM_CTRL, 0x00080000);                      /* AR_PCIE_PM_CTRL_ENA */
+    pcie_hecho = 1;
+    kprint("\nWiFi: conexion PCIe preparada como Linux (SerDes por el registro analogico + ASPM)\n");
+}
+
 /* ---- coeficiente «delta slope» (ath9k_hw_get_delta_slope_vals) ---- */
 static void delta_vals(uint32_t escala, uint32_t *man, uint32_t *ex) {
     uint32_t e;
@@ -4490,6 +4513,7 @@ static int preparar(int canal, int *cal_ok) {
     if (!encendido_hecho) {
         if (!encendido()) return -1;
         encendido_hecho = 1;
+        if (!pcie_hecho) preparar_pcie();                  /* como Linux: una vez, tras encender y antes de las tablas */
     } else if (!reinicio(1)) {
         return -1;
     }
