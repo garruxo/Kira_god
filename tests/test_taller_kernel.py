@@ -186,6 +186,11 @@ else:
         t_sin = tk.Taller(base=base, popen=popen, correr=correr,
                           which=lambda h: None if h in ("grub-mkrescue", "xorriso") else which(h))
         ok("sudo apt install" in t_sin.hacer_iso()[1] and "xorriso" in t_sin.hacer_iso()[1], "sin GRUB/xorriso dice cómo")
+        t_nada = tk.Taller(base=base, popen=popen, correr=correr,
+                           which=lambda h: None if h in ("grub-mkrescue", "xorriso", "nasm") else which(h))
+        r_n = tk.hacer(t_nada, "usb")
+        ok(r_n.get("ok") is False and "sudo apt install grub-common grub-pc-bin mtools nasm xorriso" in r_n["texto"],
+           "sin nasm ni GRUB: UNA sola línea con todo lo que falta (visto en el Packard Bell)")
         # grabar_usb.sh de verdad, con un dd de mentira
         lsb = os.path.join(T, "lsblk.json")
         with open(lsb, "w") as f:

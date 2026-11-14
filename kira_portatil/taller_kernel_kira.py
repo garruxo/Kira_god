@@ -840,6 +840,16 @@ def hacer(taller, accion, carga="", preguntar=None, al_paso=None, parar=None, ay
                               ("Funciona ✓. Puerto serie:\n" + r.get("serie", "").strip()[-900:] if r["ok"] else
                                f"Pero aquí falla ({r['fase']}): {r['texto'][:600]}"))}
         if accion == "usb":
+            falta = [h for h in ("gcc", "ld", "nasm") if not taller.which(h)] + taller.faltan_iso()
+            if falta:                                # v3.37: TODO lo que falta de una vez (no a trozos)
+                paq = sorted({"gcc": "build-essential", "ld": "binutils", "nasm": "nasm", "grub-mkrescue": "grub-common",
+                              "xorriso": "xorriso", "grub-pc-bin": "grub-pc-bin"}[x] for x in falta)
+                paq = sorted(set(paq + (["mtools", "grub-pc-bin"] if set(falta) & {"grub-mkrescue", "xorriso",
+                                                                                  "grub-pc-bin"} else [])))
+                return {"ok": False, "texto": (
+                    "Para preparar el USB me faltan programas: " + ", ".join(falta) + ". Ábreme la Terminal y escribe "
+                    "esta línea entera (te pedirá TU contraseña):\n\n  sudo apt install " + " ".join(paq) +
+                    "\n\nLuego vuelve a decirme «prepara el USB del kernel».")}
             paso(0.3, "Meto el kernel en una imagen arrancable con GRUB…")
             ok, txt = taller.hacer_iso()
             return {"texto": taller.texto_usb(ok, txt), **({} if ok else {"ok": False})}
