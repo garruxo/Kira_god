@@ -360,6 +360,15 @@ class EscritorioMixin:
         iid, nueva = ak.poner_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "",
                                       fuente=fuente, pagina=getattr(self, "_pagina_vista", "") or fuente)  # v3.81
         extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
+        try:                                              # v3.82: se instala POR LA TERMINAL → lo hago yo, en segundo plano
+            import arreglar_app_kira as arr
+            if arr.necesita_construir(r.get("carpeta"), r.get("lanzar")):
+                arr.construir_en_fondo(ak.uno(DATOS_NUCLEO, iid) or {}, DATOS_NUCLEO, lanzador=None,
+                                       preguntar=getattr(self, "_preguntar_cli", None), nombre=r["nombre"])
+                extra += (" Este programa se instala por la terminal (compilar, archivos extra…): sigo yo los pasos "
+                          "de su README en segundo plano y te aviso al terminar.")
+        except Exception:                                 # noqa: BLE001
+            pass
         dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
         import manejo_apps_kira as ma
         n = ma.preparar_ordenes(ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)),   # v3.78: sus órdenes, antes de abrirla

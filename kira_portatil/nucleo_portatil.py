@@ -556,6 +556,19 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
         suave = r.get("admin") or r.get("peligro")
         return {"texto": ("" if suave else "[x] ") + r.get("mensaje", "No pude instalarla."),
                 "ok": bool(suave)}
+    construido = ""
+    try:                                               # v3.82: hay que COMPILARLO o seguir sus pasos (archivos extra…)
+        import arreglar_app_kira as arr
+        if arr.necesita_construir(r.get("carpeta"), r.get("lanzar")):
+            paso(None, "Hay que compilarlo: sigo los pasos de su README…")
+            rc_ = arr.construir({"carpeta": r.get("carpeta"), "titulo": r["nombre"], "pagina": pagina or fuente},
+                                al_paso=lambda t: paso(None, t), preguntar=_preguntar_cerebro(core),
+                                nombre=r["nombre"])
+            if rc_.get("lanzar"):
+                r["lanzar"] = rc_["lanzar"]
+            construido = " " + arr.texto_construido(r["nombre"], rc_)
+    except Exception as e:                            # noqa: BLE001
+        construido = f" (No pude seguir sus pasos de instalación: {e})"
     iid, nueva = ak.poner_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "",
                                   fuente=fuente, pagina=pagina or fuente)          # v3.81: para estudiarla si no arranca
     extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
@@ -564,7 +577,7 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
     paso(None, "Preparo sus órdenes…")                 # v3.78: antes de abrirla, ya sabe qué se le puede pedir
     n = ma.preparar_ordenes(_manejo(core), {"titulo": r["nombre"], "lanzar": r.get("lanzar") or [],
                                             "carpeta": r.get("carpeta") or ""})
-    return {"texto": r.get("mensaje", "Instalada.") + extra +
+    return {"texto": r.get("mensaje", "Instalada.") + construido + extra +
             " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." +
             ma.texto_preparadas(n, r["nombre"]) + dep_aviso}
 
