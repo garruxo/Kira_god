@@ -213,7 +213,7 @@ otro.kill()
 fuente = open(os.path.join(RAIZ, "kira_portatil", "nucleo_portatil.py"), encoding="utf-8").read()
 ok("ma_.orden(o)" in fuente and "vk_.es_respuesta" in fuente, "el núcleo maneja apps y versiones")
 html = open(os.path.join(RAIZ, "kira_portatil", "kiraos_web", "escritorio.html"), encoding="utf-8").read()
-ok('data-a="cerrar"' in html and 'hablarCon("órdenes de "+a.titulo)' in html,
+ok('data-a="cerrar"' in html and 'ordenesAcceso(iid)' in html,
    "clic derecho en una app: Cerrar y Órdenes para manejarla")
 
 print(f"\n{n - fallos}/{n} bien" if fallos else f"\nTODO BIEN ({n})")

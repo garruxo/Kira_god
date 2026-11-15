@@ -550,3 +550,51 @@ def breve(titulo):
     """Lo que se añade al instalar una app: cómo manejarla. Puro."""
     return (f" Para manejarla: «abre {titulo}», «cierra {titulo}», «¿está abierta {titulo}?» y «órdenes de "
             f"{titulo}» (te digo todas sus herramientas).")
+
+
+# ---------------- v3.78: las ÓRDENES de una app, preparadas AL INSTALARLA y enseñadas en su ventanita ----------------
+_NO_PREGUNTAR = ("bash", "sh", "dash", "zsh", "npm", "npx", "pkexec", "sudo")
+
+
+def se_puede_preguntar(app):
+    """¿Se le puede pedir «--help» sin riesgo? (no a un instalador .sh ni a npm, que ejecutarían cosas). Puro."""
+    lan = list(app.get("lanzar") or [])
+    return bool(lan) and os.path.basename(str(lan[0])) not in _NO_PREGUNTAR
+
+
+def preparar_ordenes(manejo, app):
+    """Al instalar: le pregunta a la app qué sabe hacer (su menú .desktop y su «--help», sin abrir ventanas y con
+    tiempo) y lo deja guardado, para que al abrirla salgan ya sus órdenes. Devuelve cuántas herramientas tiene."""
+    if not se_puede_preguntar(app):
+        return 0
+    try:
+        return len(manejo.herramientas(app, refrescar=True))
+    except Exception:                                            # noqa: BLE001
+        return 0
+
+
+def lista_ordenes(manejo, app, maximo=30):
+    """[{texto, orden, desc}] de TODO lo que se le puede pedir a la app: lo básico y sus herramientas. Puro salvo la
+    caché de herramientas (no vuelve a lanzar la app si ya se preparó)."""
+    t = app.get("titulo", "la app")
+    fuera = [{"texto": "Abrir", "orden": f"abre {t}", "desc": "La abre en su ventana."},
+             {"texto": "Cerrar", "orden": f"cierra {t}", "desc": "Le pide que se cierre."},
+             {"texto": "Reiniciar", "orden": f"reinicia {t}", "desc": "La cierra y la vuelve a abrir."},
+             {"texto": "¿Está abierta?", "orden": f"¿está abierta {t}?", "desc": ""}]
+    try:
+        herr = manejo.herramientas(app) if se_puede_preguntar(app) else []
+    except Exception:                                            # noqa: BLE001
+        herr = []
+    for h in herr[:maximo]:
+        fuera.append({"texto": h["nombre"], "orden": f"en {t}, {h['nombre']}",
+                      "desc": h.get("desc") or ("Abre esa parte de su ventana." if h["tipo"] == "accion" else "")})
+    return fuera
+
+
+def texto_preparadas(n, titulo):
+    """Lo que se añade al mensaje de instalar. Puro."""
+    if n:
+        return (f" He preparado sus órdenes: {n} herramienta(s) además de abrir/cerrar. Al pulsar su icono te salen en "
+                f"su ventanita, y puedes pulsarlas o decírmelas (o «órdenes de {titulo}»).")
+    return (f" Al pulsar su icono te salen sus órdenes en su ventanita (no le he encontrado herramientas propias: "
+            f"lo demás se hace en su propia ventana). También: «órdenes de {titulo}».")

@@ -106,6 +106,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .vcuerpo.l-pequena{zoom:.88}.vcuerpo.l-grande{zoom:1.18}.vcuerpo.l-enorme{zoom:1.4}
 .nota-sala,.tarjeta-extra{margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(34,211,238,.07);
   border:1px solid var(--borde);white-space:pre-wrap;line-height:1.5;font-size:14px}
+.ordenes-app{margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.ordenes-app .ordtit{grid-column:1/-1;font-weight:600;color:var(--cian)}
+.ordenes-app .ordtit small{font-weight:400;opacity:.7}
+.ordbtn{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:9px 11px;
+  border-radius:10px;border:1px solid rgba(34,211,238,.28);background:rgba(34,211,238,.06);color:inherit;cursor:pointer}
+.ordbtn:hover{background:rgba(34,211,238,.16)}
+.ordbtn span{font-size:.82em;opacity:.8}.ordbtn i{font-size:.78em;opacity:.6;font-style:normal}
 .vcuerpo.marco .nota-sala,.vcuerpo.marco .tarjeta-extra{margin:10px 12px}
 .nota-sala{border-left:3px solid var(--rosa)}
 .tarjeta-extra h4{margin:0 0 6px;font-size:14px;color:var(--cian)}
@@ -462,7 +469,9 @@ var FAKE = {
   icono_img:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
   barra:function(){ return Promise.resolve({llamar:"Jefe",voz:true,wifi:{ssid:"MiCasa",senal:72,internet:"full"},extras:FAKE._extras||[],accesos:FAKE._accesos||[],aspecto:FAKE._aspecto||null}); },
   abrir_acceso:function(iid){ var a=(FAKE._accesos||[]).filter(function(x){ return x.id===iid; })[0]||{};
-    if(a.tipo==="externa") return Promise.resolve({titulo:a.titulo||"App",externa:true,lanzada:true,mensaje:"Abriendo "+(a.titulo||"la app")+"…"});
+    if(a.tipo==="externa"){ var t=a.titulo||"App"; return Promise.resolve({titulo:t,externa:true,lanzada:true,mensaje:"Abriendo "+t+"…",
+      ordenes:[{texto:"Abrir",orden:"abre "+t,desc:"La abre en su ventana."},{texto:"Cerrar",orden:"cierra "+t,desc:""},
+               {texto:"--version",orden:"en "+t+", --version",desc:"Muestra la versión"}]}); }
     return Promise.resolve({titulo:a.titulo||"Programa",html:a.tiene_html===false?"":"<!doctype html><title>demo</title><body>Hola desde el programa de Kira</body>"}); },
   desinstalar_acceso:function(iid){ FAKE._accesos=(FAKE._accesos||[]).filter(function(x){ return x.id!==iid; }); return Promise.resolve({ok:true}); },
   hablar:function(t){ var id="d"+Date.now(); demoCharlas[id]={t:Date.now(),
@@ -572,7 +581,7 @@ function menuAcceso(id, x, y){                      // v3.26: menú contextual d
   m.querySelector('[data-a="abrir"]').onclick=function(){ cierraMenuAcceso(); abrir(id); };
   if(ext){
     m.querySelector('[data-a="cerrar"]').onclick=function(){ cierraMenuAcceso(); hablarCon("cierra "+a.titulo); };
-    m.querySelector('[data-a="ordenes"]').onclick=function(){ cierraMenuAcceso(); hablarCon("órdenes de "+a.titulo); };
+    m.querySelector('[data-a="ordenes"]').onclick=function(){ cierraMenuAcceso(); ordenesAcceso(iid); };
   }
   m.querySelector('[data-a="desinstalar"]').onclick=function(){ cierraMenuAcceso(); desinstalaAcceso(iid, a?a.titulo:""); };
 }
@@ -586,15 +595,26 @@ function desinstalaAcceso(iid, titulo){
 }
 document.addEventListener("click", cierraMenuAcceso);
 document.addEventListener("keydown", function(e){ if(e.key==="Escape") cierraMenuAcceso(); });
+var ACC_SOLO_ORDENES=false;
+function ordenesAcceso(iid){                       // v3.78: clic derecho ▸ Órdenes → su ventanita, sin abrir la app
+  ACC_SOLO_ORDENES=true; abrir("acceso:"+iid);
+}
 function pintaAcceso(iid){                          // v3.26: abre el programa (app web) o v3.28: lanza la app externa
   var c=$("vcuerpo"); c.className="vcuerpo"; c.innerHTML='<div class="vacio">Abriendo…</div>';
-  llama("abrir_acceso", iid).then(function(d){
+  var solo=ACC_SOLO_ORDENES; ACC_SOLO_ORDENES=false;
+  llama("abrir_acceso", iid, !solo).then(function(d){
     d=d||{};
     if(d.externa){                                 // v3.28: app externa (se lanza en el portátil, no hay nada que mostrar)
       c.className="vcuerpo";
+      var ords=d.ordenes||[];                      // v3.78: la ventanita con TODAS las órdenes de este programa
       c.innerHTML='<div class="texto">'+esc(d.mensaje||(d.lanzada?("Abriendo "+(d.titulo||"la app")+"…"):"No pude abrirla."))+
-        '<br><br>Es una app que instalaste. Se abre en su propia ventana. '+
-        '<button class="acc" data-x="quitar">Desinstalar</button></div>';
+        '<br>Se abre en su propia ventana. '+'<button class="acc" data-x="quitar">Desinstalar</button></div>'+
+        (ords.length?'<div class="ordenes-app"><div class="ordtit">Órdenes de '+esc(d.titulo||"la app")+
+          ' <small>(púlsalas o dímelas)</small></div>'+ords.map(function(o,i){
+            return '<button class="ordbtn" data-o="'+i+'" title="'+esc(o.orden)+'"><b>'+esc(o.texto)+'</b>'+
+              (o.desc?'<span>'+esc(o.desc)+'</span>':'')+'<i>«'+esc(o.orden)+'»</i></button>'; }).join("")+'</div>':'');
+      Array.prototype.forEach.call(c.querySelectorAll(".ordbtn"), function(b){
+        b.onclick=function(){ var o=ords[+b.getAttribute("data-o")]; if(o) hablarCon(o.orden); }; });
     } else if(d.html){
       c.className="vcuerpo marco";
       c.innerHTML='<div class="appbar"><button data-x="quitar" class="peligro">Desinstalar</button>'+

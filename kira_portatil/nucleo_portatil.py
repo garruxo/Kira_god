@@ -534,6 +534,16 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
                                                             "» y luego «clónalo»." if aex.metodo(fuente) == "github"
                                                             else ""))
             return r1
+    if aex.metodo(fuente) == "descarga" and aex.tipo_archivo(fuente) in ("ajeno", ""):
+        # v3.78: es de otro sistema (.exe, .dmg…) o una página sin enlace directo → busco la versión para Linux
+        import buscar_linux_kira as bl
+        b = bl.buscar(fuente, nombre=nombre, al_paso=lambda t: paso(None, t))
+        if not b["ok"]:
+            return {"texto": b["texto"], "ok": True}
+        r2 = _instalar_app(core, b["fuente"], paso, forzar=forzar, sin_versiones=sin_versiones and b["como"] != "github",
+                           nombre=nombre)
+        r2["texto"] = b["texto"] + " " + r2.get("texto", "")
+        return r2
     paso(0.0, f"Instalo {nombre or fuente}…")
     r = aex.instalar(fuente, al_paso=lambda t: paso(None, t), forzar=forzar, nombre=nombre)
     if r.get("peligro"):                          # v3.29: la analizó y no se fía → recuerda cuál era
@@ -549,9 +559,12 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
     extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
     dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
     import manejo_apps_kira as ma
+    paso(None, "Preparo sus órdenes…")                 # v3.78: antes de abrirla, ya sabe qué se le puede pedir
+    n = ma.preparar_ordenes(_manejo(core), {"titulo": r["nombre"], "lanzar": r.get("lanzar") or [],
+                                            "carpeta": r.get("carpeta") or ""})
     return {"texto": r.get("mensaje", "Instalada.") + extra +
-            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." + ma.breve(r["nombre"]) +
-            dep_aviso}
+            " Pulsa su icono del escritorio para usarla; clic derecho para desinstalarla." +
+            ma.texto_preparadas(n, r["nombre"]) + dep_aviso}
 
 
 def _dependencias_app(core, nombre, paso):

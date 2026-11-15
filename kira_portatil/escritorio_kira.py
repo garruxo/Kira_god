@@ -203,13 +203,15 @@ class EscritorioMixin:
         except Exception:
             return []
 
-    def abrir_acceso(self, iid):
+    def abrir_acceso(self, iid, lanzar=True):
         """Abre el acceso directo: un programa de Kira se muestra como app web; una app EXTERNA (v3.28) se LANZA en el
         portátil (clic en su icono = abrirla)."""
         try:
             import accesos_kira as ak
             a = ak.uno(DATOS_NUCLEO, iid) or {}
-            if a.get("tipo") == "externa":
+            if a.get("tipo") == "externa" and lanzar is False:     # v3.78: solo su ventanita de órdenes
+                r = {"ok": True, "mensaje": f"Órdenes de {a.get('titulo', 'la app')} (no la he abierto)."}
+            elif a.get("tipo") == "externa":
                 try:                                      # v3.35: apuntando su proceso (para «cierra X»)
                     import manejo_apps_kira as ma
                     r0 = ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)).abrir(
@@ -218,7 +220,15 @@ class EscritorioMixin:
                     r = {"ok": r0.get("ok"), "mensaje": r0.get("texto", "")}
                 except Exception as e:                    # noqa: BLE001
                     r = {"ok": False, "mensaje": str(e)}
-                return {"titulo": a.get("titulo", "App"), "externa": True,
+            if a.get("tipo") == "externa":
+                try:                                      # v3.78: la ventanita con TODAS sus órdenes
+                    import manejo_apps_kira as ma
+                    ordenes = ma.lista_ordenes(ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)),
+                                               {"titulo": a.get("titulo", "App"), "lanzar": a.get("lanzar") or [],
+                                                "carpeta": a.get("carpeta") or ""})
+                except Exception:                         # noqa: BLE001
+                    ordenes = []
+                return {"titulo": a.get("titulo", "App"), "externa": True, "ordenes": ordenes,
                         "lanzada": bool(r.get("ok")), "mensaje": r.get("mensaje", "")}
             return {"titulo": a.get("titulo", "Programa"), "html": ak.html_de(DATOS_NUCLEO, iid)}
         except Exception as e:
@@ -272,6 +282,13 @@ class EscritorioMixin:
                     return vk.texto_opciones(nom, ops, con_codigo=True)
                 if len(ops) == 1:
                     fuente, nombre = ops[0]["url"], nombre or (vk.repo_github(url) or "app").split("/")[-1]
+            elif aex.tipo_archivo(url) == "ajeno":   # v3.78: un .exe/.dmg… → busco la versión para Linux
+                import buscar_linux_kira as bl
+                b = bl.buscar(url, nombre=nombre, pagina=getattr(self, "_pagina_antes", None))
+                if not b["ok"]:
+                    return b["texto"]
+                return b["texto"] + " " + self.instalar_web(url=b["fuente"], forzar=forzar, nombre=nombre,
+                                                            sin_versiones=sin_versiones and b["como"] != "github")
             elif not aex.es_descargable(url) and aex.metodo(url) != "github":   # es una página: busco el archivo en ella
                 try:
                     html = aex._traer_texto(url)
@@ -286,9 +303,15 @@ class EscritorioMixin:
                 if len(ops) == 1:
                     nombre = nombre or vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"])
                 mejor = aex.elegir_descarga(enlaces)
-                if not mejor:
-                    return ("No encontré en esta página un archivo que sepa instalar (AppImage, .deb, .tar.gz, .zip…). "
-                            "Entra en su página de descargas y dímelo ahí, o pégame el enlace directo del archivo.")
+                if not mejor:                         # v3.78: no hay archivo para Linux aquí → lo busco por todos lados
+                    import buscar_linux_kira as bl
+                    cache = {url: html}
+                    b = bl.buscar(url, nombre=nombre, pagina=url,
+                                  traer=lambda u: cache[u] if u in cache else aex._traer_texto(u))
+                    if not b["ok"]:
+                        return b["texto"]
+                    return b["texto"] + " " + self.instalar_web(url=b["fuente"], forzar=forzar, nombre=nombre,
+                                                                sin_versiones=sin_versiones and b["como"] != "github")
                 fuente = mejor
         r = aex.instalar(fuente, forzar=forzar, nombre=nombre)
         if r.get("peligro"):
@@ -301,8 +324,10 @@ class EscritorioMixin:
         extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
         dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
         import manejo_apps_kira as ma
+        n = ma.preparar_ordenes(ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)),   # v3.78: sus órdenes, antes de abrirla
+                                {"titulo": r["nombre"], "lanzar": r.get("lanzar") or [], "carpeta": r.get("carpeta") or ""})
         return (r.get("mensaje", "Instalada.") + extra + " Ya está su icono en el escritorio: púlsalo para abrirla, "
-                "clic derecho para desinstalarla." + ma.breve(r["nombre"]) + dep_aviso)
+                "clic derecho para desinstalarla." + ma.texto_preparadas(n, r["nombre"]) + dep_aviso)
 
     # ---------- v3.21: lo que el dueño ha cambiado de su sistema (tema, iconos, salvapantallas…) ----------
     def aspecto(self):
@@ -901,6 +926,8 @@ class EscritorioMixin:
             pag = self._internet().leer(url)
         except Exception as e:                        # noqa: BLE001
             return {"ok": False, "error": str(e), "via": self._via()}
+        if getattr(self, "_pagina_vista", None) != pag.get("url", url):   # v3.78: la de antes (si ahora pulsas un .exe)
+            self._pagina_antes = getattr(self, "_pagina_vista", None)
         self._pagina_vista = pag.get("url", url)      # v3.31: la última página que el dueño ve («descarga e instala esto»)
         todos = pag.get("enlaces") or []
         del_tema = ik.elegir_enlaces(pag, pag.get("titulo", ""), n=25)

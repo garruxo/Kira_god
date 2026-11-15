@@ -639,6 +639,13 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
     correr = correr or _correr_defecto
     bajar = bajar or _bajar_defecto
     paso = al_paso or (lambda _t: None)
+    try:                                              # v3.78: «instala flatpak org.x.App» → de Flathub, sin admin
+        import buscar_linux_kira as bl
+        fp = bl.es_flatpak(fuente)
+        if fp:
+            return bl.instalar_flatpak(fp, correr=correr, al_paso=paso)
+    except ImportError:
+        pass
     met = metodo(fuente)
     nombre = str(nombre or "").strip()[:60] or _nombre_de(fuente)   # v3.35: el nombre de la app (sin la versión)
     carpeta = os.path.join(base, _carpeta_id(nombre))
