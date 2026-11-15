@@ -98,6 +98,7 @@ def es_orden_usar(texto):
     if not m:
         return None
     nombre = m.group(2).strip()
+    nombre = re.sub(r"\s+en\s+(?:la|una)\s+(?:terminal|consola)\s*[.!]?$", "", nombre, flags=re.I)   # v3.83
     nombre = re.sub(r"^(?:la\s+|el\s+)?(?:app|aplicaci[oó]n|programa)\s+", "", nombre, flags=re.I)
     low = nombre.lower()
     # pantallas/órdenes propias de Kira: no son apps externas
@@ -105,6 +106,11 @@ def es_orden_usar(texto):
                  r"c[aá]mara|pantalla|puerto|p[aá]gina|web|v[ií]deo|youtube)\b", low):
         return None
     return nombre.strip(" .:\"'") or None
+
+
+def pide_consola(texto):
+    """v3.83: «abre X en la terminal» / «lanza X en una consola»."""
+    return bool(re.search(r"\ben\s+(?:la|una)\s+(?:terminal|consola)\s*[.!]?\s*$", str(texto or ""), re.I))
 
 
 # ---------------- decidir cómo instalar ----------------

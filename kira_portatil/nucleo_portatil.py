@@ -656,7 +656,7 @@ def _manejo(core):
     return ma.Manejo(accesos=accesos)
 
 
-def _usar_app(core, nombre):
+def _usar_app(core, nombre, visible=None):
     """v3.28: «usa/abre X» → lanza la app externa instalada (v3.35: apuntando su proceso, para poder cerrarla)."""
     a = _buscar_app(core, nombre)
     if not a:
@@ -667,7 +667,7 @@ def _usar_app(core, nombre):
     if a.get("tipo") == "externa":                    # v3.81: vigilada; si no arranca, la arregla sola y avisa al final
         import arreglar_app_kira as arr
         r = arr.abrir_vigilando(a, core.dir, al_pid=lambda pid: m.apuntar_pid(app, pid),
-                                preguntar=_preguntar_cerebro(core))
+                                preguntar=_preguntar_cerebro(core), visible=visible or None)   # v3.83
     else:
         r = m.abrir(app)
     return {"texto": r.get("texto", ""), **({} if r.get("ok") else {"ok": False})}
@@ -787,7 +787,7 @@ def ejecutar(core, orden, paso):
         return _instalar_app(core, oi, paso, forzar=forzar)
     ou = aex.es_orden_usar(o)
     if ou and _buscar_app(core, ou) and not re.search(r"\s+con\s+\S", ou):   # «abre X con <archivo>» va abajo
-        return _usar_app(core, ou)
+        return _usar_app(core, ou, visible=aex.pide_consola(o))
     import manejo_apps_kira as ma_                # v3.35: abrir/cerrar/estado/órdenes/herramientas de CUALQUIER app
     o_m = ma_.orden(o)
     if o_m:

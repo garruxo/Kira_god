@@ -134,13 +134,14 @@ def poner_externa(dir_, titulo, lanzar, carpeta="", icono="app", fuente="", pagi
                 a["fuente"] = str(fuente or a.get("fuente") or "")[:500]
                 a["pagina"] = str(pagina or a.get("pagina") or "")[:500]
                 a.pop("entorno", None)                  # otra versión: lo arreglado para la vieja ya no vale
+                a.pop("terminal", None)
                 a["cuando"] = int(time.time())
                 _guardar(dir_, lista)
             return a.get("id"), False
     return None, False
 
 
-def actualizar_externa(dir_, iid, lanzar=None, entorno=None, arreglos=None):
+def actualizar_externa(dir_, iid, lanzar=None, entorno=None, arreglos=None, terminal=None):
     """v3.81: tras ARREGLAR una app que no arrancaba, se apunta la forma de lanzarla que sí funciona."""
     lista = _leer(dir_)
     for a in lista:
@@ -150,6 +151,8 @@ def actualizar_externa(dir_, iid, lanzar=None, entorno=None, arreglos=None):
             if entorno is not None:
                 a["entorno"] = {str(k): str(v) for k, v in dict(entorno).items()
                                 if re.match(r"^[A-Z_][A-Z0-9_]{0,40}$", str(k))}
+            if terminal is not None:                 # v3.83: se maneja en una terminal visible
+                a["terminal"] = bool(terminal)
             if arreglos:
                 a["arreglos"] = ([str(x)[:160] for x in arreglos] + list(a.get("arreglos") or []))[:10]
             _guardar(dir_, lista)

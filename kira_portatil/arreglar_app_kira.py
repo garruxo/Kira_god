@@ -865,6 +865,7 @@ def construir_en_fondo(acceso, dir_accesos, *, avisar=None, en_hilo=True, lanzad
     avisar = avisar or (lambda t, x: _aviso(t, x))
     if lanzador == "real":
         lanzador = lanzador_real(acceso.get("id") or "app", espera=ESPERA)
+    lanzador = _o_terminal(acceso, lanzador)
 
     def hilo():
         r = construir(acceso, lanzador=lanzador, **kw)
@@ -906,7 +907,7 @@ def lanzador_real(app_id, popen=None, espera=ESPERA):
 
 
 def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None, preguntar=None, espera=ESPERA,
-                    avisar=None, al_pid=None, en_hilo=True, admin=None):
+                    avisar=None, al_pid=None, en_hilo=True, admin=None, en_terminal=None, which=shutil.which, visible=None):
     """Abre una app EXTERNA de Kira y la vigila: si no arranca, la arregla sola (en segundo plano) y avisa al final.
     Devuelve {ok, texto, pid} enseguida (como abrir de siempre)."""
     import accesos_kira as ak
@@ -922,6 +923,12 @@ def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None,
             return {"ok": True, "texto": f"{titulo} aún no está lista: sigo los pasos de su README para instalarla "
                                          "y la abro al terminar (te aviso)."}
         return {"ok": False, "texto": f"No sé cómo arrancar {titulo}."}
+    en_terminal = en_terminal if en_terminal is not None else visible
+    if en_terminal or (en_terminal is None and es_de_terminal(acceso)):    # v3.83: se maneja en la terminal
+        r = abrir_en_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
+        if r.get("ok") and al_pid and r.get("pid"):
+            al_pid(r["pid"])
+        return r
     ruta = ruta_registro(app_id)
     try:
         p = lanzar_con_registro(lan, carpeta, ruta, popen=popen, entorno=acceso.get("entorno"))
@@ -941,6 +948,17 @@ def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None,
             salida = leer_registro(ruta)
         else:
             salida = error_inicial
+        if necesita_terminal(salida):                 # v3.83: quería una terminal (te pregunta algo…): la abro visible
+            rt = abrir_en_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
+            if rt.get("ok"):
+                try:
+                    ak.actualizar_externa(dir_accesos, acceso.get("id"), terminal=True)
+                except Exception:                     # noqa: BLE001
+                    pass
+            avisar("Kira abrió un programa en la terminal" if rt.get("ok") else "Un programa no arranca",
+                   (f"«{titulo}» se maneja en la terminal (te pregunta cosas o escribe ahí). " + rt.get("texto", ""))
+                   if rt.get("ok") else rt.get("texto", ""))
+            return
         r = reparar(acceso, salida, lanzador=_con_pid(lanzador_real(app_id, popen=popen, espera=espera), al_pid),
                     correr=correr, traer=traer, preguntar=preguntar, espera=espera, admin=admin)
         if r["ok"]:
@@ -956,6 +974,20 @@ def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None,
     else:
         vigilar()
     return {"ok": True, "pid": getattr(p, "pid", None), "texto": f"Abriendo {titulo}… (si no arranca, lo arreglo yo)"}
+
+
+def _o_terminal(acceso, lanzador, **kw):
+    """v3.83: tras compilarlo, si es de terminal se abre en una terminal visible (no escondido)."""
+    if not lanzador:
+        return lanzador
+
+    def f(lan, carpeta, entorno):
+        a = dict(acceso, lanzar=lan, carpeta=carpeta, entorno=entorno or {})
+        if es_de_terminal(a):
+            r = abrir_en_terminal(a, **kw)
+            return bool(r.get("ok")), r.get("texto", ""), None
+        return lanzador(lan, carpeta, entorno)
+    return f
 
 
 def _con_pid(lanzador, al_pid):
@@ -976,3 +1008,256 @@ def _aviso(titulo, texto):
         avisos_kira.prioritario(texto, titulo=titulo)
     except Exception:                                 # noqa: BLE001
         pass
+
+
+# ---------------- v3.83: PROGRAMAS DE TERMINAL (se abren en una terminal VISIBLE de Xubuntu) ----------------
+# Pedido del dueño: «el programa tiene que descargar otro archivo para arrancar, eso se hace en la terminal y arranca
+# en la terminal; ¿podrá Kira abrir la terminal, escribir las órdenes y descargar lo necesario?».
+# Kira escribe un guion con los pasos de su README (descargas, preparar…) ya pasados por los candados de siempre
+# (`orden_segura`) y lo abre en una terminal de verdad: ves cada orden y lo que contesta, y luego arranca el programa
+# AHÍ, para que puedas manejarlo (escribirle, contestarle…). La preparación se hace UNA vez (marca .kira_preparado).
+TERMINALES = (                     # (programa, opciones antes del título, opción para ejecutar, ¿la orden va en una cadena?)
+    ("xfce4-terminal", ["-T"], "-x", False), ("gnome-terminal", ["--title"], "--", False),
+    ("mate-terminal", ["-t"], "-x", False), ("konsole", None, "-e", False), ("lxterminal", ["-t"], "-e", True),
+    ("qterminal", None, "-e", True), ("x-terminal-emulator", None, "-e", True), ("xterm", ["-T"], "-e", False))
+MARCA = ".kira_preparado"
+_GUI_PY = re.compile(r"^\s*(?:import|from)\s+(tkinter|Tkinter|customtkinter|ttkbootstrap|PyQt[456]|PySide[26]?|"
+                     r"kivy|kivymd|pygame|pyglet|arcade|ursina|panda3d|gi|wx|webview|flet|toga|dearpygui|pygubu|"
+                     r"matplotlib|cv2|eel|PySimpleGUI|guizero|easygui|turtle)\b", re.M)
+_GUI_ELF = (b"libX11.so", b"libgtk-", b"libQt5Gui", b"libQt6Gui", b"libSDL2", b"libSDL-", b"libwayland-client",
+            b"libglfw", b"libEGL.so", b"libGL.so", b"libxcb.so", b"libfltk", b"libwx_")
+_PREGUNTA_PY = re.compile(r"\binput\s*\(|\bgetpass\b|^\s*(?:import|from)\s+(curses|readline|prompt_toolkit|questionary|"
+                          r"inquirer|InquirerPy|blessed|urwid|textual|npyscreen|asciimatics|pick)\b|sys\.stdin|"
+                          r"Prompt\.ask|click\.prompt|typer\.prompt", re.M)
+_PREGUNTA_ELF = (b"libncurses", b"libreadline", b"libtinfo", b"libedit")
+_NECESITA_TERMINAL = re.compile(r"(?i)EOFError|EOF when reading a line|not a tty|is not a terminal|no es una terminal|"
+                                r"Inappropriate ioctl|termios\.error|_curses\.error|setupterm|could not find terminal|"
+                                r"Error opening terminal|stdin is not a tty|input device is not a TTY")
+
+
+def _leer_trozo(ruta, n=200000):
+    try:
+        with open(ruta, "rb") as f:
+            return f.read(n)
+    except OSError:
+        return b""
+
+
+def tipo_programa(acceso):
+    """«terminal», «ventana» o «» (no lo sé). Mira lo que dice su .desktop (Terminal=true/false), si un .py usa
+    alguna librería de ventanas, si un ejecutable enlaza librerías gráficas, si un guion pregunta (read)… PURO salvo leer."""
+    if acceso.get("terminal") is True:
+        return "terminal"
+    if acceso.get("terminal") is False:
+        return "ventana"
+    lan = [str(x) for x in (acceso.get("lanzar") or [])]
+    carpeta = acceso.get("carpeta") or ""
+    if carpeta and os.path.isdir(carpeta):
+        try:
+            for f in sorted(os.listdir(carpeta))[:200]:
+                if f.endswith(".desktop"):
+                    t = _leer_trozo(os.path.join(carpeta, f), 20000).decode("utf-8", "replace")
+                    m = re.search(r"(?im)^Terminal\s*=\s*(true|false)\s*$", t)
+                    if m:
+                        return "terminal" if m.group(1).lower() == "true" else "ventana"
+        except OSError:
+            pass
+    if not lan:
+        return ""
+    prim = os.path.basename(lan[0])
+    arch = lan[1] if prim in ("python3", "python", "bash", "sh", "node") and len(lan) > 1 else lan[0]
+    if arch and not os.path.isabs(arch) and carpeta:
+        arch = os.path.join(carpeta, arch)
+    low = arch.lower()
+    if low.endswith(".appimage") or prim in ("java", "flatpak", "wine"):
+        return "ventana"
+    if prim in ("python3", "python") or low.endswith(".py"):
+        t = _leer_trozo(arch).decode("utf-8", "replace")
+        if _GUI_PY.search(t):
+            return "ventana"
+        return "terminal" if _PREGUNTA_PY.search(t) else ""      # sin pruebas claras: se abre vigilada (v3.81)
+    if prim in ("bash", "sh") or low.endswith(".sh"):
+        t = _leer_trozo(arch).decode("utf-8", "replace")
+        if re.search(r"\b(zenity|yad|kdialog|xdg-open)\b", t):
+            return "ventana"
+        return "terminal" if re.search(r"(?m)\bread\b|\bselect\b", t) else ""
+    if prim in ("node", "npm"):
+        pj = _leer_trozo(os.path.join(carpeta, "package.json"), 100000)
+        if re.search(rb'"(electron|nw|neutralinojs)"', pj):
+            return "ventana"
+        return "terminal" if re.search(rb'"(inquirer|prompts|enquirer|readline-sync|blessed|ink)"', pj) else ""
+    datos = _leer_trozo(arch, 4 << 20)
+    if datos[:4] == b"\x7fELF":
+        if any(x in datos for x in _GUI_ELF):
+            return "ventana"
+        return "terminal" if any(x in datos for x in _PREGUNTA_ELF) else ""
+    return ""
+
+
+def es_de_terminal(acceso):
+    return tipo_programa(acceso) == "terminal"
+
+
+def necesita_terminal(salida):
+    """¿El error dice que el programa quería una terminal (te pregunta algo, dibuja con curses…)? PURO."""
+    return bool(_NECESITA_TERMINAL.search(str(salida or "")))
+
+
+def _linea_paso(tipo, args, cwd, carpeta):
+    q = shlex.quote
+    if tipo == "bajar":
+        url, destino = args
+        if shutil.which("wget"):
+            orden = ["wget", "-c", "-O", destino, url]
+        else:
+            orden = ["curl", "-fL", "-C", "-", "-o", destino, url]
+    elif tipo == "extraer":
+        orden = ["python3", "-I", os.path.abspath(__file__), "--extraer", args[0], args[1]]
+    else:
+        orden = list(args)
+    return f"kira_paso {q(cwd or carpeta)} " + " ".join(q(str(x)) for x in orden)
+
+
+def pasos_terminal(acceso, admin=False):
+    """Las líneas que Kira escribirá en la terminal ANTES de arrancar: los pasos de su README (descargas, preparar…)
+    que pasan los candados. Si ya se preparó una vez (marca), ninguno. Devuelve [(texto_para_ver, linea_bash)]."""
+    carpeta = acceso.get("carpeta") or ""
+    if not carpeta or not os.path.isdir(carpeta) or os.path.exists(os.path.join(carpeta, MARCA)):
+        return []
+    lan = [str(x) for x in (acceso.get("lanzar") or [])]
+    final = os.path.basename(lan[1] if len(lan) > 1 and os.path.basename(lan[0]) in ("python3", "python", "bash",
+                                                                                         "sh", "node") else
+                             (lan[0] if lan else ""))
+    cwd, out, vistos = carpeta, [], set()
+    for linea in ordenes_de_texto(leer_readme(carpeta)):
+        for t in partir_linea(linea):
+            tt = t.strip()
+            m = re.match(r"^cd\s+(\S+)$", tt)
+            if m:
+                nuevo = _abs(cwd, m.group(1)) if not m.group(1).startswith("~") else ""
+                if nuevo and _dentro(carpeta, nuevo):
+                    cwd = nuevo
+                continue
+            m = re.match(r"^mkdir\s+(?:-p\s+)?(\S+)$", tt)
+            if m:
+                nuevo = _abs(cwd, m.group(1))
+                if _dentro(carpeta, nuevo):
+                    out.append((tt, f"kira_paso {shlex.quote(carpeta)} mkdir -p {shlex.quote(nuevo)}"))
+                continue
+            o = orden_segura(tt, carpeta, admin, cwd)
+            if not o:
+                continue
+            tipo, args = o
+            if tipo == "lanzar":                       # arrancar el propio programa ya va al final
+                base = os.path.basename(args[1] if len(args) > 1 and args[0] in ("python3", "bash", "node")
+                                        else args[0])
+                if base == final or args[:1] == ["npm"]:
+                    continue
+                tipo = "arreglo"                       # p. ej. «python3 descargar_modelo.py»: un paso más
+            clave = repr((tipo, args, cwd))
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            out.append((tt, _linea_paso(tipo, args, cwd, carpeta)))
+    return out[:15]
+
+
+def guion_terminal(acceso, pasos):
+    """El guion bash que se abre en la terminal. Todo va entre comillas (shlex.quote). PURO."""
+    q = shlex.quote
+    titulo = str(acceso.get("titulo") or "el programa")[:60]
+    carpeta = acceso.get("carpeta") or os.path.expanduser("~")
+    lan = [str(x) for x in (acceso.get("lanzar") or [])]
+    l = ["#!/bin/bash", "# Lo escribió Kira (v3.83): primero los pasos de su README, luego el programa.",
+         'kira_ok=1',
+         'kira_paso() { local d="$1"; shift; echo; printf "\\033[1;36m$ %s\\033[0m\\n" "$*"; '
+         '( cd "$d" && "$@" ) || { echo "  (este paso ha fallado)"; kira_ok=0; }; }',
+         f"cd {q(carpeta)} || {{ echo 'No encuentro su carpeta'; read -r _; exit 1; }}"]
+    if pasos:
+        l.append(f"echo {q('── Kira prepara «' + titulo + '»: escribo los pasos de su README ──')}")
+        l += [b for _t, b in pasos]
+        l.append(f'[ "$kira_ok" = 1 ] && touch {q(os.path.join(carpeta, MARCA))}')
+    for k, v in (acceso.get("entorno") or {}).items():
+        if re.match(r"^[A-Z_][A-Z0-9_]{0,40}$", str(k)):
+            l.append(f"export {k}={q(str(v))}")
+    if lan:
+        l.append(f"echo; echo {q('── Arranco «' + titulo + '» ──')}")
+        l.append('printf "\\033[1;36m$ %s\\033[0m\\n" ' + q(" ".join(lan)))
+        l.append(" ".join(q(x) for x in lan))
+        l.append('kira_rc=$?')
+        l.append(f'echo; echo "── «{titulo.replace(chr(34), "")}» ha terminado (código $kira_rc) ──"')
+    l.append('read -r -p "Pulsa Intro para cerrar esta ventana… " _')
+    return "\n".join(l) + "\n"
+
+
+def orden_terminal(guion, titulo, which=shutil.which):
+    """[programa, …] para abrir `guion` en una terminal de Xubuntu (la primera que haya). None si no hay ninguna."""
+    for prog, op_titulo, op_ej, cadena in TERMINALES:
+        ruta = which(prog)
+        if not ruta:
+            continue
+        o = [ruta]
+        if op_titulo:
+            o += op_titulo + [titulo]
+        o += [op_ej] + ([f"bash {shlex.quote(guion)}"] if cadena else ["bash", guion])
+        return o
+    return None
+
+
+def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, correr=None, subir=True):
+    """Abre el programa en una terminal VISIBLE: Kira escribe ahí sus pasos (descargas…) y lo arranca. {ok, texto, pid}."""
+    titulo = acceso.get("titulo") or "el programa"
+    if admin is None:
+        try:
+            import apps_externas_kira as aex
+            admin = aex.admin_sin_clave(correr or aex._correr_defecto)
+        except Exception:                             # noqa: BLE001
+            admin = False
+    pasos = pasos_terminal(acceso, admin)
+    guion = os.path.join(REGISTROS, re.sub(r"[^\w.-]", "_", str(acceso.get("id") or titulo))[:60] + "_terminal.sh")
+    os.makedirs(REGISTROS, mode=0o700, exist_ok=True)
+    with open(guion, "w", encoding="utf-8") as f:
+        f.write(guion_terminal(acceso, pasos))
+    os.chmod(guion, 0o700)
+    t_ventana = f"Kira · {titulo}"[:60]
+    orden = orden_terminal(guion, t_ventana, which)
+    if not orden:
+        return {"ok": False, "texto": f"{titulo} se maneja en la terminal, pero no encuentro ninguna terminal de "
+                                      "Xubuntu (xfce4-terminal). Instálala con «sudo apt install xfce4-terminal»."}
+    env = dict(os.environ)
+    env.setdefault("DISPLAY", ":0")
+    try:
+        p = (popen or subprocess.Popen)(orden, env=env, start_new_session=True, stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:                            # noqa: BLE001
+        return {"ok": False, "texto": f"No he podido abrir la terminal: {e}"}
+    if subir:                                         # que salga ENCIMA de la pantalla completa de Kira
+        threading.Thread(target=_subir_ventana, args=(t_ventana, env), daemon=True).start()
+    if pasos:
+        texto = (f"Abro {titulo} en una terminal: primero escribo los {len(pasos)} pasos de su README (descargas y "
+                 "lo que necesite) y luego lo arranco ahí para que lo manejes.")
+    else:
+        texto = f"Abro {titulo} en una terminal para que lo manejes ahí."
+    return {"ok": True, "texto": texto + " Si no ves la ventana, pulsa Alt+Tab.", "pid": getattr(p, "pid", None),
+            "terminal": True, "pasos": [t for t, _b in pasos]}
+
+
+def _subir_ventana(titulo, env):
+    time.sleep(1.5)
+    for o in (["wmctrl", "-a", titulo], ["xdotool", "search", "--name", titulo, "windowactivate"]):
+        if shutil.which(o[0]):
+            try:
+                subprocess.run(o, env=env, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            except Exception:                         # noqa: BLE001
+                pass
+
+
+if __name__ == "__main__":                            # lo usa el guion de la terminal para descomprimir con su candado
+    import sys
+    if len(sys.argv) == 4 and sys.argv[1] == "--extraer":
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import apps_externas_kira as _aex
+        ok = _aex._extraer(sys.argv[2], sys.argv[3])
+        print("descomprimido" if ok else "no se pudo descomprimir")
+        sys.exit(0 if ok else 1)
