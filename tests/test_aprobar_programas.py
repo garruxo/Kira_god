@@ -53,7 +53,7 @@ ok(web["secciones"][0][0] == "espera" and "aprobación" in web["secciones"][0][1
 esp = [f for f in web["filas"] if f["seccion"] == "espera"]
 ok(len(esp) == 6, "todas en la sección de espera")
 ff = next(f for f in esp if f["texto"] == "ffmpeg")
-ok([b["texto"] for b in ff["botones"]] == ["Instalar", "No, gracias"] and ff["botones"][0]["accion"] == "decir:instala ffmpeg",
+ok([b["texto"] for b in ff["botones"]] == ["Instalar", "Ir a la web", "No, gracias"] and ff["botones"][0]["accion"] == "decir:instala ffmpeg",
    "Instalar = «instala ffmpeg» (tu sí, por el camino de siempre)")
 ok("SuperApp" in ff["detalle"], "dice quién lo pide")
 

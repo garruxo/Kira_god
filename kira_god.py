@@ -1982,7 +1982,14 @@ class KiraGodCore:
             if not lista:
                 return ""
             kiraos = bool(getattr(self, "es_kiraos", False))
-            texto = cpk.texto_aviso(lista, en_kiraos=kiraos)
+            permiso = None
+            if kiraos and any(e.get("tipo") == "sistema" for e in lista):
+                try:
+                    import apps_externas_kira as aex
+                    permiso = aex.admin_sin_clave()
+                except Exception:
+                    permiso = None
+            texto = cpk.texto_aviso(lista, en_kiraos=kiraos, permiso=permiso)
             if kiraos:
                 try:
                     import avisos_kira

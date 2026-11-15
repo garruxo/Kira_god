@@ -1479,6 +1479,32 @@ def pedir_terminal_kira(acceso, *, admin=None, correr=None):
                 " Si un programa se ve raro ahí, tienes un botón para abrirlo en la terminal de Xubuntu.")
 
 
+def pedir_permiso_terminal(ruta_permiso=None):
+    """v3.91: botón «Dar permiso» de «Mis programas»: abre MI terminal con el guion del permiso de administrador
+    (`permiso_apps.sh`); te pide la contraseña UNA vez. Solo ese guion, nada más."""
+    import json
+    ruta_permiso = ruta_permiso or os.path.join(os.path.dirname(os.path.abspath(__file__)), "permiso_apps.sh")
+    if not os.path.isfile(ruta_permiso):
+        return {"ok": False, "texto": "No encuentro el guion del permiso (permiso_apps.sh)."}
+    os.makedirs(REGISTROS, mode=0o700, exist_ok=True)
+    guion = os.path.join(REGISTROS, "permiso_admin_terminal.sh")
+    with open(guion, "w", encoding="utf-8") as f:
+        f.write("#!/bin/bash\n"
+                "echo 'Kira: voy a pedirte el permiso de administrador para instalar programas (solo apt/dpkg).'\n"
+                "echo 'Escribe tu contraseña cuando te la pida (no se ve al escribirla).'\n"
+                f"bash {shlex.quote(ruta_permiso)}\n"
+                "echo; read -r -p 'Pulsa Intro para cerrar… ' _\n")
+    os.chmod(guion, 0o700)
+    d = {"guion": guion, "titulo": "Permiso de administrador", "orden": "bash " + shlex.quote(guion),
+         "pasos": ["dar el permiso de administrador"], "cuando": int(time.time())}
+    tmp = _ruta_pendiente() + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, _ruta_pendiente())
+    return dict(d, ok=True, texto="Te abro mi Terminal: escribe ahí tu contraseña UNA vez y ya tendré el permiso.")
+
+
 def tomar_pendiente(maximo=120):
     """La pantalla recoge (y borra) lo que hay que abrir en su terminal. None si no hay o es viejo."""
     import json

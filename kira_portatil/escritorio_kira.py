@@ -1266,17 +1266,34 @@ class EscritorioMixin:
         import pensador_kira as pn
         est = pn.cargar(os.path.join(DATOS_NUCLEO, "pensamientos.json"))
         accesos = ak.listar(DATOS_NUCLEO)
-        pest = cpk.pestanas(cpk.web(DATOS_NUCLEO), cpk.propios(est), accesos)
+        vistos = cpk.web(DATOS_NUCLEO)
+        permiso = None
+        if any(e.get("espera") for e in vistos):          # v3.91: ¿tengo el permiso de administrador?
+            try:
+                import apps_externas_kira as aex
+                permiso = aex.admin_sin_clave()
+            except Exception:                         # noqa: BLE001
+                permiso = None
+        pest = cpk.pestanas(vistos, cpk.propios(est), accesos, permiso)
         return {"titulo": "Mis programas", "texto": pest[0]["texto"], "pestanas": pest,
                 "botones": [{"texto": "‹ Volver a Programando", "accion": "app:programando"}]}
 
     def _programas_hacer(self, accion):
         import accesos_kira as ak
         import catalogo_programas_kira as cpk
+        if str(accion or "") == "prog:permiso":           # v3.91: «Dar permiso» → mi Terminal pide la contraseña
+            import arreglar_app_kira as arr
+            r = arr.pedir_permiso_terminal()
+            return {"texto": r["texto"], "refrescar": False}
         partes = str(accion or "").split(":", 2)
         if len(partes) != 3 or partes[0] != "prog":
             return {"texto": "No conozco ese botón."}
         que, iid = partes[1], partes[2]
+        if que == "web":                                  # v3.91: «Ir a la web» → la página de la descarga
+            e = next((x for x in cpk.web(DATOS_NUCLEO) if x.get("id") == iid), None)
+            if not e:
+                return {"texto": "Ya no lo tengo en la lista.", "refrescar": True}
+            return {"texto": self.abrir_navegador(e.get("pagina") or e.get("fuente"))["texto"]}
         if que == "olvidar":
             cpk.quitar_web(DATOS_NUCLEO, iid)
             return {"texto": "Quitado de la lista.", "refrescar": True}
