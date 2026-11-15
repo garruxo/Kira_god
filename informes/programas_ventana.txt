@@ -1,0 +1,85 @@
+  ok  «libreoffice» → soffice
+  ok  «imagemagick» → convert (si no hay magick)
+  ok  «imagemagick» → magick si lo hay
+  ok  lo que no tiene alias, igual
+  ok  LibreOffice: docx → pdf
+  ok  LibreOffice: xlsx → csv
+  ok  LibreOffice con su propio perfil (no choca con el tuyo)
+  ok  GIMP por lotes: al 50%
+  ok  GIMP: blanco y negro
+  ok  GIMP: girar a la izquierda
+  ok  GIMP: a 800 px de ancho
+  ok  ImageMagick: girar
+  ok  ImageMagick: tamaño
+  ok  ImageMagick: grises
+  ok  ffmpeg: audio
+  ok  ffmpeg: gif
+  ok  Inkscape: svg → png
+  ok  pandoc: md → html
+  ok  lo que no tiene receta: None (va al cerebro)
+  ok  un programa sin recetas: None
+  ok  «todas las fotos»: las de la carpeta del taller
+  ok  sin «todas»: solo una
+  ok  sin archivo: dice dónde ponerlo
+  ok  nombres con comillas: no entran en una receta
+  ok  ejemplos para el cerebro
+  ok  un guion de GIMP de la receta: sí
+  ok  rechazada (guiones): gimp -i -b '(gimp-quit 0)'
+  ok  rechazada (guiones): soffice --headless macro:///Standard.Module1.Main
+  ok  rechazada (guiones): inkscape a.svg --actions=export-do
+  ok  rechazada (fuera): convert file:///etc/passwd x.png
+  ok  rechazada (fuera): convert -font /etc/shadow a.png b.png
+  ok  rechazada (fuera): ffmpeg -i x.mp4 -f mp3 -vn salida=/etc/x.mp3
+  ok  rechazada (..): convert ../secreto.jpg x.png
+  ok  válida: convert a.jpg x.png
+  ok  «..» dentro de un guion: no, ni de receta
+  ok  el perfil en /tmp sí vale
+  ok  preparar con receta (sin cerebro)
+  ok  la ventana dice que es de receta
+  ok  ImageMagick DE VERDAD: 120x80 → 60x40
+  ok  «imagemagick» se resuelve a convert
+  ok  pandoc DE VERDAD: md → html
+  ok  ffmpeg DE VERDAD: saca el audio
+  ok  LibreOffice DE VERDAD (sin ventana): txt → pdf
+  ok  GIMP DE VERDAD: haz foto.jpg más pequeña al 50% → 100x50  batch command executed successfully | ✓ bien | — 1 de 1 órdenes bien.
+  ok  GIMP DE VERDAD: gira foto.jpg 90 → 100x200  batch command executed successfully | ✓ bien | — 1 de 1 órdenes bien.
+  ok  GIMP DE VERDAD: pon foto.jpg en blanco y negro → 200x100  batch command executed successfully | ✓ bien | — 1 de 1 órdenes bien.
+  ok  Inkscape DE VERDAD: svg → png
+  ok  sin receta: el cerebro recibe ejemplos de recetas
+  ok  el guion que escribe el cerebro se rechaza; lo demás sí
+  ok  maneja X por dentro
+  ok  desde su ventana
+  ok  trabaja dentro de X
+  ok  lo demás no es esto
+  ok  el Taller de órdenes no se lo come
+  ok  PULSA con camino de menú
+  ok  ESCRIBE campo = texto
+  ok  ESPERA como mucho 10 s
+  ok  rechaza «PULSA: Archivo > Eliminar»
+  ok  rechaza «PULSA: No guardar»
+  ok  rechaza «PULSA: Enviar»
+  ok  rechaza «PULSA: Vaciar papelera»
+  ok  rechaza «ESCRIBE: Contraseña = 1234»
+  ok  rechaza «ESCRIBE: Nombre =»
+  ok  rechaza «BORRA: todo»
+  ok  rechaza «PULSA: Reemplazar»
+  ok  programas que no se manejan por dentro
+  ok  abre el programa si no estaba abierto
+  ok  el cerebro recibe los menús y botones (sin los de contraseña)
+  ok  plan de 4 pasos ESPERANDO tu «Hazlo» (no ha pulsado nada)
+  ok  el paso de «Eliminar» se rechaza
+  ok  la ventana dice que es experimental
+  ok  pulsa por su nombre, en orden: ['Archivo', 'Exportar como…', 'Exportar']
+  ok  escribe en el campo
+  ok  registro en vivo
+  ok  no encuentra un botón: se para
+  ok  nunca escribe en un campo de contraseña
+  ok  
+  ok  una terminal no se maneja por dentro
+  ok  un programa que no tengo: lo dice
+  ok  la barra de KiraOS lo prepara y abre el Taller
+  ok  desde el móvil/la red: dice que es de la pantalla del portátil
+  ok  el instalador pone la accesibilidad e ImageMagick
+  ok  la ventana vacía explica las dos formas
+
+TODO BIEN (83)
