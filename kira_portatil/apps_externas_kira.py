@@ -533,6 +533,9 @@ def instalar_dependencias(carpeta, correr=None, al_paso=None, con_npm=True):
                 else ["pip3", "install", "--user"] + dep["pip"])
         try:
             rc, salida = correr(args, cwd=carpeta, timeout=900)
+            if rc != 0 and re.search(r"(?i)externally[- ]managed", salida or ""):
+                # v3.81: Ubuntu 24.04 bloquea pip --user; con este permiso solo toca TU ~/.local, nunca el sistema
+                rc, salida = correr(args[:3] + ["--break-system-packages"] + args[3:], cwd=carpeta, timeout=900)
         except Exception as e:                        # noqa: BLE001
             rc, salida = 127, str(e)
         if rc == 0:

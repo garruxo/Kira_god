@@ -323,6 +323,13 @@ class Manejo:
         return {"ok": True, "pid": p.pid,
                 "texto": f"Abriendo {app['titulo']}" + (f" con {archivo}" if archivo else "") + "…"}
 
+    def apuntar_pid(self, app, pid):
+        """v3.81: apunta un proceso de la app abierto por otro camino (el vigilante que la arregla)."""
+        d = _leer_json(self.ruta_procesos)
+        vivos = [x for x in d.get(self._clave(app), []) if _vivo(x)]
+        d[self._clave(app)] = (vivos + [int(pid)])[-10:]
+        _guardar_json(self.ruta_procesos, d)
+
     def cerrar(self, app, forzar=False, espera=3.0):
         pids = self.procesos(app)
         if not pids:

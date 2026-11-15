@@ -96,7 +96,7 @@ def anadir(dir_, titulo, codigo="", tipo="programa", icono="programa"):
     return iid
 
 
-def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
+def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app", fuente="", pagina=""):
     """v3.28: acceso directo de una APP EXTERNA que el dueño mandó instalar (de GitHub, un AppImage…). No es una app web:
     al pulsarla se LANZA en el portátil (`lanzar`, una lista de argumentos) y al desinstalarla se borra su `carpeta`.
     Deduplicado por título. Devuelve el id (o None si ya existía o no hay título)."""
@@ -112,15 +112,16 @@ def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
         k += 1
     lista.append({"id": iid, "titulo": titulo, "tipo": "externa", "icono": icono or "app",
                   "cuando": int(time.time()), "tiene_html": False,
-                  "lanzar": list(lanzar or []), "carpeta": str(carpeta or "")})
+                  "lanzar": list(lanzar or []), "carpeta": str(carpeta or ""),
+                  "fuente": str(fuente or "")[:500], "pagina": str(pagina or "")[:500]})
     _guardar(dir_, lista)
     return iid
 
 
-def poner_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
+def poner_externa(dir_, titulo, lanzar, carpeta="", icono="app", fuente="", pagina=""):
     """v3.35: como anadir_externa, pero si ya estaba (otra versión de la misma app) ACTUALIZA cómo se lanza.
     Devuelve (id, nueva: bool)."""
-    iid = anadir_externa(dir_, titulo, lanzar, carpeta, icono)
+    iid = anadir_externa(dir_, titulo, lanzar, carpeta, icono, fuente, pagina)
     if iid:
         return iid, True
     t = str(titulo or "").strip()[:60].lower()
@@ -130,10 +131,30 @@ def poner_externa(dir_, titulo, lanzar, carpeta="", icono="app"):
             if a.get("tipo") == "externa":
                 a["lanzar"] = list(lanzar or a.get("lanzar") or [])
                 a["carpeta"] = str(carpeta or a.get("carpeta") or "")
+                a["fuente"] = str(fuente or a.get("fuente") or "")[:500]
+                a["pagina"] = str(pagina or a.get("pagina") or "")[:500]
+                a.pop("entorno", None)                  # otra versión: lo arreglado para la vieja ya no vale
                 a["cuando"] = int(time.time())
                 _guardar(dir_, lista)
             return a.get("id"), False
     return None, False
+
+
+def actualizar_externa(dir_, iid, lanzar=None, entorno=None, arreglos=None):
+    """v3.81: tras ARREGLAR una app que no arrancaba, se apunta la forma de lanzarla que sí funciona."""
+    lista = _leer(dir_)
+    for a in lista:
+        if a.get("id") == iid and a.get("tipo") == "externa":
+            if lanzar:
+                a["lanzar"] = [str(x) for x in lanzar]
+            if entorno is not None:
+                a["entorno"] = {str(k): str(v) for k, v in dict(entorno).items()
+                                if re.match(r"^[A-Z_][A-Z0-9_]{0,40}$", str(k))}
+            if arreglos:
+                a["arreglos"] = ([str(x)[:160] for x in arreglos] + list(a.get("arreglos") or []))[:10]
+            _guardar(dir_, lista)
+            return True
+    return False
 
 
 def uno(dir_, iid):

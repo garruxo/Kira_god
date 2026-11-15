@@ -171,6 +171,8 @@ esc = ek.EscritorioMixin()
 abiertos = []
 _abrir = ma.Manejo.abrir
 ma.Manejo.abrir = lambda self, a, archivo="": (abiertos.append(a["titulo"]) or {"ok": True, "texto": "Abriendo Herr…"})
+import arreglar_app_kira as _arr   # v3.81: abierta VIGILADA
+_arr.abrir_vigilando = lambda a, d, **k: (abiertos.append(a["titulo"]) or {"ok": True, "texto": "Abriendo Herr…"})
 try:
     d = esc.abrir_acceso(iid)
     ok(d["externa"] and abiertos == ["Herr"] and any(o["orden"] == "en Herr, --rapido" for o in d["ordenes"]),

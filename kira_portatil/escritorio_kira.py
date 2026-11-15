@@ -247,10 +247,13 @@ class EscritorioMixin:
                 r = {"ok": True, "mensaje": f"Órdenes de {a.get('titulo', 'la app')} (no la he abierto)."}
             elif a.get("tipo") == "externa":
                 try:                                      # v3.35: apuntando su proceso (para «cierra X»)
-                    import manejo_apps_kira as ma
-                    r0 = ma.Manejo(accesos=ak.listar(DATOS_NUCLEO)).abrir(
-                        {"titulo": a.get("titulo", "App"), "lanzar": a.get("lanzar") or [],
-                         "carpeta": a.get("carpeta") or ""})
+                    import manejo_apps_kira as ma          # v3.81: y VIGILADA: si no arranca, Kira la arregla sola
+                    import arreglar_app_kira as arr
+                    m_ = ma.Manejo(accesos=ak.listar(DATOS_NUCLEO))
+                    app_ = {"titulo": a.get("titulo", "App"), "lanzar": a.get("lanzar") or [],
+                            "carpeta": a.get("carpeta") or ""}
+                    r0 = arr.abrir_vigilando(a, DATOS_NUCLEO, al_pid=lambda pid: m_.apuntar_pid(app_, pid),
+                                             preguntar=getattr(self, "_preguntar_cli", None))
                     r = {"ok": r0.get("ok"), "mensaje": r0.get("texto", "")}
                 except Exception as e:                    # noqa: BLE001
                     r = {"ok": False, "mensaje": str(e)}
@@ -354,7 +357,8 @@ class EscritorioMixin:
         if not r.get("ok"):
             return r.get("mensaje", "No pude instalarla.")
         self._app_bloqueada = ""
-        iid, nueva = ak.poner_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+        iid, nueva = ak.poner_externa(DATOS_NUCLEO, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "",
+                                      fuente=fuente, pagina=getattr(self, "_pagina_vista", "") or fuente)  # v3.81
         extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
         dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
         import manejo_apps_kira as ma

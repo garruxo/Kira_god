@@ -117,6 +117,8 @@ ok("instalada" in r["texto"].lower() and npmod._buscar_app(Core(), "pepe"), "el 
 lan2 = []
 import manejo_apps_kira as _ma   # v3.35: «usa X» abre con el manejo de apps (apunta el proceso para «cierra X»)
 _ma.Manejo.abrir = lambda self, a, archivo="": (lan2.append(a.get("titulo")), {"ok": True, "texto": "Abriendo Pepe…"})[1]
+import arreglar_app_kira as _arr   # v3.81: las apps externas se abren VIGILADAS (si no arrancan, se arreglan)
+_arr.abrir_vigilando = lambda a, d, **k: (lan2.append(a.get("titulo")), {"ok": True, "texto": "Abriendo Pepe…"})[1]
 r = npmod._usar_app(Core(), "pepe")
 ok("abriendo" in r["texto"].lower() and lan2, "«usa Pepe» la lanza")
 

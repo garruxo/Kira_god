@@ -513,7 +513,7 @@ def _elegir_version(core, texto, pend, paso):
     return r
 
 
-def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=None):
+def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=None, pagina=None):
     """v3.28/v3.29: instala la app que el dueño pidió (sin administrador), la ANALIZA antes y la deja como icono en el
     escritorio. Si el análisis la marca peligrosa (y no la fuerza), no la instala y recuerda cuál era (para «igualmente»).
     v3.35: si hay varias versiones, pregunta cuál antes de bajar nada."""
@@ -527,7 +527,8 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
             import versiones_kira as vk
             nombre = nombre or ((vk.repo_github(fuente) or "").split("/")[-1] or
                                 vk.nombre_bonito(aex._nombre_de(ops[0]["url"]), ops[0]["version"]))
-            r1 = _instalar_app(core, ops[0]["url"], paso, forzar=forzar, sin_versiones=True, nombre=nombre)
+            r1 = _instalar_app(core, ops[0]["url"], paso, forzar=forzar, sin_versiones=True, nombre=nombre,
+                               pagina=pagina or fuente)
             if r1.get("ok") is not False:
                 r1["texto"] = (f"Solo hay una versión publicada ({ops[0].get('version') or 'sin número'}): la "
                                "instalo. " + r1["texto"] + (" Si prefieres el código fuente, dime «instala " + fuente +
@@ -541,7 +542,7 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
         if not b["ok"]:
             return {"texto": b["texto"], "ok": True}
         r2 = _instalar_app(core, b["fuente"], paso, forzar=forzar, sin_versiones=sin_versiones and b["como"] != "github",
-                           nombre=nombre)
+                           nombre=nombre, pagina=pagina or fuente)
         r2["texto"] = b["texto"] + " " + r2.get("texto", "")
         return r2
     paso(0.0, f"Instalo {nombre or fuente}…")
@@ -555,7 +556,8 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
         suave = r.get("admin") or r.get("peligro")
         return {"texto": ("" if suave else "[x] ") + r.get("mensaje", "No pude instalarla."),
                 "ok": bool(suave)}
-    iid, nueva = ak.poner_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "")
+    iid, nueva = ak.poner_externa(core.dir, r["nombre"], r.get("lanzar") or [], r.get("carpeta") or "",
+                                  fuente=fuente, pagina=pagina or fuente)          # v3.81: para estudiarla si no arranca
     extra = "" if nueva else " (ya la tenías: he actualizado su icono a esta)"
     dep_aviso = aex.aviso_dependencias(r.get("dependencias"), r["nombre"])   # v3.32: si le hace falta algo, pregunta
     import manejo_apps_kira as ma
@@ -649,7 +651,12 @@ def _usar_app(core, nombre):
     m = _manejo(core)
     app = m.buscar(a.get("titulo", nombre)) or {"titulo": a.get("titulo", nombre), "lanzar": a.get("lanzar") or [],
                                                  "carpeta": a.get("carpeta") or ""}
-    r = m.abrir(app)
+    if a.get("tipo") == "externa":                    # v3.81: vigilada; si no arranca, la arregla sola y avisa al final
+        import arreglar_app_kira as arr
+        r = arr.abrir_vigilando(a, core.dir, al_pid=lambda pid: m.apuntar_pid(app, pid),
+                                preguntar=_preguntar_cerebro(core))
+    else:
+        r = m.abrir(app)
     return {"texto": r.get("texto", ""), **({} if r.get("ok") else {"ok": False})}
 
 
