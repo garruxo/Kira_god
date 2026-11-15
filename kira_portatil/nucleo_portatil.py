@@ -660,6 +660,14 @@ def ejecutar(core, orden, paso):
     if hw_.es_orden(o):
         paso(0.0, "Estudio tu portátil…")
         return {"texto": hw_.hacer(core, al_paso=paso)["texto"]}
+    import taller_programas_kira as tp_          # v3.76: trabajar con un PROGRAMA de órdenes mientras lo ves
+    o_tp = tp_.orden(o)
+    if o_tp is not None:
+        paso(0.2, f"Leo la ayuda de «{o_tp[0]}» y preparo las órdenes…")
+        _s, txt = tp_.preparar(o_tp[0], o_tp[1], _preguntar_cerebro(core), datos=getattr(core, "dir", None))
+        return {"texto": txt, **({"ok": False} if txt.startswith("[x]") else {})}
+    if tp_.es_ver(o):
+        return {"texto": tp_.texto_ventana(tp_.leer())}
     import taller_kernel_kira as tk_              # v3.35: el TALLER DE KERNEL (programa un SO de verdad, lo prueba en QEMU)
     o_k = tk_.orden(o)
     if o_k:

@@ -236,7 +236,7 @@ _SUBJ = {"muestre": "enséñame", "ensene": "enséñame", "enseñe": "enséñame
          "borre": "borra", "cuente": "cuenta", "calcule": "calcula", "piense": "piensa", "pinte": "pinta",
          "guarde": "guarda", "investigue": "investiga", "resuma": "resume", "explique": "explica",
          "actualice": "actualiza", "liste": "lista", "escanee": "escanea", "vigile": "vigila",
-         "reinicie": "reinicia", "programe": "programa", "traiga": "trae", "lance": "lanza", "ejecute": "ejecuta"}
+         "reinicie": "reinicia", "programe": "programa", "trabaje": "trabaja", "use": "usa", "traiga": "trae", "lance": "lanza", "ejecute": "ejecuta"}
 _INF = {"mostrar": "enséñame", "ensenar": "enséñame", "ver": "enséñame", "decir": "dime", "hacer": "haz",
         "poner": "pon", "abrir": "abre", "buscar": "busca", "encender": "enciende", "apagar": "apaga",
         "estudiar": "estudia", "leer": "lee", "comprobar": "comprueba", "mirar": "mira", "revisar": "revisa",
@@ -244,7 +244,7 @@ _INF = {"mostrar": "enséñame", "ensenar": "enséñame", "ver": "enséñame", "
         "borrar": "borra", "contar": "cuenta", "calcular": "calcula", "pensar": "piensa", "pintar": "pinta",
         "guardar": "guarda", "investigar": "investiga", "resumir": "resume", "explicar": "explica",
         "actualizar": "actualiza", "listar": "lista", "escanear": "escanea", "vigilar": "vigila",
-        "reiniciar": "reinicia", "programar": "programa", "lanzar": "lanza", "ejecutar": "ejecuta"}
+        "reiniciar": "reinicia", "programar": "programa", "trabajar": "trabaja", "usar": "usa", "lanzar": "lanza", "ejecutar": "ejecuta"}
 
 
 def _sin_tildes(t):

@@ -638,6 +638,12 @@ class EscritorioMixin:
                 ke.manejar(self.cli, texto, t["lineas"].append, trozo, nucleo=self._nucleo(), ctx=ctx,
                            wifi=getattr(self, "wifi_mod", None))
                 t["pedir_clave"] = ctx.get("pedir_clave")
+                try:                                       # v3.76: «trabaja con X…» → se abre la ventana del Taller
+                    import taller_programas_kira as _tp
+                    if _tp.orden(texto) or _tp.es_ver(texto):
+                        t["abrir"] = "taller"
+                except Exception:
+                    pass
                 self._recordar_codigo(texto, t["lineas"])
                 if t["respuesta"].strip() or any(not _TRANSITORIA.match(str(x)) for x in t["lineas"]):  # ya contestó
                     t["lineas"][:] = [x for x in t["lineas"] if not _TRANSITORIA.match(str(x))]
@@ -709,7 +715,7 @@ class EscritorioMixin:
         for k in ("aspecto", "salvapantallas"):
             if t.get(k):
                 r[k] = True
-        if t.get("abrir") in ("fondos", "aplicaciones", "disenos"):   # v3.45/v3.74: abre esa ventana
+        if t.get("abrir") in ("fondos", "aplicaciones", "disenos", "taller"):   # v3.45/v3.74: abre esa ventana
             r["abrir"] = t["abrir"]
         return r
 
@@ -928,6 +934,8 @@ class EscritorioMixin:
                 self.voz_activa_poner(accion == "voz_si")
                 return {"texto": "Voz " + ("puesta: te contesto hablando." if self.voz_activa else
                                            "quitada: te contesto solo por escrito.")}
+        if nombre == "taller":                        # v3.76: Hazlo / Parar del Taller de programas
+            return self._taller_hacer(accion)
         if nombre == "mejoras":                       # v3.07: sus propias mejoras (solo aquí, en el portátil)
             return self._mejoras_hacer(accion)
         if nombre == "cuaderno":                      # v3.10: Parar / Borrar / Empezar de la pestaña Tareas
@@ -939,6 +947,37 @@ class EscritorioMixin:
             v = mq.Maquina().visitas(15)
             return {"texto": ("Lo último que ha pasado por la puerta de mi máquina (solo el sitio, nunca el contenido):\n"
                               + "\n".join(v)) if v else "Mi máquina aún no ha salido a internet."}
+        return {"texto": "No conozco ese botón."}
+
+    # ---------- v3.76: el TALLER de programas (Kira trabaja con un programa de órdenes y tú lo ves en vivo) ----------
+    def _obrero_taller(self):
+        if getattr(self, "_obrero_tp", None) is None:
+            import taller_programas_kira as tp
+            self._obrero_tp = tp.Obrero()
+        return self._obrero_tp
+
+    def _app_taller(self):
+        import taller_programas_kira as tp
+        s = tp.leer()
+        ob = self._obrero_taller()
+        botones = []
+        if s.get("plan") and not ob.ocupado():
+            botones.append({"texto": "Hazlo" if s.get("estado") == "esperando" else "Hazlo otra vez",
+                            "accion": "hacer:hazlo", "dos": True})
+        if ob.ocupado():
+            botones.append({"texto": "Parar", "accion": "hacer:parar"})
+        d = {"titulo": "Taller" + (f" · {s['programa']}" if s.get("programa") else ""), "texto": tp.texto_ventana(s),
+             "botones": botones}
+        if ob.ocupado() or s.get("estado") == "trabajando":
+            d["refrescar_cada"] = 2
+        return d
+
+    def _taller_hacer(self, accion):
+        ob = self._obrero_taller()
+        if accion == "hazlo":
+            return {"texto": ob.empezar(), "refrescar": True}
+        if accion == "parar":
+            return {"texto": ob.parar(), "refrescar": True}
         return {"texto": "No conozco ese botón."}
 
     # ---------- v3.07: MEJORAS de KiraOS (laboratorio + tus dos toques + volver atrás) ----------
@@ -1181,6 +1220,7 @@ class EscritorioMixin:
                 "botones": [{"texto": "Todas las aplicaciones", "accion": "app:aplicaciones"},     # v3.45
                             {"texto": "Fondo de pantalla", "accion": "app:fondos"},
                             {"texto": "Diseños del móvil", "accion": "app:disenos"},      # v3.74
+                            {"texto": "Taller de programas", "accion": "app:taller"},     # v3.76
                             {"texto": "Cerebro rápido", "accion": "hacer:rapido"},
                             {"texto": "Cerebro grande", "accion": "hacer:grande"},
                             {"texto": "Con voz", "accion": "hacer:voz_si"},

@@ -413,7 +413,7 @@ var ICONOS = [
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil", taller:"Taller"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
@@ -1229,7 +1229,7 @@ function hablarCon(texto){
           var ca=$("callar"); if(ca) ca.onclick=function(){ llama("callar"); quitaAviso(); };
           if(d.pedir_clave){ abrir("wifi"); }
           if(d.aspecto) refrescaBarra();                       // v3.21: cambiaste algo de mi sistema
-          if(d.abrir==="fondos"||d.abrir==="aplicaciones"||d.abrir==="disenos") abrir(d.abrir);   // v3.45
+          if(d.abrir==="fondos"||d.abrir==="aplicaciones"||d.abrir==="disenos"||d.abrir==="taller") abrir(d.abrir);   // v3.45
           if(d.salvapantallas) setTimeout(function(){ refrescaBarra(); setTimeout(mostrarSalva, 600); }, 300);
         }
       }).catch(function(){});
