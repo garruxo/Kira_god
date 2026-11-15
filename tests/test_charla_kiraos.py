@@ -20,7 +20,8 @@ class Core:
             def __init__(s): s.g = []
             def guardar_charla(s, a, b): s.g.append((a, b))
         self.recuerdos = Rec()
-    def conversar(self, texto, historial=(), al_trozo=None):
+    def conversar(self, texto, historial=(), al_trozo=None, sistema=None):
+        self.sistema = sistema
         if self.falla:
             raise RuntimeError("no hay cerebro")
         self.vistos.append(list(historial))
@@ -31,6 +32,7 @@ r = npo.charla_si_no_es_orden(c, "hola", "[i] No reconozco la orden 'hola'.")
 ok(r["texto"] == "respuesta a hola", "lo que no es una orden se contesta con el cerebro")
 r = npo.charla_si_no_es_orden(c, "¿y tú?", "[i] No reconozco la orden '¿y tú?'.")
 ok(c.vistos[-1] == [("tu", "hola"), ("kira", "respuesta a hola")], "recuerda la charla anterior")
+ok(c.sistema == npo.SISTEMA_CHARLA and len(c.sistema) < 500, "v3.69: le da instrucciones CORTAS (lee menos, contesta antes)")
 ok(c.recuerdos.g[-1] == ("¿y tú?", "respuesta a ¿y tú?"), "guarda la charla en el baúl")
 ok(npo.charla_si_no_es_orden(c, "x", "Hecho: tema bosque")["texto"] == "Hecho: tema bosque", "una orden de verdad no cambia")
 r = npo.charla_si_no_es_orden(Core(falla=True), "hola", "[i] No reconozco la orden 'hola'.")

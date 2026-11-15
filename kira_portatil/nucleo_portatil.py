@@ -736,6 +736,12 @@ def ejecutar(core, orden, paso):
     return charla_si_no_es_orden(core, o, r, paso)
 
 
+SISTEMA_CHARLA = ("Eres Kira, la asistente del portátil de tu persona (KiraOS). Hablas TÚ como Kira, en español, en 1 a 3 "
+                  "frases cortas, sin listas ni markdown: se lee en voz alta. No digas que no puedes hacer cosas: si te "
+                  "piden una tarea, di que te la pida como orden («estudia…», «escríbeme un programa que…»). "
+                  "No afirmes haber hecho algo que no has hecho.")
+
+
 def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
     """v3.68: si lo que dijiste no es una orden («hola», «¿qué es un compilador?»), te CONTESTA con su cerebro, como
     en el móvil (antes salía «No reconozco la orden»). Recuerda los últimos turnos de la charla (solo en RAM)."""
@@ -751,7 +757,10 @@ def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
             pass
     try:
         paso(None, "Te contesto…")
-        resp = core.conversar(o, historial=list(hist))
+        try:                                     # v3.69: instrucciones CORTAS (el cerebro del portátil lee menos)
+            resp = core.conversar(o, historial=list(hist), sistema=SISTEMA_CHARLA)
+        except TypeError:
+            resp = core.conversar(o, historial=list(hist))
     except Exception as e:                       # noqa: BLE001
         return {"texto": f"No he podido contestarte con mi cerebro ({str(e)[:160]}). Si era una orden, dime «ayuda» "
                          "para ver cómo pedírmela."}

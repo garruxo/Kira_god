@@ -472,7 +472,7 @@ class KiraGodCore:
         except Exception:
             return None
 
-    def conversar(self, texto, historial=(), al_trozo=None):
+    def conversar(self, texto, historial=(), al_trozo=None, sistema=None):
         """Respuesta hablada de Kira (modelo local o API de Claude). Lanza RuntimeError si falta cerebro o falla la red.
         Antes de responder, la IA recibe los recuerdos del baúl que vengan al caso."""
         import cerebro_ia_kira
@@ -498,6 +498,8 @@ class KiraGodCore:
                   "sala hacker», «ve a los juegos», «abre WhatsApp», «ajustes del wifi» o «conéctate al ordenador»: si te "
                   "lo pide con otras palabras, dile cómo pedirlo así, nunca que no puedes. "
                   "No afirmes haber hecho acciones que no has hecho.")
+        if sistema:                                   # v3.69: instrucciones cortas (KiraOS: el cerebro lee menos)
+            system = sistema
         nuevas = sorted(p for p in getattr(self, "comandos_modulos", {}) if isinstance(p, str))[:20]
         if nuevas:                                     # lo que aprendió con mejoras (cambia solo al instalar una)
             system += " Órdenes nuevas que has aprendido: " + ", ".join(f"«{p}»" for p in nuevas) + "."
