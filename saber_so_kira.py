@@ -5147,6 +5147,123 @@ static int ec_escribir_bit_wifi(uint8_t v) {                /* SOLO el byte 0xBB
     if (!ec_libre()) return -1;
     return 0;
 }
+/* ---- v3.66: «modo ACPI», como hace Linux al arrancar ----
+   La tabla de la BIOS de tu portátil (DSDT) dice que la función que usa Linux para encender la WiFi SOLO cambia
+   el bit WLAT (0xBB bit 0), lo mismo que ya hacemos, y aun así la radio no se enciende. La diferencia que queda:
+   Linux, al arrancar, pasa el portátil a «modo ACPI» (escribe un valor en el puerto SMI que dice la tabla FACP;
+   en tu portátil 0xA0 en 0xB2) y la BIOS/EC puede que solo obedezcan en ese modo. Aquí se prueba UNOS SEGUNDOS:
+   se leen el puerto y los valores de la FACP de TU portátil (nada inventado), se pasa a modo ACPI, se cambia WLAT
+   como Linux, se mira la radio y se VUELVE a modo normal con el valor de desactivar de la misma tabla. Las
+   interrupciones de ACPI (IRQ 9) están tapadas en el PIC, así que no llegan; el ventilador lo lleva el EC solo. */
+#ifdef WIFI_SIMULADA
+const uint8_t *sim_mem(uint32_t dir, uint32_t tam);
+uint16_t sim_inw(uint16_t p);
+__attribute__((weak)) const uint8_t *sim_mem(uint32_t dir, uint32_t tam) { (void)dir; (void)tam; return 0; }
+__attribute__((weak)) uint16_t sim_inw(uint16_t p) { (void)p; return 0xFFFF; }
+#define FIS(d, t) sim_mem(d, t)
+#define ACPI_INW(p) sim_inw(p)
+#else
+#include "memoria.h"
+static const uint8_t *fis(uint32_t d, uint32_t t) { paginacion_mapear(d, t); return (const uint8_t *)(uintptr_t)d; }
+#define FIS(d, t) fis(d, t)
+#define ACPI_INW(p) inw(p)
+#endif
+struct acpi_modo { uint32_t smi, pm1a; uint8_t on, off; };
+static uint32_t acpi_le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
+static int acpi_suma(const uint8_t *p, uint32_t n) { uint8_t x = 0; for (uint32_t i = 0; i < n; i++) x += p[i]; return x == 0; }
+static int acpi_firma(const uint8_t *p, const char *f, int n) { for (int i = 0; i < n; i++) if (p[i] != (uint8_t)f[i]) return 0; return 1; }
+static uint32_t buscar_rsdp(uint32_t dir, uint32_t tam) {
+    const uint8_t *z = FIS(dir, tam);
+    if (!z) return 0;
+    for (uint32_t o = 0; o + 20 <= tam; o += 16)
+        if (acpi_firma(z + o, "RSD PTR ", 8) && acpi_suma(z + o, 20)) return acpi_le32(z + o + 16);
+    return 0;
+}
+static int leer_facp(struct acpi_modo *m) {
+    uint32_t rsdt = 0;
+    const uint8_t *bda = FIS(0x400, 0x100);
+    if (bda) { uint32_t ebda = (uint32_t)(bda[0x0E] | (bda[0x0F] << 8)) << 4; if (ebda >= 0x80000 && ebda < 0xA0000) rsdt = buscar_rsdp(ebda, 1024); }
+    if (!rsdt) rsdt = buscar_rsdp(0xE0000, 0x20000);
+    if (!rsdt) return -1;
+    const uint8_t *r = FIS(rsdt, 36);
+    if (!r || !acpi_firma(r, "RSDT", 4)) return -2;
+    uint32_t largo = acpi_le32(r + 4);
+    if (largo < 36 || largo > 4096) return -2;
+    r = FIS(rsdt, largo);
+    if (!r || !acpi_suma(r, largo)) return -2;
+    for (uint32_t i = 36; i + 4 <= largo; i += 4) {
+        uint32_t t = acpi_le32(r + i);
+        const uint8_t *f = FIS(t, 36);
+        if (!f || !acpi_firma(f, "FACP", 4)) continue;
+        uint32_t lf = acpi_le32(f + 4);
+        if (lf < 116 || lf > 1024) return -3;
+        f = FIS(t, lf);
+        if (!f || !acpi_suma(f, lf)) return -3;
+        m->smi = acpi_le32(f + 48); m->on = f[52]; m->off = f[53]; m->pm1a = acpi_le32(f + 64);
+        return 0;
+    }
+    return -3;
+}
+static int sci_activo(const struct acpi_modo *m) { return ACPI_INW((uint16_t)m->pm1a) & 1; }
+static int esperar_sci(const struct acpi_modo *m, int quiero) {   /* como mucho 3 s */
+    for (int i = 0; i < 300; i++) { if (sci_activo(m) == quiero) return 1; espera_us(10000); }
+    return 0;
+}
+static int radio_viva(int g, int pol) { return ((gpio_entradas() >> g) & 1) != (uint32_t)pol; }
+static int probar_modo_acpi(uint8_t a, int g, int pol) {
+    struct acpi_modo m;
+    int r = leer_facp(&m);
+    if (r) {
+        kprint(r == -1 ? "WiFi modo ACPI: no encuentro las tablas de la BIOS; no toco nada\n"
+                       : "WiFi modo ACPI: la tabla FACP no se lee bien; no toco nada\n");
+        return -8;
+    }
+    kprint("WiFi modo ACPI (tabla FACP): puerto SMI "); kprint_hex(m.smi); kprint(", activar "); kprint_hex(m.on);
+    kprint(", desactivar "); kprint_hex(m.off); kprint(", PM1a "); kprint_hex(m.pm1a); kprint("\n");
+    if (m.smi == 0 || m.smi > 0xFF || m.pm1a == 0 || m.pm1a > 0xFFFF || m.on == 0 || m.off == 0) {
+        kprint("WiFi modo ACPI: este portatil no tiene paso a modo ACPI que yo pueda deshacer; no toco nada\n");
+        return -8;
+    }
+    int ya = sci_activo(&m);
+    if (!ya) {
+        EC_OUT((uint16_t)m.smi, m.on);
+        if (!esperar_sci(&m, 1)) {
+            kprint("WiFi modo ACPI: el portatil no ha pasado a modo ACPI en 3 s; no toco nada mas\n");
+            return -9;
+        }
+        kprint("WiFi modo ACPI: activado, como hace Linux al arrancar\n");
+    } else kprint("WiFi modo ACPI: ya estaba activado\n");
+    int encendida = 0;
+    if (!ec_escribir_bit_wifi((uint8_t)(a & ~1u))) {
+        espera_us(1000000);
+        if (!ec_escribir_bit_wifi((uint8_t)(a | 1)))
+            for (int i = 0; i < 30 && !encendida; i++) { espera_us(100000); encendida = radio_viva(g, pol); }
+    }
+    if (!encendida) ec_escribir_bit_wifi(a);
+    int vuelta = 1;
+    if (!ya) {
+        EC_OUT((uint16_t)m.smi, m.off);
+        vuelta = esperar_sci(&m, 0);
+    }
+    espera_us(500000);
+    int sigue = radio_viva(g, pol);
+    uint8_t d = 0;
+    ec_leer(EC_WIFI, &d);
+    kprint(ya ? "WiFi modo ACPI: lo dejo como estaba (activado)\n"
+              : vuelta ? "WiFi modo ACPI: vuelto a modo normal, como estaba\n"
+                       : "WiFi modo ACPI: OJO, no ha vuelto a modo normal en 3 s (reinicia con Esc al acabar)\n");
+    kprint("WiFi modo ACPI: controlador 0xBB = "); kprint_hex(d); kprint(", GPIO "); kprint_hex(gpio_entradas()); kprint("\n");
+    if (encendida && sigue) { kprint("WiFi enciende: radio ENCENDIDA (en modo ACPI) y sigue encendida. Escribe redes\n"); return 1; }
+    if (encendida) {
+        kprint("WiFi enciende: en modo ACPI la radio SI se enciende, pero se apaga al volver a modo normal.\n"
+               "  Hazme una foto: en la siguiente version escucho las redes en modo ACPI\n");
+        return 2;
+    }
+    kprint("WiFi enciende: tampoco se enciende en modo ACPI. Lo que falta lo hace Linux con mas cosas que esto;\n"
+           "  la WiFi del kernel se queda aparcada hasta que Kira sea un sistema completo. Hazme una foto\n");
+    return -7;
+}
+
 int radio_encender(void) {
     struct wifi_info w;
     if (wifi_leer(&w) != 1) { kprint("WiFi enciende: no encuentro la tarjeta; no toco nada\n"); return -1; }
@@ -5200,8 +5317,11 @@ int radio_encender(void) {
     ec_leer(EC_WIFI, &d);
     kprint("WiFi enciende: la radio NO se ha encendido en 3 s (GPIO "); kprint_hex(gpio_entradas());
     kprint("). He dejado el controlador como estaba (");
-    kprint_hex(d); kprint(d == a ? ", igual que antes). Hazme una foto\n" : ", OJO: no es igual que antes). Hazme una foto\n");
-    return -6;
+    kprint_hex(d); kprint(d == a ? ", igual que antes)\n" : ", OJO: no es igual que antes). Hazme una foto\n");
+    if (d != a) return -6;
+    kprint("  -> ultimo intento: en modo ACPI, como Linux\n");
+    int r = probar_modo_acpi(a, g, pol);
+    return r == -8 || r == -9 ? -6 : r;
 }
 
 /* ---- para la orden «compara»: deja la radio ajustada en un canal (como para escuchar, pero SIN escuchar:

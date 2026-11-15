@@ -168,6 +168,29 @@ void sim_paso(uint32_t us) {
    (GPIO 0); 11: el EC acepta la escritura pero la radio no se enciende; 12: no hay EC (0xFF); 13: EC atascado. */
 static uint8_t ec_ram[256]; static int ec_est = 0, ec_dir = 0, ec_obf = 0, ec_esc = 0, ec_esc_otro = 0;
 static uint8_t ec_sal = 0, ec_previo = 0x44;
+/* v3.66: tablas ACPI y modo ACPI. 16: la radio solo se enciende en modo ACPI y se queda; 17: se enciende en modo
+   ACPI pero se apaga al volver; 18: ni así. */
+static uint8_t mem_bajo[0x100000], mem_alto[0x1000];
+static int sci = 0, smi_on = 0, smi_off = 0, smi_otro = 0;
+const uint8_t *sim_mem(uint32_t d, uint32_t t) {
+    if (modo < 16) return 0;
+    if (d + t <= 0x100000) return mem_bajo + d;
+    if (d >= 0x100000 && d + t <= 0x101000) return mem_alto + (d - 0x100000);
+    return 0;
+}
+uint16_t sim_inw(uint16_t p) { return p == 0x404 ? (uint16_t)sci : 0xFFFF; }
+static void pon32(uint8_t *q, uint32_t v) { q[0] = v; q[1] = v >> 8; q[2] = v >> 16; q[3] = v >> 24; }
+static void sumar(uint8_t *q, int n, int pos) { uint8_t x = 0; q[pos] = 0; for (int i = 0; i < n; i++) x += q[i]; q[pos] = (uint8_t)(0 - x); }
+static void tablas_acpi(void) {
+    uint8_t *r = mem_bajo + 0xE1230;                       /* RSDP (alineada a 16) */
+    memcpy(r, "RSD PTR ", 8); pon32(r + 16, 0x100000); sumar(r, 20, 8);
+    uint8_t *t = mem_alto;                                 /* RSDT con dos tablas: una cualquiera y la FACP */
+    memcpy(t, "RSDT", 4); pon32(t + 4, 44); pon32(t + 36, 0x100200); pon32(t + 40, 0x100100); sumar(t, 44, 9);
+    uint8_t *o = mem_alto + 0x200; memcpy(o, "APIC", 4); pon32(o + 4, 36);
+    uint8_t *f = mem_alto + 0x100;
+    memcpy(f, "FACP", 4); pon32(f + 4, 116); pon32(f + 48, 0xB2); f[52] = 0xA0; f[53] = 0xA1; pon32(f + 64, 0x404);
+    sumar(f, 116, 9);
+}
 uint8_t sim_inb(uint16_t p) {
     if (modo == 12) return 0xFF;
     if (p == 0x66) return (uint8_t)((modo == 13 ? 0x02 : 0) | (ec_obf ? 1 : 0));
@@ -176,6 +199,12 @@ uint8_t sim_inb(uint16_t p) {
 }
 void sim_outb(uint16_t p, uint8_t v) {
     if (modo == 12 || modo == 13) return;
+    if (p == 0xB2) {
+        if (v == 0xA0) { smi_on++; sci = 1; }
+        else if (v == 0xA1) { smi_off++; sci = 0; if (modo == 17) regs[0x4048 / 4] &= ~(1u << 11); }
+        else smi_otro++;
+        return;
+    }
     if (p == 0x66) { ec_est = v == 0x80 ? 1 : v == 0x81 ? 2 : 0; return; }
     if (p != 0x62) return;
     if (ec_est == 1) { ec_sal = ec_ram[v]; ec_obf = 1; ec_est = 0; }
@@ -184,6 +213,9 @@ void sim_outb(uint16_t p, uint8_t v) {
         ec_ram[ec_dir] = v; ec_esc++; if (ec_dir != 0xBB) ec_esc_otro++;
         if (ec_dir == 0xBB && modo == 10) {
             if (v & 1) regs[0x4048 / 4] |= 1u << 11; else regs[0x4048 / 4] &= ~(1u << 11);
+        }
+        if (ec_dir == 0xBB && (modo == 16 || modo == 17)) {   /* solo en modo ACPI y en el cambio 0 -> 1 */
+            if ((v & 1) && !(ec_previo & 1) && sci) regs[0x4048 / 4] |= 1u << 11;
         }
         if (ec_dir == 0xBB && modo == 14) {                /* solo actúa cuando el bit CAMBIA de 0 a 1 */
             if ((v & 1) && !(ec_previo & 1)) regs[0x4048 / 4] |= 1u << 11;
@@ -218,7 +250,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 256; i++) ec_ram[i] = (uint8_t)(0x30 + i);
         ec_ram[0xBB] = modo >= 14 ? 0x45 : 0x44;
         ec_previo = ec_ram[0xBB];
+        if (modo >= 16) tablas_acpi();
         int e = radio_encender();
+        printf("SMI_ON=%d SMI_OFF=%d SMI_OTRO=%d SCI=%d\n", smi_on, smi_off, smi_otro, sci);
         printf("ENCENDER=%d EC_BB=%02x ESCRITURAS=%d OTRO=%d GPIO0=%u\n", e, ec_ram[0xBB], ec_esc, ec_esc_otro,
                (regs[0x4048 / 4] >> 11) & 1);
         int e2 = radio_encender();
@@ -347,6 +381,15 @@ if gcc and SIMPROG:
     ok("ENCENDER=-6 EC_BB=45 ESCRITURAS=3 OTRO=0" in s15 and "igual que antes" in s15,
        "si ni así se enciende, el byte queda como estaba (0x45)")
     s13 = corre2(13)
+    s16 = corre2(16); s17 = corre2(17); s18 = corre2(18)
+    ok("puerto SMI 0x000000B2, activar 0x000000A0, desactivar 0x000000A1, PM1a 0x00000404" in s16, "lee la FACP de las tablas de la BIOS " + s16[-600:])
+    ok("ENCENDER=1" in s16 and "SMI_ON=1 SMI_OFF=1 SMI_OTRO=0 SCI=0" in s16 and "OTRO=0 GPIO0=1" in s16,
+       "en modo ACPI se enciende, vuelve a modo normal y la radio se queda encendida " + s16[-500:])
+    ok("vuelto a modo normal" in s16 and "OTRA_VEZ=1" in s16, "lo dice y no lo repite si ya está encendida")
+    ok("ENCENDER=2" in s17 and "SMI_OFF=1" in s17 and "se apaga al volver" in s17, "si se apaga al volver, lo dice")
+    ok("ENCENDER=-7" in s18 and "EC_BB=45" in s18 and "SMI_ON=1 SMI_OFF=1 SMI_OTRO=0 SCI=0" in s18 and "aparcada" in s18,
+       "si ni así, deja el EC y el modo como estaban y lo dice " + s18[-500:])
+    ok("SMI_ON=0" in corre2(15), "sin tablas ACPI no toca el puerto SMI")
     ok("ENCENDER=-3" in s13 and "ESCRITURAS=0" in s13, "con el EC atascado no se cuelga ni escribe nada")
 ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],
    "la prueba analógica no toca nada de transmitir")
