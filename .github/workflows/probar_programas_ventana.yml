@@ -1,0 +1,24 @@
+name: probar programas de ventana (recetas reales de GIMP, Inkscape, LibreOffice)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ventana-prueba]
+permissions:
+  contents: write
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: instalar programas
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gimp inkscape imagemagick pandoc ffmpeg libreoffice-writer-nogui >/dev/null
+      - name: probar
+        run: python3 tests/test_programas_ventana.py 2>&1 | tee informe.txt
+      - name: guardar el informe en la rama
+        if: always()
+        run: |
+          git config user.name kira-ci; git config user.email kira-ci@users.noreply.github.com
+          mkdir -p informes && cp informe.txt informes/programas_ventana.txt
+          git add informes && git commit -qm "informe de programas de ventana" && git push -q origin HEAD:ventana-prueba || true

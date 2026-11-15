@@ -661,6 +661,13 @@ def ejecutar(core, orden, paso):
         paso(0.0, "Estudio tu portátil…")
         return {"texto": hw_.hacer(core, al_paso=paso)["texto"]}
     import taller_programas_kira as tp_          # v3.76: trabajar con un PROGRAMA de órdenes mientras lo ves
+    try:                                          # v3.77: manejar un programa POR DENTRO es de la pantalla
+        import accesibilidad_kira as acc_
+        if acc_.es_orden(o):
+            return {"texto": "Manejar un programa por dentro (pulsando sus menús) lo hago desde la pantalla del "
+                             "portátil, que es donde está la ventana: escríbemelo en la barra de KiraOS."}
+    except Exception:                             # noqa: BLE001
+        pass
     o_tp = tp_.orden(o)
     if o_tp is not None:
         paso(0.2, f"Leo la ayuda de «{o_tp[0]}» y preparo las órdenes…")

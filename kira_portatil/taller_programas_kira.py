@@ -86,6 +86,11 @@ def resolver(prog, datos=None):
     prog = str(prog or "").strip()
     if not prog:
         return None
+    try:                                                  # v3.77: «libreoffice» → soffice, «imagemagick» → convert…
+        import recetas_programas_kira as rp
+        prog = rp.canonico(prog)
+    except Exception:                                     # noqa: BLE001
+        pass
     exe = shutil.which(prog)
     if exe:
         return os.path.basename(prog), [exe]
@@ -114,6 +119,12 @@ def orden(texto):
     """(programa, tarea) para «trabaja con X: …», «abre el taller de X», «usa X para …»; si no, None.
     «usa X para …» solo si X es un programa de órdenes que existe (si no, no se lo come a las apps)."""
     t = _plano(re.sub(r"\s+", " ", str(texto or "")).strip().rstrip(" .!?"))
+    try:                                                  # v3.77: «maneja X por dentro» es la accesibilidad
+        import accesibilidad_kira as acc
+        if acc.es_orden(texto):
+            return None
+    except Exception:                                     # noqa: BLE001
+        pass
     for i, rx in enumerate(_ORDEN):
         m = rx.match(t)
         if m:
@@ -139,7 +150,11 @@ def prohibido(prog):
     return n in PROHIBIDOS or n.startswith("mkfs")
 
 
-def validar_orden(cmd, prog, carpeta=None, lanzar=None):
+_ABS_DENTRO = re.compile(r"(?:^|(?<=[=\"'(\s,])|(?<=file://))(/[^\s\"')]+)")
+_PUNTOS = re.compile(r"(?:^|[/\"'\s=(])\.\.(?:[/\"'\s)]|$)")
+
+
+def validar_orden(cmd, prog, carpeta=None, lanzar=None, de_receta=False):
     """Lista de argumentos lista para ejecutar, o lanza ValueError con el motivo (en español). Con `lanzar` (un
     programa que descargaste), el nombre del principio se cambia por su forma de arrancarlo."""
     cmd = str(cmd or "").strip()
@@ -160,12 +175,26 @@ def validar_orden(cmd, prog, carpeta=None, lanzar=None):
     if prohibido(args[0]):
         raise ValueError(f"«{args[0]}» no lo uso nunca desde aquí")
     casa = os.path.expanduser("~")
+
+    def _dentro(r):
+        r = os.path.normpath(r)
+        return r == casa or r.startswith(casa + "/") or r.startswith("/tmp/") or r == "/tmp"
+    try:
+        import recetas_programas_kira as rp
+    except Exception:                                     # noqa: BLE001
+        rp = None
     for a in args[1:]:
-        if ".." in a.replace("\\", "/").split("/"):
+        if ".." in a.replace("\\", "/").split("/") or _PUNTOS.search(a):
             raise ValueError("una ruta con «..» no se permite")
         r = os.path.expanduser(a) if a.startswith("~") else a
-        if r.startswith("/") and not (r == casa or r.startswith(casa + "/") or r.startswith("/tmp/") or r == "/tmp"):
+        if r.startswith("/") and not _dentro(r):
             raise ValueError(f"la ruta «{a}» está fuera de tu carpeta personal")
+        for dentro in _ABS_DENTRO.findall(a):             # v3.77: rutas metidas DENTRO de un argumento
+            if dentro.startswith("/") and not dentro.startswith("//") and not _dentro(dentro):
+                raise ValueError(f"la ruta «{dentro}» está fuera de tu carpeta personal")
+        if rp is not None and not de_receta and rp.es_guion(prog, a):
+            raise ValueError("los guiones de este programa (Script-Fu, macros, acciones) solo los uso de mis "
+                             "recetas probadas, no escritos por mi cerebro")
     args = [os.path.expanduser(a) if a.startswith("~") else a for a in args]
     if lanzar:
         return list(lanzar) + args[1:]
@@ -175,7 +204,7 @@ def validar_orden(cmd, prog, carpeta=None, lanzar=None):
     return [exe] + args[1:]
 
 
-def ordenes_de(respuesta, prog, lanzar=None):
+def ordenes_de(respuesta, prog, lanzar=None, de_receta=False):
     """Saca del texto del cerebro las órdenes (líneas «$ prog …» o dentro de un bloque ``` ) y separa las malas."""
     lineas = []
     for l in str(respuesta or "").splitlines():
@@ -191,7 +220,7 @@ def ordenes_de(respuesta, prog, lanzar=None):
     buenas, malas = [], []
     for s in lineas[:MAX_ORDENES * 2]:
         try:
-            validar_orden(s, prog, lanzar=lanzar)
+            validar_orden(s, prog, lanzar=lanzar, de_receta=de_receta)
             buenas.append(s)
         except ValueError as e:
             malas.append((s, str(e)))
@@ -227,9 +256,10 @@ SISTEMA_PLAN = ("Eres Kira y manejas programas de terminal en Linux (Xubuntu). T
                 "dilo en una línea que empiece por «NOTA:». Nada más.")
 
 
-def pedido_plan(prog, tarea, ayuda_txt, archivos):
+def pedido_plan(prog, tarea, ayuda_txt, archivos, ejemplos=""):
     return (f"Programa: {prog}\nTarea: {tarea or 'enseña qué puede hacer este programa con un ejemplo sencillo'}\n"
             f"Archivos en la carpeta del taller: {', '.join(archivos) if archivos else '(ninguno)'}\n"
+            + (f"{ejemplos}\n" if ejemplos else "") +
             f"Ayuda del programa (recortada):\n{ayuda_txt or '(no tiene ayuda)'}")
 
 
@@ -267,6 +297,11 @@ def guardar(d):
 
 def preparar(prog, tarea, preguntar, correr=None, datos=None):
     """Lee la ayuda, pide el plan al cerebro y deja la sesión ESPERANDO tu «Hazlo». Devuelve (sesion, texto)."""
+    try:                                                  # v3.77: el programa de verdad («libreoffice» → soffice)
+        import recetas_programas_kira as rp
+        prog = rp.canonico(prog)
+    except Exception:                                     # noqa: BLE001
+        rp = None
     if prohibido(prog):
         return None, f"[x] «{prog}» no lo manejo desde el taller (por seguridad: administrador, shells o cosas que borran)."
     r = resolver(prog, datos)
@@ -276,11 +311,28 @@ def preparar(prog, tarea, preguntar, correr=None, datos=None):
     nombre, lanzar = r
     descargado = not shutil.which(prog)
     carpeta = carpeta_de(prog)
-    ay = ayuda(prog, correr, lanzar)
-    resp = preguntar(SISTEMA_PLAN, pedido_plan(prog, tarea, ay, archivos(carpeta)))
-    buenas, malas = ordenes_de(resp, prog, lanzar if descargado else None)
-    notas = [_limpio(l.split(":", 1)[1], 200) for l in str(resp or "").splitlines() if l.strip().upper().startswith("NOTA:")]
-    s = {"programa": os.path.basename(prog), "tarea": tarea, "carpeta": carpeta, "plan": buenas,
+    receta = rp.plan(prog, tarea, archivos(carpeta)) if rp is not None and not descargado else None
+    if receta is not None:                                # v3.77: la tarea encaja con una RECETA probada
+        buenas, malas = ordenes_de("\n".join("$ " + o for o in receta[0]), prog, de_receta=True)
+        notas = [_limpio(n, 200) for n in receta[1]]
+        de_receta = True
+        if not buenas:
+            s = {"programa": os.path.basename(prog), "tarea": tarea, "carpeta": carpeta, "plan": [], "lanzar": None,
+                 "descargado": False, "rechazadas": [{"orden": o, "por": p} for o, p in malas][:8],
+                 "notas": notas[:4], "estado": "sin plan", "registro": [], "cuando": time.time(), "actual": -1,
+                 "de_receta": True}
+            guardar(s)
+            return s, (f"[x] Sé hacerlo con «{prog}», pero me falta el archivo. " + " ".join(notas[:1]) +
+                       f" (La carpeta es {carpeta}.)")
+    else:
+        ay = ayuda(prog, correr, lanzar)
+        ej = rp.ejemplos(prog) if rp is not None and not descargado else ""
+        resp = preguntar(SISTEMA_PLAN, pedido_plan(prog, tarea, ay, archivos(carpeta), ej))
+        buenas, malas = ordenes_de(resp, prog, lanzar if descargado else None)
+        notas = [_limpio(l.split(":", 1)[1], 200) for l in str(resp or "").splitlines()
+                 if l.strip().upper().startswith("NOTA:")]
+        de_receta = False
+    s = {"programa": os.path.basename(prog), "tarea": tarea, "carpeta": carpeta, "plan": buenas, "de_receta": de_receta,
          "lanzar": lanzar if descargado else None, "descargado": descargado,
          "rechazadas": [{"orden": o, "por": p} for o, p in malas][:8], "notas": notas[:4],
          "estado": "esperando" if buenas else "sin plan", "registro": [], "cuando": time.time(), "actual": -1}
@@ -288,7 +340,7 @@ def preparar(prog, tarea, preguntar, correr=None, datos=None):
     if not buenas:
         return s, (f"[x] Mi cerebro no me ha dado ninguna orden válida para «{prog}»" +
                    (f" (rechacé {len(malas)} por seguridad)" if malas else "") + ". Dímelo con más detalle.")
-    return s, (f"He preparado {len(buenas)} orden(es) de «{prog}» para: {tarea or 'enseñarte qué hace'}. Las tienes en la "
+    return s, ("De mis recetas probadas: " if de_receta else "") + (f"He preparado {len(buenas)} orden(es) de «{prog}» para: {tarea or 'enseñarte qué hace'}. Las tienes en la "
                "ventana Taller: míralas y pulsa «Hazlo» (dos toques) para que las ejecute; verás en vivo lo que va "
                "contestando el programa.")
 
@@ -297,8 +349,10 @@ def preparar(prog, tarea, preguntar, correr=None, datos=None):
 class Obrero:
     """Ejecuta el plan de la sesión una orden tras otra y va escribiendo lo que sale en la sesión (la ventana lo lee)."""
 
-    def __init__(self, popen=None):
+    def __init__(self, popen=None, back=None, dormir=None):
         self.popen = popen or subprocess.Popen
+        self.back = back                                  # v3.77: accesibilidad (pasos en la ventana del programa)
+        self.dormir = dormir or time.sleep
         self.hilo = None
         self.proc = None
         self.parar_ya = False
@@ -336,8 +390,42 @@ class Obrero:
         s["registro"] = (s.get("registro") or []) + [_limpio(linea, 300)]
         s["registro"] = s["registro"][-MAX_REGISTRO:]
 
+    def _trabajar_ventana(self, s):
+        """v3.77: los pasos PULSA/ESCRIBE/ESPERA en la ventana del programa (accesibilidad). Si uno falla, para."""
+        import accesibilidad_kira as acc
+        bien = 0
+        try:
+            back = self.back or acc.BackendAtspi()
+        except Exception as e:                            # noqa: BLE001
+            self._apuntar(s, f"[x] {acc.FALTA} ({e})")
+            back = None
+        for i, paso in enumerate(s["plan"] if back is not None else []):
+            if self.parar_ya:
+                break
+            s["actual"] = i
+            self._apuntar(s, f"» {paso}")
+            guardar(s)
+            try:
+                hecho = acc.hacer_paso(back, s["programa"], paso, dormir=self.dormir)
+                bien += 1
+                self._apuntar(s, "✓ " + hecho)
+            except Exception as e:                        # noqa: BLE001
+                self._apuntar(s, f"[x] {e}. Me paro aquí (no improviso).")
+                guardar(s)
+                break
+            guardar(s)
+        return bien
+
     def _trabajar(self):
         s = leer()
+        if s.get("modo") == "ventana":
+            bien = self._trabajar_ventana(s)
+            s["estado"] = "parado" if self.parar_ya else "hecho"
+            s["actual"] = -1
+            s["resumen"] = f"{bien} de {len(s['plan'])} pasos hechos." + (" (La paraste.)" if self.parar_ya else "")
+            self._apuntar(s, "— " + s["resumen"])
+            guardar(s)
+            return
         prog, carpeta = s["programa"], s["carpeta"]
         bien = 0
         for i, cmd in enumerate(s["plan"]):
@@ -347,7 +435,7 @@ class Obrero:
             self._apuntar(s, f"$ {cmd}")
             guardar(s)
             try:
-                args = validar_orden(cmd, prog, carpeta, lanzar=s.get("lanzar"))
+                args = validar_orden(cmd, prog, carpeta, lanzar=s.get("lanzar"), de_receta=bool(s.get("de_receta")))
             except ValueError as e:
                 self._apuntar(s, f"[x] No la ejecuto: {e}")
                 guardar(s)
@@ -391,10 +479,17 @@ def texto_ventana(s):
         return ("Aquí trabajo con programas de órdenes (git, python, ffmpeg, convert, pandoc, nmap…) mientras tú miras.\n"
                 "Pídemelo así: «trabaja con ffmpeg: convierte video.mp4 a mp3» o «usa convert para hacer pequeñas las "
                 "fotos». También con los programas que me hayas hecho descargar (por su nombre). Los archivos los pones "
-                "en kira_portatil/taller/<programa>/.")
+                "en kira_portatil/taller/<programa>/.\n\n"
+                "Programas de ventana: con mis recetas convierto con LibreOffice («trabaja con libreoffice: convierte "
+                "informe.docx a pdf»), retoco fotos con GIMP o ImageMagick (tamaño, blanco y negro, girar, formato), "
+                "exporto con Inkscape y saco audio o gifs con ffmpeg.\n"
+                "Y, de forma EXPERIMENTAL, los manejo por dentro pulsando sus menús mientras miras: «maneja gimp por "
+                "dentro: exporta la imagen como png».")
     nombres = {"esperando": "ESPERANDO TU «HAZLO»", "trabajando": "TRABAJANDO…", "hecho": "TERMINADO",
                "parado": "PARADO", "sin plan": "SIN PLAN"}
     lin = [f"PROGRAMA: {s.get('programa')}" + (" (lo descargaste tú)" if s.get("descargado") else "") +
+           (" · POR DENTRO DE SU VENTANA (experimental)" if s.get("modo") == "ventana" else "") +
+           (" · de mis recetas probadas" if s.get("de_receta") else "") +
            f"   ·   {nombres.get(s.get('estado'), s.get('estado'))}",
            f"TAREA: {s.get('tarea') or '(enseñar qué hace)'}",
            f"CARPETA: {s.get('carpeta')}", "", "PLAN:"]

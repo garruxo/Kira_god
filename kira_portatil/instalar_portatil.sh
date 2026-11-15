@@ -62,6 +62,13 @@ $SUDO apt-get install -y -qq alsa-utils unzip >/dev/null 2>&1 || true
 # borra tras leerla. «Ver de verdad» (describir, no solo leer) necesita los ojos del móvil.
 $SUDO apt-get install -y -qq fswebcam scrot tesseract-ocr tesseract-ocr-spa >/dev/null 2>&1 || \
   echo "  (aviso: no pude instalar cámara/captura/lector del portátil; Kira seguirá sin esos sentidos)"
+# v3.77: programas de ventana usados por órdenes (recetas del Taller) y la ACCESIBILIDAD de Linux para manejarlos por
+# dentro (experimental). Si no se instalan, Kira lo dice al pedírselo.
+$SUDO apt-get install -y -qq imagemagick python3-pyatspi at-spi2-core >/dev/null 2>&1 || \
+  echo "  (aviso: no pude instalar imagemagick / la accesibilidad; el Taller funcionará sin ellos)"
+if [ "$PRUEBA" != "1" ] && command -v gsettings >/dev/null 2>&1; then
+  gsettings set org.gnome.desktop.interface toolkit-accessibility true >/dev/null 2>&1 || true
+fi
 # v3.21: lo que el dueño le cambia a su sistema con una frase: brillo, sonido, pantalla y bluetooth
 $SUDO apt-get install -y -qq brightnessctl pulseaudio-utils x11-xserver-utils x11-utils bluez rfkill >/dev/null 2>&1 || \
   echo "  (aviso: no pude instalar brillo/sonido/bluetooth; Kira avisará si falta algo)"

@@ -601,6 +601,12 @@ class EscritorioMixin:
                                  (_aex.quiere_forzar(texto) and getattr(self, "_app_bloqueada", "")))
             except Exception:
                 inst_esto = False
+            o_acc = None                                           # v3.77: «maneja X por dentro» (accesibilidad)
+            try:
+                import accesibilidad_kira as _acc
+                o_acc = None if (o_d is not None or o_s is not None) else _acc.es_orden(texto)
+            except Exception:
+                o_acc = None
             if o_d is not None:
                 pass                                               # v3.74: ya contestado arriba
             elif o_s is not None:
@@ -625,6 +631,10 @@ class EscritorioMixin:
                 t["estado"] = "hablando"
                 t["respuesta"] = self.instalar_web(forzar=_aex.quiere_forzar(texto))
                 t["barra"] = True                                  # refrescar iconos del escritorio
+            elif o_acc is not None:
+                t["estado"] = "hablando"
+                t["respuesta"] = self.preparar_por_dentro(o_acc[0], o_acc[1], t["lineas"].append)
+                t["abrir"] = "taller"
             elif self.cli is None:
                 t["respuesta"] = ("No encuentro mi cerebro de casa (el servidor de Kira). Si acabas de encender, "
                                   "espera un minuto y vuelve a hablarme.")
@@ -953,7 +963,7 @@ class EscritorioMixin:
     def _obrero_taller(self):
         if getattr(self, "_obrero_tp", None) is None:
             import taller_programas_kira as tp
-            self._obrero_tp = tp.Obrero()
+            self._obrero_tp = tp.Obrero(back=getattr(self, "back_acc", None))
         return self._obrero_tp
 
     def _app_taller(self):
@@ -971,6 +981,28 @@ class EscritorioMixin:
         if ob.ocupado() or s.get("estado") == "trabajando":
             d["refrescar_cada"] = 2
         return d
+
+    def _preguntar_cli(self, system, usuario):
+        """v3.77: una pregunta suelta al cerebro grande del portátil (sin historial de charla)."""
+        if self.cli is None:
+            raise RuntimeError("No encuentro mi cerebro de casa.")
+        r = self.cli._pedir("/v1/chat/completions",
+                            {"messages": [{"role": "system", "content": system}, {"role": "user", "content": usuario}],
+                             "max_tokens": 900, "temperature": 0.3, "kira_cerebro": "grande",
+                             "chat_template_kwargs": {"enable_thinking": False}})
+        return r["choices"][0]["message"]["content"]
+
+    def preparar_por_dentro(self, app, tarea, linea=None):
+        """v3.77 (experimental): abre el programa, lee sus menús/botones y prepara los pasos. NO pulsa nada aún."""
+        import accesibilidad_kira as acc
+        if linea:
+            linea(f"· Abro «{app}» y leo sus menús y botones…")
+        try:
+            _s, txt = acc.preparar(app, tarea, getattr(self, "preguntar_por_dentro", None) or self._preguntar_cli,
+                                   back=getattr(self, "back_acc", None))
+        except Exception as e:                        # noqa: BLE001
+            txt = f"[x] No he podido prepararlo: {e}"
+        return txt
 
     def _taller_hacer(self, accion):
         ob = self._obrero_taller()
