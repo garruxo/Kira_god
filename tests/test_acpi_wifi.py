@@ -46,6 +46,14 @@ DefinitionBlock ("", "DSDT", 2, "ACRSYS", "ACRPRDCT", 0x00000001)
             Offset (0xB6),
             CNT1,   8
         }
+        Method (_REG, 2, NotSerialized)
+        {
+            If ((Arg0 == 0x03))
+            {
+                ECOK = Arg1
+                OSTY = 0x07
+            }
+        }
         Method (SWLS, 1, Serialized)
         {
             If ((Arg0 == One))
@@ -75,6 +83,12 @@ DefinitionBlock ("", "DSDT", 2, "ACRSYS", "ACRPRDCT", 0x00000001)
 }
 '''
 
+FACP = """
+[0B0h 0176   4]           SMI Command Port : 000000B2
+[0B4h 0180   1]          ACPI Enable Value : F0
+[0B5h 0181   1]         ACPI Disable Value : F1
+[040h 0064   4]     PM1A Control Block Address : 00000404
+"""
 lista = aw.campos(DSL)
 nombres = {c["nombre"]: c for c in lista}
 ok(nombres.get("WLEX", {}).get("byte") == 0xBB and nombres["WLEX"]["bit"] == 0, "WLEX está en el EC 0xBB bit 0")
@@ -89,6 +103,12 @@ t = aw.texto(r)
 print(t)
 ok("Campo del EC en 0xBB bit 0: WLEX" in t, "dice el nombre del campo")
 ok(any(l.startswith(">") and "WLEX = One" in l for l in t.splitlines()) and any(l.startswith("*") and "GP28 = One" in l for l in t.splitlines()), "marca el bit del EC (>) y lo otro que enciende la radio (*)")
+r2 = aw.analizar({"DSDT.dsl": DSL, "FACP.dsl": FACP})
+ok(r2["fadt"] == {"smi": 0xB2, "activar": 0xF0, "desactivar": 0xF1, "pm1a": 0x404}, "lee de la FACP cómo pasar a modo ACPI")
+t2 = aw.texto(r2)
+ok("puerto SMI 0xB2, activar 0xF0, desactivar 0xF1, PM1a 0x404" in t2, "lo enseña")
+ok("BTEX=0xBB.1" in t2 and "CNT2=0xBE.0" in t2, "enseña los campos del EC de alrededor")
+ok("== _REG (al arrancar) ==" in t2 and "OSTY = 0x07" in t2, "enseña lo que hace la BIOS al arrancar (_REG)")
 ok("No he encontrado" in aw.texto(aw.analizar({"x.dsl": "DefinitionBlock () { }"})), "sin campos del EC lo dice")
 ok("ninguno en el byte" in aw.texto(aw.analizar({"x.dsl": DSL}, 0xC0, 0), 0xC0, 0), "sin campo en ese byte lo dice")
 src = open(os.path.join(RAIZ, "kira_portatil", "acpi_wifi_kira.py")).read()
@@ -100,10 +120,12 @@ def montar(t, con_dsdt=True):
     if con_dsdt:
         open(os.path.join(tab, "DSDT"), "wb").write(b"AML")
     open(os.path.join(tab, "SSDT1"), "wb").write(b"AML")
+    open(os.path.join(tab, "FACP"), "wb").write(b"FAC")
+    open(os.path.join(t, "facp.dsl"), "w").write(FACP)
     bin_ = os.path.join(t, "bin"); os.makedirs(bin_)
     iasl = os.path.join(bin_, "iasl")
     dsl = os.path.join(t, "fuente.dsl"); open(dsl, "w").write(DSL)
-    open(iasl, "w").write('#!/bin/bash\necho "$@" >> "%s/iasl.log"\nfor a in "$@"; do case "$a" in DSDT.dat) cp "%s" DSDT.dsl;; SSDT*.dat) echo "DefinitionBlock () { }" > "${a%%.dat}.dsl";; esac; done\n' % (t, dsl))
+    open(iasl, "w").write('#!/bin/bash\necho "$@" >> "%s/iasl.log"\nfor a in "$@"; do case "$a" in DSDT.dat) cp "%s" DSDT.dsl;; SSDT*.dat) echo "DefinitionBlock () { }" > "${a%%.dat}.dsl";; FACP.dat) cp "%s/facp.dsl" FACP.dsl;; esac; done\n' % (t, dsl, t))
     os.chmod(iasl, 0o755)
     return tab, iasl, os.path.join(t, "kernel")
 
@@ -113,8 +135,9 @@ with tempfile.TemporaryDirectory() as t:
     r = subprocess.run(["bash", GUION], env=env, capture_output=True, text=True, timeout=60)
     s = r.stdout
     print(s, r.stderr)
-    ok(r.returncode == 0 and "Tablas copiadas: 2" in s, "copia DSDT y SSDT")
+    ok(r.returncode == 0 and "Tablas copiadas: 3" in s, "copia DSDT, SSDT y FACP")
     ok("Campo del EC en 0xBB bit 0: WLEX" in s and "== SWLS ==" in s and "== WMBA ==" in s, "enseña el campo y los métodos")
+    ok("puerto SMI 0xB2" in s, "el guion también lee la FACP")
     inf = os.path.join(dest, "acpi_wifi.txt")
     ok(os.path.exists(inf) and stat.S_IMODE(os.stat(inf).st_mode) == 0o600, "informe guardado con permisos 0600")
     ok(os.path.exists(os.path.join(dest, "acpi", "DSDT.dsl")), "guarda las tablas en texto")

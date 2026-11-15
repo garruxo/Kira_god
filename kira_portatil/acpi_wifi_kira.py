@@ -120,6 +120,29 @@ def usan(mets, nombre):
 _OTRAS = re.compile(r"\bGP\w*|\bGL\w*|\bGIO\w*|\bGPIO\w*|\bIO\w*|SystemIO|\bPWR\w*|\bWL\w*|\bRF\w*|\bBT\w*|\bW3G\w*")
 
 
+_FADT = {
+    "smi": r"SMI Command Port\s*:\s*([0-9A-Fa-f]+)",
+    "activar": r"ACPI Enable Value\s*:\s*([0-9A-Fa-f]+)",
+    "desactivar": r"ACPI Disable Value\s*:\s*([0-9A-Fa-f]+)",
+    "pm1a": r"PM1A Control Block Address\s*:\s*([0-9A-Fa-f]+)",
+}
+
+
+def fadt(texto):
+    """Lo que la tabla FACP dice de cómo pasa el portátil a «modo ACPI» (lo hace Linux al arrancar)."""
+    r = {}
+    for k, pat in _FADT.items():
+        m = re.search(pat, texto)
+        if m:
+            r[k] = int(m.group(1), 16)
+    return r
+
+
+def cerca(lista, byte, margen=4):
+    """Campos del EC en los bytes de alrededor (para encontrar WLEX y compañía)."""
+    return [c for c in lista if abs(c["byte"] - byte) <= margen]
+
+
 def analizar(textos, byte=0xBB, bit=0):
     """textos = {archivo: texto .dsl}. Devuelve un diccionario con lo encontrado."""
     todo = "\n".join(textos.values())
@@ -143,6 +166,17 @@ def analizar(textos, byte=0xBB, bit=0):
     res["llamadores"] = llam
     for m in vistos + llam:
         res["texto"][m] = mets.get(m, "")
+    res["fadt"] = fadt(todo)
+    res["cerca"] = cerca(lista, byte)
+    nombres_ec = {c["nombre"] for c in lista}
+    arranque = []
+    for m in ("_REG", "_INI", "_OSI", "_WAK", "ECON"):
+        if m in mets:
+            arranque.append(m)
+    res["arranque"] = arranque
+    for m in arranque:
+        res["texto"][m] = mets.get(m, "")
+    res["nombres_ec"] = sorted(nombres_ec)
     return res
 
 
@@ -173,7 +207,21 @@ def texto(res, byte=0xBB, bit=0, maximo=30):
         out.append("Metodos WMI (los que usa acer-wmi): " + ", ".join(res["wmi"]))
     if res["gpio_regiones"]:
         out.append("Zonas de puertos (SystemIO): " + ", ".join("%s=0x%X" % (k, v) for k, v in res["gpio_regiones"].items()))
+    f = res.get("fadt") or {}
+    if f:
+        out.append("Modo ACPI (FACP): puerto SMI 0x%X, activar 0x%X, desactivar 0x%X, PM1a 0x%X" % (
+            f.get("smi", 0), f.get("activar", 0), f.get("desactivar", 0), f.get("pm1a", 0)))
+    else:
+        out.append("Modo ACPI (FACP): no he podido leer la tabla FACP")
+    if res.get("cerca"):
+        out.append("Campos del EC alrededor: " + ", ".join(
+            "%s=0x%X.%d" % (c["nombre"], c["byte"], c["bit"]) for c in sorted(res["cerca"], key=lambda c: (c["byte"], c["bit"]))))
     nombres = {c["nombre"] for c in res["campo"]}
+    for m in res.get("arranque", []):
+        out.append("")
+        out.append("== %s (al arrancar) ==" % m)
+        for l in _limpia(res["texto"].get(m, ""), maximo):
+            out.append("  " + l)
     for m in res["metodos"] + res["llamadores"]:
         out.append("")
         out.append("== %s ==" % m)

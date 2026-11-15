@@ -45,7 +45,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 YO="$(id -un)"
 # copiar las tablas (solo leer; hace falta la contrasena porque /sys/firmware/acpi/tables es solo de root)
-$SUDO sh -c 'for f in "$1"/DSDT "$1"/SSDT*; do [ -f "$f" ] && cp "$f" "$2/$(basename "$f").dat"; done; chown -R "$3" "$2"' \
+$SUDO sh -c 'for f in "$1"/DSDT "$1"/SSDT* "$1"/FACP; do [ -f "$f" ] && cp "$f" "$2/$(basename "$f").dat"; done; chown -R "$3" "$2"' \
     _ "$TABLAS" "$TMP" "$YO" || { echo "No he podido leer las tablas ACPI."; exit 1; }
 if [ ! -f "$TMP/DSDT.dat" ]; then
     echo "No encuentro la tabla DSDT en $TABLAS."
@@ -58,7 +58,7 @@ echo "Tablas copiadas: $N. Las paso a texto..."
     SSDT=$(ls SSDT*.dat 2>/dev/null | tr '\n' ',' | sed 's/,$//')
     if [ -n "$SSDT" ]; then "$IASL" -e $(echo "$SSDT" | tr ',' ' ') -d DSDT.dat >/dev/null 2>&1 || "$IASL" -d DSDT.dat >/dev/null 2>&1
     else "$IASL" -d DSDT.dat >/dev/null 2>&1; fi
-    for f in SSDT*.dat; do [ -f "$f" ] && "$IASL" -d "$f" >/dev/null 2>&1; done
+    for f in SSDT*.dat FACP.dat; do [ -f "$f" ] && "$IASL" -d "$f" >/dev/null 2>&1; done
 )
 if [ ! -f "$TMP/DSDT.dsl" ]; then
     echo "iasl no ha podido pasar la tabla DSDT a texto."
