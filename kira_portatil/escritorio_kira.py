@@ -199,8 +199,71 @@ class EscritorioMixin:
                                    if v.get("lugar") in ("arriba", "abajo") else {}))
                            for v in self.ventanas_extra()],
                 "accesos": self.accesos(),                    # v3.26: accesos directos de los programas creados
+                "auxiliares": self.n_auxiliares(),            # v3.92: programas auxiliares (carpeta, sin icono propio)
                 "aspecto": self.aspecto(),
                 "prioritario": self._prioritario()}           # v3.44: aviso prioritario (franja rosa con «Visto»)
+
+    # ---------- v3.92: PROGRAMAS AUXILIARES (los puentes que un programa necesita encendidos) ----------
+    def n_auxiliares(self):
+        ahora = time.time()
+        c = getattr(self, "_aux_cache", None)
+        if c and ahora - c[0] < 30:
+            return c[1]
+        try:
+            import arreglar_app_kira as arr
+            n = sum(len(x["puentes"]) for x in arr.auxiliares(DATOS_NUCLEO))
+        except Exception:                             # noqa: BLE001
+            n = 0
+        self._aux_cache = (ahora, n)
+        return n
+
+    def _app_auxiliares(self):
+        import arreglar_app_kira as arr
+        progs = arr.auxiliares(DATOS_NUCLEO)
+        filas, secs = [], []
+        for pr in progs:
+            sec = "aux_" + str(pr["id"])
+            secs.append([sec, f"Carpeta de «{pr['titulo']}» · {pr['carpeta']}"])
+            for p in pr["puentes"]:
+                clave = f"{pr['id']}:{p['n']}"
+                det = (f"Orden: {p['texto']}" + (f" · puerto {p['puerto']}" if p["puerto"] else "") +
+                       (f" · lo último que dijo: {p['ultimo'].splitlines()[-1]}" if p.get("ultimo") else ""))
+                filas.append({"seccion": sec, "texto": f"Auxiliar {p['n']}: {os.path.basename(p['args'][0])}",
+                              "detalle": det, "etiqueta": "Encendido" if p["encendido"] else "Apagado",
+                              "botones": [{"texto": "Ver mensajes", "accion": "hacer:aux:ver:" + clave},
+                                          {"texto": "Apagar", "accion": "hacer:aux:parar:" + clave,
+                                           "off": not p["encendido"]},
+                                          {"texto": "Encender", "accion": "hacer:aux:encender:" + clave,
+                                           "off": p["encendido"]}]})
+        texto = ("Aquí están los programas AUXILIARES (los «puentes») que necesitan tus programas: se encienden "
+                 "solos cuando abres el programa principal y se apagan al cerrarlo. No tienen icono propio." if progs
+                 else "Ninguno de tus programas necesita un programa auxiliar.")
+        return {"titulo": "Programas auxiliares", "texto": texto, "refrescar_cada": 4,
+                "pestanas": [{"id": "aux", "titulo": f"Programas auxiliares ({len(filas)})", "filas": filas,
+                              "secciones": secs, "texto": texto}], "botones": []}
+
+    def _auxiliares_hacer(self, accion):
+        import arreglar_app_kira as arr
+        partes = str(accion or "").split(":")
+        if len(partes) != 4 or partes[0] != "aux":
+            return {"texto": "No conozco ese botón."}
+        _, que, aid, n = partes
+        pr = next((x for x in arr.auxiliares(DATOS_NUCLEO) if str(x["id"]) == aid), None)
+        p = next((x for x in (pr or {}).get("puentes", []) if str(x["n"]) == n), None)
+        if not p:
+            return {"texto": "Ya no encuentro ese programa auxiliar.", "refrescar": True}
+        nombre = os.path.basename(p["args"][0])
+        self._aux_cache = None
+        if que == "ver":
+            ult = arr.ultimas_lineas(p["log"], 25)
+            return {"texto": f"Mensajes de «{nombre}»:\n" + (ult or "(todavía no ha dicho nada)")}
+        if que == "parar":
+            return {"texto": f"«{nombre}» apagado." if arr.parar_puente(p) else f"«{nombre}» ya estaba apagado.",
+                    "refrescar": True}
+        if que == "encender":
+            return {"texto": f"«{nombre}» encendido (solo, sin el programa principal)." if arr.encender_puente(p)
+                    else f"No he podido encender «{nombre}». Mira sus mensajes.", "refrescar": True}
+        return {"texto": "No conozco ese botón."}
 
     # ---------- v3.44: AVISOS PRIORITARIOS (p. ej. «ya he estudiado tu portátil») ----------
     def _prioritario(self):
@@ -1102,6 +1165,8 @@ class EscritorioMixin:
             return self._tareas_hacer(accion)
         if nombre == "programas":                     # v3.84: Programando ▸ Mis programas
             return self._programas_hacer(accion)
+        if nombre == "auxiliares":                    # v3.92: Programas auxiliares
+            return self._auxiliares_hacer(accion)
         if nombre == "movil" and accion == "codigo":
             return {"texto": codigo_movil()}
         if nombre == "maquina" and accion == "visitas":

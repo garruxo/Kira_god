@@ -24,6 +24,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -77,9 +78,38 @@ def leer_registro(ruta, tope=65536):
         return ""
 
 
+# ---------- v3.92: «/usr/bin/env: python: No existe» — en Ubuntu solo hay python3 ----------
+def atajo_python(which=shutil.which, carpeta=None):
+    """Si el sistema no tiene la orden «python» (Ubuntu 24.04 solo trae «python3»), crea en una carpeta de Kira un
+    atajo «python» → python3 y devuelve esa carpeta (para ponerla delante en el PATH). Sin administrador; no toca el
+    sistema. None si no hace falta o no hay python3."""
+    if which("python"):
+        return None
+    py3 = which("python3")
+    if not py3:
+        return None
+    d = carpeta or os.path.join(os.path.dirname(REGISTROS), "atajos_kira")
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        ruta = os.path.join(d, "python")
+        if not os.path.exists(ruta):
+            os.symlink(py3, ruta)
+        return d
+    except OSError:
+        return None
+
+
+def con_atajo(env, which=shutil.which):
+    """El entorno con el atajo de «python» delante en el PATH (si hace falta)."""
+    d = atajo_python(which)
+    if d and d not in str(env.get("PATH", "")).split(os.pathsep):
+        env["PATH"] = d + os.pathsep + str(env.get("PATH") or os.defpath)
+    return env
+
+
 def lanzar_con_registro(lanzar, carpeta, ruta, popen=None, entorno=None):
     """Abre la app guardando lo que escribe (salida y errores) en `ruta`. Devuelve el proceso."""
-    env = dict(os.environ)
+    env = con_atajo(dict(os.environ))
     env.setdefault("DISPLAY", ":0")
     env.update(entorno or {})
     f = open(ruta, "wb")
@@ -138,6 +168,8 @@ def diagnostico(salida, lanzar=()):
         d.append({"tipo": "glibc", "que": m.group(1)})
     if re.search(r"(?i)externally[- ]managed[- ]environment", t):
         d.append({"tipo": "pep668", "que": ""})
+    if re.search(r"(?i)env:\s*[«'\"‘`]?python2?[»'\"’`]?\s*:\s*(no such file|no existe)", t):
+        d.insert(0, {"tipo": "python", "que": "python"})       # v3.92: pide «python» y en Ubuntu solo hay python3
     vistos, sal = set(), []
     for x in d:
         k = (x["tipo"], x["que"])
@@ -360,9 +392,103 @@ def orden_segura(args, carpeta, admin=False, cwd=None):
 _CODIGO = re.compile(r"(?is)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>")
 
 
-def ordenes_de_texto(texto):
-    """Líneas que parecen órdenes en un README o una página: bloques de código, líneas con «$ » delante. PURO."""
-    t = str(texto or "")
+# ---------- v3.92: NO MEZCLAR SISTEMAS. Este portátil es Linux: lo de Windows o Mac del README no se ejecuta ----------
+_SECC_OTRO = re.compile(r"(?i)\b(windows|win(?:32|64|10|11)|mac\s?os|macos|os\s?x|osx|darwin|homebrew|powershell|"
+                        r"apple\s+silicon|m1\s+mac|macbook)\b")
+_SECC_LINUX = re.compile(r"(?i)\b(linux|ubuntu|debian|xubuntu|kubuntu|mint|fedora|arch|unix|apt(-get)?)\b")
+_OTRO_SISTEMA = re.compile(
+    r"(?i)(^\s*(brew|choco|chocolatey|winget|scoop|port|mas)\s)|\.(exe|bat|cmd|ps1|psm1|msi|command|app|dmg|pkg)\b|"
+    r"\bpowershell\b|\bpwsh\b|\bcmd(\.exe)?\s+/[ck]\b|^\s*start\s+\S|^\s*open\s+(-a\b|\S+\.app)|\blaunchctl\b|"
+    r"^\s*set\s+\w+=|%\w+%|\$env:|^\s*(copy|del|xcopy|robocopy|dir|cls|type|ren|rd|md)\s|\\scripts\\|"
+    r"\b[a-z]:\\|\bdefaults\s+write\b|\bpbcopy\b|\bpbpaste\b|\bosascript\b|\bxattr\b|\bditto\b|\bhdiutil\b|"
+    r"\bsetx\b|\bwsl\b|\bwmic\b|\breg\s+add\b|\w\\\w")
+_EXT_OTRO = re.compile(r"(?i)([\w./-]+?)\.(bat|cmd|ps1|command)\b")
+
+
+def _cabecera(linea):
+    """¿Es una cabecera de sección? → nivel (1-6 en markdown, 9 para las demás) o 0. PURO."""
+    l = str(linea or "").strip()
+    m = re.match(r"^(#{1,6})\s+\S", l)
+    if m:
+        return len(m.group(1))
+    m = re.match(r"(?i)^<h([1-6])\b", l)
+    if m:
+        return int(m.group(1))
+    if re.match(r"(?i)^<summary>|^\*\*[^*]{2,60}\*\*:?$|^__[^_]{2,60}__:?$", l):
+        return 9
+    if 2 < len(l) <= 60 and l.endswith(":") and not re.search(r"[`$=(){}]", l):
+        return 9
+    return 0
+
+
+def solo_linux(texto):
+    """Quita del README/la página las secciones que son SOLO de Windows o Mac («## Windows», «On macOS:»…), para que
+    Kira no mezcle órdenes de otro sistema. Las de Linux y las generales se quedan. PURO."""
+    sal, saltando, nivel, valla = [], False, 0, False
+    for linea in str(texto or "").splitlines():
+        if re.match(r"^\s*(```|~~~)", linea):
+            valla = not valla
+            if not saltando:
+                sal.append(linea)
+            continue
+        cab = 0 if valla else _cabecera(linea)
+        if cab:
+            if saltando and (cab <= nivel or nivel == 9 or cab == 9):
+                saltando = False
+            if not saltando and _SECC_OTRO.search(linea) and not _SECC_LINUX.search(linea):
+                saltando, nivel = True, cab
+                continue
+        if not saltando:
+            sal.append(linea)
+    return "\n".join(sal)
+
+
+def es_de_otro_sistema(linea):
+    """¿Esta orden es de Windows o de Mac (brew, .exe, .bat, powershell, start, open -a, rutas C:\\…)? PURO."""
+    return bool(_OTRO_SISTEMA.search(str(linea or "")))
+
+
+def _hermano_sh(carpeta, nombre):
+    """Si existe la versión de Linux (mismo nombre .sh) del guion de Windows/Mac, su ruta relativa."""
+    if not carpeta or not os.path.isdir(carpeta):
+        return ""
+    base = os.path.basename(nombre)
+    for raiz, dirs, fich in os.walk(carpeta):
+        dirs[:] = [d for d in dirs if d not in _NO_MIRAR_CONSTRUIR]
+        if raiz[len(carpeta):].count(os.sep) > 2:
+            dirs[:] = []
+            continue
+        for f in fich:
+            if f == base + ".sh":
+                return os.path.relpath(os.path.join(raiz, f), carpeta)
+    return ""
+
+
+def a_linux(linea, carpeta=None):
+    """La versión de Linux de una orden del README, o None si es de otro sistema y no tiene equivalente.
+    «py -3 x.py» → «python3 x.py»; «start.bat» / «run.command» → «bash start.sh» si está su .sh. PURO salvo mirar."""
+    l = str(linea or "").strip()
+    l = re.sub(r"^py(?:\s+-3(?:\.\d+)?)?\s+", "python3 ", l)
+    m = _EXT_OTRO.search(l)
+    if m:
+        sh = _hermano_sh(carpeta, m.group(1))
+        if sh:
+            resto = l[m.end():].strip()
+            l = "bash " + sh + ((" " + resto) if resto and not es_de_otro_sistema(resto) else "")
+            return l
+        return None
+    if es_de_otro_sistema(l):
+        return None
+    return l
+
+
+_NO_MIRAR_CONSTRUIR = {".git", "node_modules", "__pycache__", ".venv", "venv"}
+
+
+def ordenes_de_texto(texto, carpeta=None):
+    """Líneas que parecen órdenes en un README o una página: bloques de código, líneas con «$ » delante. PURO.
+    v3.92: sin las secciones ni las órdenes de Windows/Mac (lo que tiene equivalente de Linux se traduce)."""
+    t = solo_linux(str(texto or ""))
     trozos = [_html.unescape(re.sub(r"<[^>]+>", "", m)) for m in _CODIGO.findall(t)]
     trozos += re.findall(r"(?s)```[a-zA-Z]*\n(.*?)```", t)
     trozos += [l for l in t.splitlines() if re.match(r"^\s*(?:\$|>)\s+\S", l)]
@@ -370,7 +496,10 @@ def ordenes_de_texto(texto):
     for tr in trozos:
         for l in str(tr).splitlines():
             l = re.sub(r"^\s*(?:\$|>|#)\s*", "", l.strip())
-            if 2 < len(l) < 200 and l not in sal:
+            if not (2 < len(l) < 200):
+                continue
+            l = a_linux(l, carpeta)
+            if l and l not in sal:
                 sal.append(l)
     return sal[:80]
 
@@ -479,6 +608,19 @@ def arreglos_para(d, app, admin, correr):
         if pk and _NOMBRE_PIP.match(pk):
             return [{"args": ["pip3", "install", "--user", pk], "que": f"instalé el paquete de Python {pk}"}]
         return []
+    if t == "python":                                 # v3.92
+        r = []
+        d_at = atajo_python()
+        if d_at:
+            r.append({"entorno": {"PATH": d_at + os.pathsep + os.environ.get("PATH", os.defpath)},
+                      "que": "le puse un atajo «python» → python3 (en Ubuntu solo existe python3)"})
+        if lan and lan[0].endswith(".py") or (lan and os.path.isfile(lan[0]) and not lan[0].endswith((".sh",))):
+            if os.path.basename(lan[0]) not in ("python", "python3", "bash", "sh", "node"):
+                r.append({"lanzar": ["python3"] + lan, "que": "la arranqué con python3"})
+        if admin and _apt_existe("python-is-python3", correr):
+            r.append({"args": ["sudo", "-n", "apt-get", "install", "-y", "python-is-python3"],
+                      "que": "instalé python-is-python3 (la orden «python» para todo el sistema)"})
+        return r
     if t == "npm" and carpeta and os.path.isfile(os.path.join(carpeta, "package.json")):
         return [{"args": ["npm", "install"], "que": "instalé sus paquetes de JavaScript (npm install)"}]
     if t == "libreria" and admin:
@@ -544,7 +686,7 @@ def reparar(app, salida, *, lanzador=None, correr=None, admin=None, traer=None, 
                 paso("Leo su README…")
                 for l in otros_lanzadores(carpeta, lanzar):
                     cola.append({"lanzar": l, "que": "la arranqué de otra forma que traía en su carpeta"})
-                encolar_ordenes(ordenes_de_texto(leer_readme(carpeta)), "su README")
+                encolar_ordenes(ordenes_de_texto(leer_readme(carpeta), carpeta), "su README")
             elif not estudiado["pagina"]:
                 estudiado["pagina"] = True
                 pag = app.get("pagina") or app.get("fuente") or ""
@@ -552,7 +694,7 @@ def reparar(app, salida, *, lanzador=None, correr=None, admin=None, traer=None, 
                     paso("Estudio la página de donde la descargué…")
                     try:
                         texto = (traer or aex._traer_texto)(pag)
-                        encolar_ordenes(ordenes_de_texto(texto), "la página de descarga")
+                        encolar_ordenes(ordenes_de_texto(texto, carpeta), "la página de descarga")
                     except Exception:                 # noqa: BLE001 - sin internet: sigue con lo demás
                         pass
             elif not estudiado["cerebro"] and preguntar:
@@ -765,13 +907,13 @@ def construir(app, *, correr=None, bajar=None, traer=None, admin=None, preguntar
     if not carpeta or not os.path.isdir(carpeta):
         return {"ok": False, "lanzar": None, "hecho": [], "error": "no tengo su carpeta", "falta_admin": []}
     desde = time.time()
-    lineas = ordenes_de_texto(leer_readme(carpeta))
+    lineas = ordenes_de_texto(leer_readme(carpeta), carpeta)
     pag = app.get("pagina") or ""
     if not any(orden_segura(t, carpeta, admin) for l in lineas for t in partir_linea(l)) and \
             re.match(r"^https?://", pag) and "github.com" not in pag:
         try:
             paso("Leo en su página cómo se instala…")
-            lineas += ordenes_de_texto((traer or aex._traer_texto)(pag))
+            lineas += ordenes_de_texto((traer or aex._traer_texto)(pag), carpeta)
         except Exception:                              # noqa: BLE001
             pass
     hecho, falta_admin, lanzadores, error = [], [], [], ""
@@ -1219,14 +1361,14 @@ def pasos_terminal(acceso, admin=False):
     if not carpeta or not os.path.isdir(carpeta):
         return []
     preparado = os.path.exists(os.path.join(carpeta, MARCA))   # ya preparado: solo vuelven a arrancar los PUENTES
-    readme = leer_readme(carpeta)
+    readme = solo_linux(leer_readme(carpeta))
     ident = re.sub(r"[^\w.-]", "_", str(acceso.get("id") or acceso.get("titulo") or "app"))[:50]
     lan = [str(x) for x in (acceso.get("lanzar") or [])]
     final = os.path.basename(lan[1] if len(lan) > 1 and os.path.basename(lan[0]) in ("python3", "python", "bash",
                                                                                          "sh", "node") else
                              (lan[0] if lan else ""))
     cwd, out, vistos = carpeta, [], set()
-    todas = [t.strip() for linea in ordenes_de_texto(readme) for t in partir_linea(linea)]
+    todas = [t.strip() for linea in ordenes_de_texto(readme, carpeta) for t in partir_linea(linea)]
 
     def _arranca(x):
         o = orden_segura(x, carpeta, admin, carpeta)
@@ -1313,6 +1455,9 @@ def guion_terminal(acceso, pasos):
          'kira_paso() { local d="$1"; shift; echo; printf "\\033[1;36m$ %s\\033[0m\\n" "$*"; '
          '( cd "$d" && "$@" ) || { echo "  (este paso ha fallado)"; kira_ok=0; }; }',
          f"cd {q(carpeta)} || {{ echo 'No encuentro su carpeta'; read -r _; exit 1; }}"]
+    d_at = atajo_python()                              # v3.92: en Ubuntu no hay «python», solo python3
+    if d_at:
+        l.append(f'export PATH={q(d_at)}:"$PATH"')
     if any(es_puente_linea(b) for _t, b in pasos):     # v3.88: ayudantes que se quedan encendidos aparte
         l += _bash_puentes(which=shutil.which)
     if pasos:
@@ -1354,7 +1499,7 @@ def _bash_puentes(which=shutil.which):
         'printf "\\033[1;35m$ %s   (puente: se queda encendido aparte)\\033[0m\\n" "$*"; '
         'if command -v setsid >/dev/null; then ( cd "$d" && exec setsid "$@" ) >"$log" 2>&1 & '
         'else ( cd "$d" && exec "$@" ) >"$log" 2>&1 & fi; '
-        'local pid=$!; kira_puentes+=("$pid"); '
+        'local pid=$!; kira_puentes+=("$pid"); echo "$pid" >"$log.pid"; '
         '[ "${KIRA_VER_PUENTE:-}" = 1 ] && kira_ver_puente "$log"; '
         'local i=0; if [ "$puerto" != 0 ]; then echo "  espero a que el puente abra el puerto $puerto…"; '
         'while [ $i -lt 90 ]; do (echo >/dev/tcp/127.0.0.1/$puerto) 2>/dev/null && break; '
@@ -1362,6 +1507,117 @@ def _bash_puentes(which=shutil.which):
         'if kill -0 $pid 2>/dev/null; then echo "  puente encendido. Sus mensajes: $log"; tail -n 4 "$log"; '
         'else echo "  (el puente se ha cerrado; esto es lo último que dijo:)"; tail -n 15 "$log"; kira_ok=0; fi; }',
     ]
+
+
+# ---------- v3.92: la ventana «Programas auxiliares»: los puentes de cada programa, sin icono propio ----------
+def puentes_de(acceso):
+    """Los programas AUXILIARES (puentes) que necesita esa app: [{n, texto, cwd, puerto, log, args}]."""
+    sal = []
+    try:
+        pasos = pasos_terminal(dict(acceso, carpeta=acceso.get("carpeta")))
+    except Exception:                                 # noqa: BLE001
+        return sal
+    for texto, linea in pasos:
+        if not es_puente_linea(linea):
+            continue
+        try:
+            partes = shlex.split(linea)
+        except ValueError:
+            continue
+        if len(partes) < 5:
+            continue
+        sal.append({"n": len(sal) + 1, "texto": texto.replace("   (puente)", ""), "cwd": partes[1],
+                    "puerto": int(partes[2]) if partes[2].isdigit() else 0, "log": partes[3], "args": partes[4:]})
+    return sal
+
+
+def _pid_de(log):
+    try:
+        with open(str(log) + ".pid") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def puente_encendido(p):
+    pid = _pid_de(p.get("log"))
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except (OSError, ProcessLookupError):
+        return False
+    try:                                              # que de verdad sea ese programa (no otro con el mismo número)
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read().replace(b"\0", b" ").decode("utf-8", "ignore")
+        prog = os.path.basename(str(p["args"][0])) if p.get("args") else ""
+        return not prog or prog in cmd
+    except OSError:
+        return True
+
+
+def ultimas_lineas(log, n=6):
+    try:
+        with open(log, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 6000))
+            t = f.read().decode("utf-8", "ignore")
+    except OSError:
+        return ""
+    lineas = [re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", x)[:160] for x in t.splitlines() if x.strip()]
+    return "\n".join(lineas[-n:])
+
+
+def auxiliares(datos=None):
+    """Por cada programa instalado que necesita AUXILIARES: su carpeta y sus puentes, con si están encendidos."""
+    try:
+        import accesos_kira as ak
+        lista = ak.listar(datos or DATOS)
+    except Exception:                                 # noqa: BLE001
+        return []
+    sal = []
+    for a in lista:
+        if a.get("tipo") != "externa" or not a.get("carpeta"):
+            continue
+        ps = puentes_de(a)
+        if not ps:
+            continue
+        for p in ps:
+            p["encendido"] = puente_encendido(p)
+            p["ultimo"] = ultimas_lineas(p["log"])
+        sal.append({"id": a.get("id"), "titulo": a.get("titulo") or "programa", "carpeta": a.get("carpeta"),
+                    "puentes": ps})
+    return sal
+
+
+def parar_puente(p):
+    pid = _pid_de(p.get("log"))
+    if pid <= 0 or not puente_encendido(p):
+        return False
+    for f in (lambda: os.killpg(pid, signal.SIGTERM), lambda: os.kill(pid, signal.SIGTERM)):
+        try:
+            f()
+            return True
+        except (OSError, ProcessLookupError):
+            continue
+    return False
+
+
+def encender_puente(p, popen=None):
+    """Lo enciende solo (sin el programa principal). Son las MISMAS órdenes que ya pasaron los candados."""
+    if puente_encendido(p):
+        return True
+    os.makedirs(os.path.dirname(p["log"]) or ".", mode=0o700, exist_ok=True)
+    try:
+        with open(p["log"], "ab") as out:
+            pr = (popen or subprocess.Popen)(p["args"], cwd=p["cwd"], stdout=out, stderr=subprocess.STDOUT,
+                                             stdin=subprocess.DEVNULL, start_new_session=True,
+                                             env=con_atajo(dict(os.environ)))
+        with open(p["log"] + ".pid", "w") as f:
+            f.write(str(pr.pid))
+        return True
+    except Exception:                                 # noqa: BLE001
+        return False
 
 
 def orden_terminal(guion, titulo, which=shutil.which):
@@ -1420,7 +1676,7 @@ def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, cor
     if not orden:
         return {"ok": False, "texto": f"{titulo} se maneja en la terminal, pero no encuentro ninguna terminal de "
                                       "Xubuntu (xfce4-terminal). Instálala con «sudo apt install xfce4-terminal»."}
-    env = dict(os.environ)
+    env = con_atajo(dict(os.environ))
     env.setdefault("DISPLAY", ":0")
     env["KIRA_VER_PUENTE"] = "1"                      # v3.88: el puente, en OTRA ventana de terminal a la vista
     try:

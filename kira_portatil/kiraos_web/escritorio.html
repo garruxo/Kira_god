@@ -428,9 +428,10 @@ var ICONOS = [
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil", taller:"Taller", programas:"Mis programas"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil", taller:"Taller", programas:"Mis programas", auxiliares:"Programas auxiliares"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
+var AUX=0;                                        // v3.92: programas auxiliares (una carpeta, no un icono por cada uno)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
   for(var i=0;i<ICONOS.length;i++){ if(ICONOS[i].id===id) return ICONOS[i].titulo; }
   for(var j=0;j<EXTRAS.length;j++){ if("extra:"+EXTRAS[j].id===id) return EXTRAS[j].titulo; } return OCULTAS[id]||id; }
@@ -438,7 +439,8 @@ var ASPECTO={};                                   // v3.21: lo que el dueño cam
 function todosIconos(){ var oc=(ASPECTO.ocultos||[]); var l=ICONOS.filter(function(i){ return oc.indexOf(i.id)<0; }).concat(EXTRAS.filter(function(e){ return e.en==="escritorio"; }).map(function(e){
   return {id:"extra:"+e.id, titulo:e.titulo, sub:"añadida por Kira"}; }))
   .concat(ACCESOS.map(function(a){                 // v3.26: los programas que Kira hizo, como acceso directo
-    return {id:"acceso:"+a.id, titulo:a.titulo, sub:"programa de Kira", dib:(a.icono&&ICO[a.icono])?a.icono:"programa", acceso:true}; }));
+    return {id:"acceso:"+a.id, titulo:a.titulo, sub:"programa de Kira", dib:(a.icono&&ICO[a.icono])?a.icono:"programa", acceso:true}; }))
+  .concat(AUX>0?[{id:"auxiliares", titulo:"Programas auxiliares", sub:AUX+" auxiliar"+(AUX>1?"es":""), dib:"carpeta"}]:[]);
   // v3.22: tu orden, tus nombres y tus dibujos («mueve el icono…», «cambia el nombre…», «cambia el icono… por…»)
   var ord=ASPECTO.orden_iconos||[], nom=ASPECTO.nombres||{}, dib=ASPECTO.dibujos||{};
   l=l.map(function(i){ return {id:i.id,titulo:nom[i.id]||i.titulo,sub:i.sub,
@@ -658,6 +660,7 @@ function pintaBarra(d){
   if(d.llamar) $("hola").innerHTML="Hola, <b>"+esc(d.llamar)+"</b>";
   if(d.extras){ var antes=JSON.stringify(EXTRAS); EXTRAS=d.extras||[]; if(JSON.stringify(EXTRAS)!==antes){ pintaIconos(); if(actual) pintaExtras(actual); } }
   if(d.accesos){ var antesA=JSON.stringify(ACCESOS); ACCESOS=d.accesos||[]; if(JSON.stringify(ACCESOS)!==antesA) pintaIconos(); }
+  if(typeof d.auxiliares==="number" && d.auxiliares!==AUX){ AUX=d.auxiliares; pintaIconos(); }   // v3.92
   if(typeof d.voz==="boolean"){ vozOn=d.voz; pintaVoz(); }
   if(d.aspecto) ponAspecto(d.aspecto);
   pintaPrio(d.prioritario);                            // v3.44
