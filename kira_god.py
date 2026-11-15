@@ -1880,6 +1880,11 @@ class KiraGodCore:
         except ImportError:
             pass
         n = rec.guardar(resumen, tema=(tema or pag.get("titulo") or "internet")[:80], fuente=pag.get("url", "internet"))
+        try:                                              # v3.84: si la página es un PROGRAMA, va a «Mis programas»
+            import catalogo_programas_kira as cpk
+            cpk.anotar_web(self.dir, pag, tema)
+        except Exception:
+            pass
         return bool(n), resumen
 
     def aprender_codigo(self, consulta, al_paso=None):
@@ -2890,14 +2895,8 @@ class KiraGodCore:
             pn.guardar(estado, ruta)
         except Exception:
             pass
-        # v3.26: en KiraOS, cada programa nuevo deja un ACCESO DIRECTO con icono en el escritorio (clic derecho ▸
-        # desinstalar, como en Windows). Se guarda como app web para abrirlo y verlo/manejarlo de forma segura.
-        if codigo and getattr(self, "es_kiraos", False):
-            try:
-                import accesos_kira as ak
-                ak.anadir(self.dir, str(tema or "Programa de Kira")[:60], codigo)
-            except Exception:
-                pass
+        # v3.84: lo que saca POR SU CUENTA ya no se instala solo: queda en Programando ▸ Mis programas ▸ «Aprendidos
+        # por mi cuenta», con su botón Instalar (antes, v3.26, creaba el icono directamente).
 
     # ---------- FOCO: pensar en algo CONCRETO sin parar hasta resolverlo ----------
     def _ruta_foco(self):

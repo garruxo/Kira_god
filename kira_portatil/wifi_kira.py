@@ -482,6 +482,9 @@ def orden_wifi(texto):
         import ventanas_kira                          # VENTANA nueva (mejora), no una orden de la WiFi
         if ventanas_kira.orden(texto):
             return None
+        import catalogo_programas_kira                # v3.84: «mejora el programa «X wifi»: …» es mejorar un programa
+        if catalogo_programas_kira.orden_mejorar(texto):
+            return None
     except ImportError:
         pass
     if re.match(r"^(?:que es|que son|como funciona|para que sirve|explica|explicame|cuentame|historia)\b", t):

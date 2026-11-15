@@ -1068,6 +1068,8 @@ class EscritorioMixin:
             return self._mejoras_hacer(accion)
         if nombre == "cuaderno":                      # v3.10: Parar / Borrar / Empezar de la pestaña Tareas
             return self._tareas_hacer(accion)
+        if nombre == "programas":                     # v3.84: Programando ▸ Mis programas
+            return self._programas_hacer(accion)
         if nombre == "movil" and accion == "codigo":
             return {"texto": codigo_movil()}
         if nombre == "maquina" and accion == "visitas":
@@ -1224,6 +1226,46 @@ class EscritorioMixin:
         except Exception as e:                        # noqa: BLE001
             return {"texto": texto_error_nucleo(e)}
         return {"texto": str(r.get("texto", "Hecho.")), "refrescar": True}
+
+    # ---------- v3.84: PROGRAMANDO ▸ MIS PROGRAMAS (aprendidos en la web / por su cuenta / instalados) ----------
+    def _app_programas(self):
+        import accesos_kira as ak
+        import catalogo_programas_kira as cpk
+        import pensador_kira as pn
+        est = pn.cargar(os.path.join(DATOS_NUCLEO, "pensamientos.json"))
+        accesos = ak.listar(DATOS_NUCLEO)
+        pest = cpk.pestanas(cpk.web(DATOS_NUCLEO), cpk.propios(est), accesos)
+        return {"titulo": "Mis programas", "texto": pest[0]["texto"], "pestanas": pest,
+                "botones": [{"texto": "‹ Volver a Programando", "accion": "app:programando"}]}
+
+    def _programas_hacer(self, accion):
+        import accesos_kira as ak
+        import catalogo_programas_kira as cpk
+        partes = str(accion or "").split(":", 2)
+        if len(partes) != 3 or partes[0] != "prog":
+            return {"texto": "No conozco ese botón."}
+        que, iid = partes[1], partes[2]
+        if que == "olvidar":
+            cpk.quitar_web(DATOS_NUCLEO, iid)
+            return {"texto": "Quitado de la lista.", "refrescar": True}
+        if que == "quitar":
+            a = ak.uno(DATOS_NUCLEO, iid) or {}
+            if not ak.quitar(DATOS_NUCLEO, iid):
+                return {"texto": "Ese programa ya no estaba instalado.", "refrescar": True}
+            return {"texto": f"«{a.get('titulo', 'El programa')}» desinstalado: quitado su icono y sus archivos.",
+                    "refrescar": True}
+        if que == "instalar":
+            import pensador_kira as pn
+            est = pn.cargar(os.path.join(DATOS_NUCLEO, "pensamientos.json"))
+            s = next((x for x in cpk.propios(est) if x["id"] == iid), None)
+            if s is None:
+                return {"texto": "Ya no tengo ese programa.", "refrescar": True}
+            nuevo = ak.anadir(DATOS_NUCLEO, s["tema"][:60], s["codigo"])
+            if not nuevo:
+                return {"texto": f"«{s['tema'][:60]}» ya estaba instalado.", "refrescar": True}
+            return {"texto": f"«{s['tema'][:60]}» instalado: ya tiene su icono en el escritorio (clic para abrirlo, "
+                             "clic derecho para desinstalar).", "refrescar": True}
+        return {"texto": "No conozco ese botón."}
 
     def _app_red(self):
         botones = [{"texto": "Buscar aparatos", "accion": "hacer:inventario"},

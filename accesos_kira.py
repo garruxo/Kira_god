@@ -78,6 +78,7 @@ def anadir(dir_, titulo, codigo="", tipo="programa", icono="programa"):
         k += 1
     tiene_html = False
     if codigo:
+        _guardar_codigo(dir_, iid, codigo)          # v3.84: para poder MEJORARLO luego
         try:
             import app_web_kira as aw
             html = aw.html_app(codigo, titulo=titulo)
@@ -94,6 +95,62 @@ def anadir(dir_, titulo, codigo="", tipo="programa", icono="programa"):
                   "cuando": int(time.time()), "tiene_html": tiene_html})
     _guardar(dir_, lista)
     return iid
+
+
+def _guardar_codigo(dir_, iid, codigo):
+    carpeta = os.path.join(dir_, CARPETA)
+    os.makedirs(carpeta, exist_ok=True)
+    ruta = os.path.join(carpeta, str(iid) + ".py")
+    with open(ruta, "w", encoding="utf-8") as f:
+        f.write(str(codigo))
+    os.chmod(ruta, 0o600)
+
+
+def codigo_de(dir_, iid):
+    """v3.84: el código de un programa de Kira (para mejorarlo). '' si no lo guardó (los de antes de la v3.84)."""
+    try:
+        with open(os.path.join(dir_, CARPETA, str(iid) + ".py"), encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def actualizar_programa(dir_, iid, codigo, titulo=None):
+    """v3.84: tras MEJORAR un programa de Kira: nuevo código y nueva app web; mismo icono. True si existía."""
+    lista = _leer(dir_)
+    a = next((x for x in lista if x.get("id") == iid and x.get("tipo", "programa") == "programa"), None)
+    if a is None or not codigo:
+        return False
+    _guardar_codigo(dir_, iid, codigo)
+    try:
+        import app_web_kira as aw
+        ruta = os.path.join(dir_, CARPETA, str(iid) + ".html")
+        with open(ruta, "w", encoding="utf-8") as f:
+            f.write(aw.html_app(codigo, titulo=titulo or a.get("titulo") or "Programa"))
+        os.chmod(ruta, 0o600)
+        a["tiene_html"] = True
+    except Exception:
+        pass
+    a["mejorado"] = int(a.get("mejorado") or 0) + 1
+    a["cuando_mejora"] = int(time.time())
+    _guardar(dir_, lista)
+    return True
+
+
+def buscar(dir_, nombre):
+    """v3.84: el acceso que se llama así (exacto, sin mayúsculas/signos; o el que lo contiene)."""
+    n = re.sub(r"[\W_]+", "", str(nombre or "").lower())
+    if not n:
+        return None
+    lista = _leer(dir_)
+    for a in lista:
+        if re.sub(r"[\W_]+", "", str(a.get("titulo", "")).lower()) == n:
+            return a
+    for a in lista:
+        t = re.sub(r"[\W_]+", "", str(a.get("titulo", "")).lower())
+        if t and (n in t or t in n):
+            return a
+    return None
 
 
 def anadir_externa(dir_, titulo, lanzar, carpeta="", icono="app", fuente="", pagina=""):
@@ -187,10 +244,11 @@ def quitar(dir_, iid):
     quitado = a is not None
     if quitado:
         _guardar(dir_, quedan)
-        try:
-            os.remove(os.path.join(dir_, CARPETA, str(iid) + ".html"))
-        except OSError:
-            pass
+        for ext in (".html", ".py"):
+            try:
+                os.remove(os.path.join(dir_, CARPETA, str(iid) + ext))
+            except OSError:
+                pass
         carpeta = (a or {}).get("carpeta") or ""
         if carpeta:
             try:

@@ -162,6 +162,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .ftxt{flex:1;min-width:0}.ftit{font-size:14.5px;color:#e9f1fb;overflow-wrap:anywhere}
 .fdet{font-size:12.5px;color:var(--tenue);margin-top:3px;overflow-wrap:anywhere}
 .fbot{display:flex;gap:6px;flex:0 0 auto}
+.pedir{margin:-2px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(46,230,255,.08);box-shadow:inset 0 0 0 1px rgba(46,230,255,.35)}
+.pedir .ptit{font-size:13px;color:#bff5ff;margin:0 0 7px}
+.pedir .plin{display:flex;gap:8px}
+.pedir input{flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--borde);border-radius:9px;padding:8px 10px;color:inherit;font:inherit}
 .b.mini{padding:6px 11px;font-size:12.5px}.b.mini.off{opacity:.3;cursor:default}
 .vacia{font-size:13px;color:var(--tenue);padding:4px 2px}
 .etq{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:8px;font-size:11.5px;font-weight:600}
@@ -423,7 +427,7 @@ var ICONOS = [
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil", taller:"Taller"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil", taller:"Taller", programas:"Mis programas"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
@@ -443,7 +447,9 @@ function todosIconos(){ var oc=(ASPECTO.ocultos||[]); var l=ICONOS.filter(functi
 function pintaExtras(id){                          // en la cabecera de la ventana: las secciones que Kira le añadió
   var b=$("vextras"); if(!b) return;
   var l=EXTRAS.filter(function(e){ return e.en===id && (!e.lugar || e.lugar==="boton"); });
-  b.innerHTML=l.map(function(e){ return '<button data-extra="'+esc(e.id)+'">+ '+esc(e.titulo)+'</button>'; }).join("");
+  b.innerHTML=(id==="programando"?'<button data-misprog="1">Mis programas</button>':'')+   // v3.84
+    l.map(function(e){ return '<button data-extra="'+esc(e.id)+'">+ '+esc(e.titulo)+'</button>'; }).join("");
+  var mp=b.querySelector("[data-misprog]"); if(mp) mp.onclick=function(){ abrir("programas"); };
   [].forEach.call(b.querySelectorAll("[data-extra]"), function(x){ x.onclick=function(){ abrir("extra:"+x.dataset.extra); }; });
 }
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -944,6 +950,7 @@ function pintaApp(id, d){
     '</div><div class="resultado" id="resultado"></div>';
   [].forEach.call(c.querySelectorAll("[data-pest]"), function(b){ b.onclick=function(){
     pestApp[id]=b.dataset.pest; pintaApp(id, d); c.scrollTop=0; }; });
+  [].forEach.call(c.querySelectorAll("[data-pedir]"), function(b){ b.onclick=function(){ barraPedir(b); }; });   // v3.84
   [].forEach.call(c.querySelectorAll("[data-acc]"), function(b){ b.onclick=function(){
     if(b.dataset.dos && !b.dataset.armado){            // DOS toques: el primero solo avisa
       b.dataset.armado="1"; b.dataset.antes=b.textContent; b.textContent="¿Seguro? Pulsa otra vez"; b.classList.add("aviso");
@@ -981,9 +988,28 @@ function htmlFilas(filas, secs){
         (f.etiqueta?'<span class="etq '+claseEtiqueta(f.etiqueta)+'">'+esc(f.etiqueta)+'</span>':'')+
         '<div class="fdet">'+esc(f.etiqueta?String(f.detalle||"").replace(f.etiqueta,"").replace(/^ · /,"").replace(/^ — /,""):f.detalle)+'</div></div>'+
         '<div class="fbot">'+(f.botones||[]).map(function(b){
+          if(b.pedir) return '<button class="b mini" data-pedir="'+esc(b.pedir)+'" data-plantilla="'+esc(b.accion)+'">'+esc(b.texto)+'</button>';   // v3.84: saca una barra
           return '<button class="b mini'+(b.off?' off':'')+'"'+(b.off?' disabled':' data-acc="'+esc(b.accion)+'"')+(b.dos?' data-dos="1"':'')+'>'+esc(b.texto)+'</button>'; }).join("")+'</div></div>';
     }).join(""):'<div class="vacia">Nada aquí.</div>')+'</div>';
   }).join("");
+}
+// v3.84: «Mejorar»: una BARRA bajo esa fila para escribirle a Kira qué mejorar de ESE programa
+function barraPedir(b){
+  var fila=b.closest(".fila"); if(!fila) return;
+  var ya=fila.nextElementSibling; if(ya && ya.classList.contains("pedir")){ ya.remove(); return; }
+  [].forEach.call(document.querySelectorAll(".pedir"), function(x){ x.remove(); });
+  var d=document.createElement("div"); d.className="pedir";
+  d.innerHTML='<div class="ptit"></div><div class="plin"><input autocomplete="off" spellcheck="true">'+
+    '<button class="b prin">Mejorar</button><button class="b">Cancelar</button></div>';
+  d.querySelector(".ptit").textContent=b.dataset.pedir;
+  var inp=d.querySelector("input"); inp.placeholder="por ejemplo: que guarde los resultados en un archivo";
+  fila.parentNode.insertBefore(d, fila.nextSibling);
+  var bs=d.querySelectorAll("button");
+  var manda=function(){ var v=inp.value.trim(); if(v.length<3){ inp.focus(); return; }
+    d.remove(); enviar(b.dataset.plantilla.replace(/^decir:/,"").replace("{texto}", v)); };
+  bs[0].onclick=manda; bs[1].onclick=function(){ d.remove(); };
+  inp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); manda(); } if(e.key==="Escape"){ d.remove(); } });
+  inp.focus();
 }
 function accion(id, acc){
   var dos=acc.indexOf(":"), tipo=acc.slice(0,dos), arg=acc.slice(dos+1);
@@ -991,7 +1017,7 @@ function accion(id, acc){
   if(tipo==="app"){ abrir(arg); return; }
   var r=$("resultado"); if(r){ r.className="resultado on"; r.textContent="Un momento…"; r.dataset.desde=Date.now(); }
   llama("app_hacer", id, arg).then(function(d){
-      if(d&&d.refrescar&&actual===id){ return llama("app", id).then(function(a){ pintaApp(id, a); var r2=$("resultado"); if(r2){ r2.className="resultado on"; r2.textContent=d.texto||"Hecho."; } }); }
+      if(d&&d.refrescar&&actual===id){ refrescaBarra(); return llama("app", id).then(function(a){ pintaApp(id, a); var r2=$("resultado"); if(r2){ r2.className="resultado on"; r2.textContent=d.texto||"Hecho."; } }); }
       if(r) r.textContent=(d&&d.texto)||"Hecho."; refrescaBarra(); })
     .catch(function(e){ if(r) r.textContent="No he podido: "+e; });
 }

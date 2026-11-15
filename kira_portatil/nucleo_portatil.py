@@ -416,6 +416,51 @@ def mejora_hacer(core, accion, nombre="", confirmado=False):
     return {"ok": False, "texto": "[x] No conozco esa acción."}
 
 
+def mejorar_programa(core, titulo, que, paso):
+    """v3.84: «mejora el programa «X»: <qué>» (botón Mejorar de Programando ▸ Mis programas).
+    Un programa de Kira: lo reescribe con su código de ahora, lo prueba (en su máquina / modo seguro) y, si funciona,
+    actualiza su icono (mismo nombre). Una app instalada de fuera: «actualízala» la vuelve a instalar desde su fuente;
+    lo demás lo prepara en el Taller de programas (su plan espera tu «Hazlo»)."""
+    import accesos_kira as ak
+    import catalogo_programas_kira as cpk
+    a = ak.buscar(core.dir, titulo)
+    if a is None:
+        return {"texto": f"No tengo instalado ningún programa «{titulo}». Míralos en Programando ▸ Mis programas.",
+                "ok": False}
+    nombre = a.get("titulo") or titulo
+    if a.get("tipo") == "externa":
+        import re as _re
+        if _re.search(r"(?i)\b(actualiz|nueva versi|última versi|ultima versi|versión nueva|version nueva)", que):
+            if not a.get("fuente"):
+                return {"texto": f"No sé de dónde vino «{nombre}», así que no puedo buscar una versión nueva.",
+                        "ok": False}
+            paso(0.0, f"Busco la versión nueva de {nombre}…")
+            return _instalar_app(core, a["fuente"], paso, pagina=a.get("pagina") or None)
+        lan = [str(x) for x in (a.get("lanzar") or [])]
+        prog = (lan[0] if lan and not lan[0].startswith(("python", "bash", "sh", "node", "npm")) else nombre)
+        paso(0.0, f"Preparo en el Taller cómo hacerlo con {nombre}…")
+        r = ejecutar(core, f"trabaja con {prog}: {que}", paso)
+        txt = r.get("texto", "") if isinstance(r, dict) else str(r)
+        return {"texto": (f"«{nombre}» es una app de fuera: su código no lo cambio yo. Lo que pides lo he preparado en el "
+                          f"Taller de programas (Ajustes ▸ Taller), y espera tu «Hazlo». ") + txt,
+                "ok": bool(r.get("ok", True)) if isinstance(r, dict) else True}
+    codigo = ak.codigo_de(core.dir, a.get("id"))
+    if not codigo:
+        return {"texto": (f"De «{nombre}» no guardé el código (se instaló antes de la v3.84), así que no puedo mejorarlo "
+                          "por dentro. Pídeme «escríbeme un programa que…» con lo que quieras y lo hago de nuevo."),
+                "ok": False}
+    paso(0.0, f"Mejoro {nombre}: {que}…")
+    r = core.programa_acordado(cpk.pedido_mejora(nombre, codigo, que), al_paso=lambda t: paso(None, t))
+    if not r.get("ok") or not r.get("codigo"):
+        return {"texto": f"No he conseguido mejorar «{nombre}»; lo dejo como estaba. "
+                         + str(r.get("texto", "")).split("\n")[0], "ok": False}
+    ak.actualizar_programa(core.dir, a.get("id"), r["codigo"])
+    core.ultimo_codigo = r["codigo"]
+    return {"texto": f"«{nombre}» mejorado ({que}) y probado: ya funciona con el cambio. Su icono es el mismo; "
+                     "si no te gusta, dime cómo lo quieres y lo vuelvo a mejorar.",
+            "codigo": r["codigo"], "nombre": nombre, "ok": True}
+
+
 def _crear_acceso(core, titulo, codigo):
     """v3.26: deja un ACCESO DIRECTO con icono en el escritorio del programa recién hecho (clic derecho ▸ desinstalar)."""
     if not codigo:
@@ -685,6 +730,13 @@ def ejecutar(core, orden, paso):
         core.nueva_tarea()
     except Exception:
         pass
+    try:                                          # v3.84: «mejora el programa «X»: …» (Programando ▸ Mis programas)
+        import catalogo_programas_kira as cpk_
+        om_ = cpk_.orden_mejorar(o)
+    except Exception:
+        om_ = None
+    if om_:
+        return mejorar_programa(core, om_[0], om_[1], paso)
     import experimentos_kira as ex
     import programar_kira as pk
     import internet_kira as net

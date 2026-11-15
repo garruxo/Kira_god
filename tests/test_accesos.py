@@ -49,11 +49,12 @@ core = kira_god.KiraGodCore()
 # en el MÓVIL (es_kiraos falso) NO crea accesos de escritorio
 core._guardar_solucion("programa del movil", codigo="print(1)")
 ok(not ak.listar(core.dir), "en el móvil (no KiraOS) no deja accesos directos de escritorio")
-# en KiraOS sí
+# v3.84: en KiraOS tampoco se instala solo: queda en Programando ▸ Mis programas con su botón Instalar
 core.es_kiraos = True
 core._guardar_solucion("mi programa en kiraos", codigo="print('ok')")
+ok(not ak.listar(core.dir), "en KiraOS lo que saca por su cuenta espera en «Mis programas» (no se instala solo)")
+ak.anadir(core.dir, "mi programa en kiraos", "print('ok')")
 acc = ak.listar(core.dir)
-ok(len(acc) == 1 and "kiraos" in acc[0]["titulo"].lower(), "en KiraOS, cada programa nuevo deja su acceso directo")
 
 # ---------------- puente del escritorio ----------------
 import accesos_kira as ak2
@@ -120,7 +121,7 @@ let b; (async () => { b = await chromium.launch(); const pg = await b.newPage({v
 
 # ---------------- cableado ----------------
 kg = open(os.path.join(RAIZ, "kira_god.py"), encoding="utf-8").read()
-ok("accesos_kira" in kg and "es_kiraos" in kg, "kira_god crea el acceso al guardar una solución (solo KiraOS)")
+ok("catalogo_programas_kira" in kg, "kira_god apunta los programas que ve al estudiar (v3.84: Mis programas)")
 npsrc = open(os.path.join(RAIZ, "kira_portatil", "nucleo_portatil.py"), encoding="utf-8").read()
 ok(npsrc.count("_crear_acceso(core") >= 2, "KiraOS crea el acceso también al escribir un programa / experimentar")
 
