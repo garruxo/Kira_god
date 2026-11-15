@@ -5167,9 +5167,17 @@ int radio_encender(void) {
     }
     kprint("WiFi enciende: controlador byte 0xBB = "); kprint_hex(a);
     if (a & 1) {
-        kprint(" (el bit de la WiFi ya esta a 1 y la radio sigue apagada: no toco nada mas)\n"); return -4;
-    }
-    kprint(" -> pongo SOLO el bit 0, como hace Linux\n");
+        /* v3.63: en tu portátil el bit ya estaba a 1 (el EC lo recuerda de Xubuntu) y la radio seguía apagada:
+           el EC solo actúa cuando el bit CAMBIA. Se hace lo mismo que se vio en Linux: 45 -> 44 -> 45. */
+        kprint(" (el bit ya esta a 1 pero la radio sigue apagada)\n"
+               "  -> lo apago y lo vuelvo a encender, como hizo Linux en Xubuntu\n");
+        if (ec_escribir_bit_wifi((uint8_t)(a & ~1u))) {
+            kprint("WiFi enciende: el controlador no me deja escribir; lo intento dejar como estaba\n");
+            ec_escribir_bit_wifi(a);
+            return -5;
+        }
+        espera_us(1000000);
+    } else kprint(" -> pongo SOLO el bit 0, como hace Linux\n");
     if (ec_escribir_bit_wifi((uint8_t)(a | 1))) {
         kprint("WiFi enciende: el controlador no me deja escribir; lo intento dejar como estaba\n");
         ec_escribir_bit_wifi(a);
@@ -5190,7 +5198,8 @@ int radio_encender(void) {
     ec_escribir_bit_wifi(a);                               /* no ha servido: tal y como estaba */
     uint8_t d = 0;
     ec_leer(EC_WIFI, &d);
-    kprint("WiFi enciende: la radio NO se ha encendido en 3 s. He dejado el controlador como estaba (");
+    kprint("WiFi enciende: la radio NO se ha encendido en 3 s (GPIO "); kprint_hex(gpio_entradas());
+    kprint("). He dejado el controlador como estaba (");
     kprint_hex(d); kprint(d == a ? ", igual que antes). Hazme una foto\n" : ", OJO: no es igual que antes). Hazme una foto\n");
     return -6;
 }

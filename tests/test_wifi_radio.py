@@ -167,7 +167,7 @@ void sim_paso(uint32_t us) {
 /* v3.62: el controlador del portátil (EC) en los puertos 0x62/0x66. modo 10: el bit 0 de 0xBB enciende la radio
    (GPIO 0); 11: el EC acepta la escritura pero la radio no se enciende; 12: no hay EC (0xFF); 13: EC atascado. */
 static uint8_t ec_ram[256]; static int ec_est = 0, ec_dir = 0, ec_obf = 0, ec_esc = 0, ec_esc_otro = 0;
-static uint8_t ec_sal = 0;
+static uint8_t ec_sal = 0, ec_previo = 0x44;
 uint8_t sim_inb(uint16_t p) {
     if (modo == 12) return 0xFF;
     if (p == 0x66) return (uint8_t)((modo == 13 ? 0x02 : 0) | (ec_obf ? 1 : 0));
@@ -185,6 +185,11 @@ void sim_outb(uint16_t p, uint8_t v) {
         if (ec_dir == 0xBB && modo == 10) {
             if (v & 1) regs[0x4048 / 4] |= 1u << 11; else regs[0x4048 / 4] &= ~(1u << 11);
         }
+        if (ec_dir == 0xBB && modo == 14) {                /* solo actúa cuando el bit CAMBIA de 0 a 1 */
+            if ((v & 1) && !(ec_previo & 1)) regs[0x4048 / 4] |= 1u << 11;
+            if (!(v & 1)) regs[0x4048 / 4] &= ~(1u << 11);
+        }
+        ec_previo = v;
         ec_est = 0;
     }
 }
@@ -211,7 +216,8 @@ int main(int argc, char **argv) {
     eep[129] = x ^ 0xFFFF;
     if (modo >= 10) {
         for (int i = 0; i < 256; i++) ec_ram[i] = (uint8_t)(0x30 + i);
-        ec_ram[0xBB] = 0x44;
+        ec_ram[0xBB] = modo >= 14 ? 0x45 : 0x44;
+        ec_previo = ec_ram[0xBB];
         int e = radio_encender();
         printf("ENCENDER=%d EC_BB=%02x ESCRITURAS=%d OTRO=%d GPIO0=%u\n", e, ec_ram[0xBB], ec_esc, ec_esc_otro,
                (regs[0x4048 / 4] >> 11) & 1);
@@ -334,6 +340,12 @@ if gcc and SIMPROG:
        "si la radio no se enciende, deja el byte EXACTAMENTE como estaba (0x44)")
     s12 = corre2(12)
     ok("ENCENDER=-2" in s12 and "no toco nada" in s12, "sin controlador (EC) no toca nada")
+    s14 = corre2(14); print(s14)
+    ok("ENCENDER=1 EC_BB=45 ESCRITURAS=2 OTRO=0 GPIO0=1" in s14 and "como hizo Linux" in s14,
+       "v3.63: con el bit ya a 1 y la radio apagada, lo apaga y enciende (45->44->45) como Linux y se enciende")
+    s15 = corre2(15); print(s15)
+    ok("ENCENDER=-6 EC_BB=45 ESCRITURAS=3 OTRO=0" in s15 and "igual que antes" in s15,
+       "si ni así se enciende, el byte queda como estaba (0x45)")
     s13 = corre2(13)
     ok("ENCENDER=-3" in s13 and "ESCRITURAS=0" in s13, "con el EC atascado no se cuelga ni escribe nada")
 ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],
