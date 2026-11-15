@@ -732,7 +732,38 @@ def ejecutar(core, orden, paso):
     if cod is not None:
         return {"texto": core.aprender_codigo(cod, al_paso=lambda t: paso(None, t))}
     paso(None, "Pensando…")
-    return {"texto": core.procesar_orden(o)}
+    r = core.procesar_orden(o)
+    return charla_si_no_es_orden(core, o, r, paso)
+
+
+def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
+    """v3.68: si lo que dijiste no es una orden («hola», «¿qué es un compilador?»), te CONTESTA con su cerebro, como
+    en el móvil (antes salía «No reconozco la orden»). Recuerda los últimos turnos de la charla (solo en RAM)."""
+    no = getattr(core, "NO_RECONOCIDA", "[i] No reconozco la orden")
+    if not (isinstance(r, str) and r.startswith(no)):
+        return {"texto": r}
+    hist = getattr(core, "_charla_kiraos", None)
+    if hist is None:
+        hist = []
+        try:
+            core._charla_kiraos = hist
+        except Exception:
+            pass
+    try:
+        paso(None, "Te contesto…")
+        resp = core.conversar(o, historial=list(hist))
+    except Exception as e:                       # noqa: BLE001
+        return {"texto": f"No he podido contestarte con mi cerebro ({str(e)[:160]}). Si era una orden, dime «ayuda» "
+                         "para ver cómo pedírmela."}
+    hist.extend([("tu", o), ("kira", resp)])
+    del hist[:-12]
+    try:
+        rec = getattr(core, "recuerdos", None)
+        if rec is not None:
+            rec.guardar_charla(o, resp)
+    except Exception:
+        pass
+    return {"texto": resp}
 
 
 # =====================================================================================

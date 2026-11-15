@@ -35,6 +35,9 @@ ok(iv.es_orden("investiga qué es un trie") == ("investiga", "qué es un trie"),
 ok(iv.es_orden("pregúntate si puedes hacer lo mismo que un cronómetro")[0] == "investiga", "«pregúntate si…»")
 ok(iv.es_orden("averigua cómo se hace un hash")[0] == "investiga", "«averigua…»")
 ok(iv.es_orden("investiga la búsqueda binaria hasta resolverlo")[0] is None, "«…hasta resolverlo» es FOCO, no esto")
+ok(iv.es_orden("pregúntate qué es un compilador") == ("investiga", "qué es un compilador"),
+   "v3.68: «pregúntate qué es X» guarda la pregunta entera (antes se comía el «qué»)")
+ok(iv.es_orden("pregúntate si puedo") == ("investiga", "puedo"), "«pregúntate si…» sigue quitando el «si»")
 ok(iv.es_orden("pregúntate también qué es un grafo")[0] == "recordar", "«pregúntate también» -> recordar")
 ok(iv.es_orden("añade la pregunta: qué es un árbol")[0] == "recordar", "«añade la pregunta» -> recordar")
 ok(iv.es_orden("tus preguntas")[0] == "listar", "«tus preguntas» -> listar")

@@ -47,7 +47,7 @@ def clasificar_peticion(texto):
 
 # ---------- reconocer la orden del dueño ----------
 _ORDEN = (
-    r"^(?:invest[ií]ga(?:me)?|aver[ií]gua|preg[uú]ntate(?:\s+(?:si|que|qu[eé]))?|"
+    r"^(?:invest[ií]ga(?:me)?|aver[ií]gua|preg[uú]ntate(?:\s+si(?=\s))?|"
     r"mira a ver(?:\s+si)?|quiero que te preguntes|a ver si)\s+(.+)$"
 )
 _ORDEN_RECORDAR = (
