@@ -143,6 +143,7 @@ void sim_paso(uint32_t us) {
     if (!rxe || (regs[0x8048 / 4] & 0x20) || ahora - ultimo < 20000) return;
     if ((regs[0x9864 / 4] & 0x1FF) == 0) return;           /* sin cargar el ruido, la radio real queda sorda */
     if (modo == 5) return;                                 /* chip sordo */
+    if (modo == 19 && !(regs[0x4048 / 4] & (1u << 11))) return;   /* radio apagada por el interruptor */
     if (modo == 6) {                                       /* oye, pero no entiende nada: solo errores de radio */
         ultimo = ahora;
         volatile uint32_t *d = (volatile uint32_t *)(radio_base_sim + rxdp);
@@ -172,8 +173,10 @@ static uint8_t ec_sal = 0, ec_previo = 0x44;
    ACPI pero se apaga al volver; 18: ni así. */
 static uint8_t mem_bajo[0x100000], mem_alto[0x1000];
 static int sci = 0, smi_on = 0, smi_off = 0, smi_otro = 0;
+static void tablas_acpi(void);
 const uint8_t *sim_mem(uint32_t d, uint32_t t) {
     if (modo < 16) return 0;
+    if (modo == 19 && !mem_alto[0]) tablas_acpi();
     if (d + t <= 0x100000) return mem_bajo + d;
     if (d >= 0x100000 && d + t <= 0x101000) return mem_alto + (d - 0x100000);
     return 0;
@@ -201,7 +204,7 @@ void sim_outb(uint16_t p, uint8_t v) {
     if (modo == 12 || modo == 13) return;
     if (p == 0xB2) {
         if (v == 0xA0) { smi_on++; sci = 1; }
-        else if (v == 0xA1) { smi_off++; sci = 0; if (modo == 17) regs[0x4048 / 4] &= ~(1u << 11); }
+        else if (v == 0xA1) { smi_off++; sci = 0; if (modo == 17 || modo == 19) regs[0x4048 / 4] &= ~(1u << 11); }
         else smi_otro++;
         return;
     }
@@ -214,7 +217,7 @@ void sim_outb(uint16_t p, uint8_t v) {
         if (ec_dir == 0xBB && modo == 10) {
             if (v & 1) regs[0x4048 / 4] |= 1u << 11; else regs[0x4048 / 4] &= ~(1u << 11);
         }
-        if (ec_dir == 0xBB && (modo == 16 || modo == 17)) {   /* solo en modo ACPI y en el cambio 0 -> 1 */
+        if (ec_dir == 0xBB && (modo == 16 || modo == 17 || modo == 19)) {   /* solo en modo ACPI y en el cambio 0 -> 1 */
             if ((v & 1) && !(ec_previo & 1) && sci) regs[0x4048 / 4] |= 1u << 11;
         }
         if (ec_dir == 0xBB && modo == 14) {                /* solo actúa cuando el bit CAMBIA de 0 a 1 */
@@ -246,7 +249,8 @@ int main(int argc, char **argv) {
     uint16_t x = 0;
     for (int i = 0; i < n; i++) x ^= eep[128 + i];
     eep[129] = x ^ 0xFFFF;
-    if (modo >= 10) {
+    if (modo == 19) { ec_ram[0xBB] = 0x45; ec_previo = 0x45; }
+    if (modo >= 10 && modo != 19) {
         for (int i = 0; i < 256; i++) ec_ram[i] = (uint8_t)(0x30 + i);
         ec_ram[0xBB] = modo >= 14 ? 0x45 : 0x44;
         ec_previo = ec_ram[0xBB];
@@ -261,6 +265,7 @@ int main(int argc, char **argv) {
     }
     int r = radio_escanear();
     printf("RESULTADO=%d\n", r);
+    printf("SMI_ON=%d SMI_OFF=%d SMI_OTRO=%d SCI=%d EC_BB=%02x EC_OTRO=%d\n", smi_on, smi_off, smi_otro, sci, ec_ram[0xBB], ec_esc_otro);
     printf("SWITCH_COM=0x%08x\n", regs[0x9964 / 4]);
     printf("STA_ID0=0x%08x\n", regs[0x8000 / 4]);
     printf("RUIDO=0x%03x,0x%03x\n", regs[0x9864 / 4] & 0x1FF, regs[0xA864 / 4] & 0x1FF);
@@ -389,6 +394,13 @@ if gcc and SIMPROG:
     ok("ENCENDER=2" in s17 and "SMI_OFF=1" in s17 and "se apaga al volver" in s17, "si se apaga al volver, lo dice")
     ok("ENCENDER=-7" in s18 and "EC_BB=45" in s18 and "SMI_ON=1 SMI_OFF=1 SMI_OTRO=0 SCI=0" in s18 and "aparcada" in s18,
        "si ni así, deja el EC y el modo como estaban y lo dice " + s18[-500:])
+    s19 = corre2(19)
+    ok("radio ENCENDIDA en modo ACPI" in s19 and "SMI_ON=1 SMI_OFF=1 SMI_OTRO=0 SCI=0 EC_BB=45 EC_OTRO=0" in s19,
+       "v3.67: redes pasa a modo ACPI SOLO mientras escucha y vuelve a modo normal " + s19[-700:])
+    import re as _re
+    m19 = _re.search(r"RESULTADO=(-?\d+)", s19)
+    ok(m19 and int(m19.group(1)) >= 1, "con la radio encendida en modo ACPI, oye las redes")
+    ok("SMI_ON=0 SMI_OFF=0" in corre2(0), "si la radio no tiene interruptor, redes no toca el modo ACPI")
     ok("SMI_ON=0" in corre2(15), "sin tablas ACPI no toca el puerto SMI")
     ok("ENCENDER=-3" in s13 and "ESCRITURAS=0" in s13, "con el EC atascado no se cuelga ni escribe nada")
 ok("AR_Q_TXE" not in RC.split("prueba_analogicos")[1].split("static int preparar")[0],

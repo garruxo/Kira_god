@@ -4878,7 +4878,18 @@ static void escribe_senal(int rssi) {                      /* rssi = dB sobre el
 
 static void hex2(uint8_t v) { const char *h = "0123456789abcdef"; kputc(h[v >> 4]); kputc(h[v & 0xF]); }
 
+static int acpi_escuchar_empezar(void);
+static void acpi_escuchar_acabar(void);
+static int escanear_dentro(void);
+/* v3.67: en tu Packard Bell la radio solo se enciende en «modo ACPI» y se apaga al volver a modo normal (lo
+   vio la v3.66). Así que, si está apagada, se pasa a modo ACPI SOLO mientras escucha y al acabar se vuelve. */
 int radio_escanear(void) {
+    int dentro = acpi_escuchar_empezar();
+    int r = escanear_dentro();
+    if (dentro) acpi_escuchar_acabar();
+    return r;
+}
+static int escanear_dentro(void) {
     eco_ok = eco_total = 0; eco_primero_reg = 0; diag4_hecho = 0;
     for (int i = 0; i < 4; i++) paso_an[i] = -1;
     struct wifi_info w;
@@ -5262,6 +5273,54 @@ static int probar_modo_acpi(uint8_t a, int g, int pol) {
     kprint("WiFi enciende: tampoco se enciende en modo ACPI. Lo que falta lo hace Linux con mas cosas que esto;\n"
            "  la WiFi del kernel se queda aparcada hasta que Kira sea un sistema completo. Hazme una foto\n");
     return -7;
+}
+
+/* v3.67: lo mismo que probar_modo_acpi, pero SE QUEDA en modo ACPI mientras «redes» escucha. Solo si la radio
+   está apagada por el interruptor; si algo no cuadra, no toca nada y «redes» sigue como siempre. */
+static struct acpi_modo acpi_esc;
+static int acpi_esc_entre = 0;
+static int acpi_escuchar_empezar(void) {
+    acpi_esc_entre = 0;
+    struct wifi_info w;
+    if (wifi_leer(&w) != 1 || w.version != 0x180) return 0;
+    const uint8_t *e = wifi_eeprom();
+    uint32_t rs = (uint32_t)e[20] | ((uint32_t)e[21] << 8);
+    int pol = (rs >> 1) & 1, g = (rs >> 2) & 7;
+    if (!(rs & 1) || radio_viva(g, pol)) return 0;
+    if (EC_IN(EC_ORDEN) == 0xFF) return 0;
+    uint8_t a = 0, b = 0;
+    if (ec_leer(EC_WIFI, &a) || ec_leer(EC_WIFI, &b) || a != b) return 0;
+    if (leer_facp(&acpi_esc)) return 0;
+    struct acpi_modo *m = &acpi_esc;
+    if (m->smi == 0 || m->smi > 0xFF || m->pm1a == 0 || m->pm1a > 0xFFFF || m->on == 0 || m->off == 0) return 0;
+    kprint("WiFi: la radio esta apagada; paso a modo ACPI (como Linux) SOLO mientras escucho\n");
+    if (!sci_activo(m)) {
+        EC_OUT((uint16_t)m->smi, m->on);
+        if (!esperar_sci(m, 1)) { kprint("WiFi: el portatil no ha pasado a modo ACPI; escucho sin el\n"); return 0; }
+        acpi_esc_entre = 1;
+    }
+    int encendida = 0;
+    if (!ec_escribir_bit_wifi((uint8_t)(a & ~1u))) {
+        espera_us(1000000);
+        if (!ec_escribir_bit_wifi((uint8_t)(a | 1)))
+            for (int i = 0; i < 30 && !encendida; i++) { espera_us(100000); encendida = radio_viva(g, pol); }
+    }
+    if (!encendida) {
+        ec_escribir_bit_wifi(a);
+        kprint("WiFi: en modo ACPI tampoco se ha encendido esta vez\n");
+        if (acpi_esc_entre) { acpi_escuchar_acabar(); }
+        return 0;
+    }
+    kprint("WiFi: radio ENCENDIDA en modo ACPI (GPIO "); kprint_hex(gpio_entradas());
+    kprint("); escucho y al acabar vuelvo a modo normal\n");
+    return acpi_esc_entre;
+}
+static void acpi_escuchar_acabar(void) {
+    if (!acpi_esc_entre) return;
+    acpi_esc_entre = 0;
+    EC_OUT((uint16_t)acpi_esc.smi, acpi_esc.off);
+    kprint(esperar_sci(&acpi_esc, 0) ? "WiFi: vuelto a modo normal, como estaba\n"
+                                    : "WiFi: OJO, no ha vuelto a modo normal en 3 s (reinicia con Esc)\n");
 }
 
 int radio_encender(void) {
