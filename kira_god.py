@@ -3254,6 +3254,12 @@ class KiraGodCore:
                       "programar— ya le van; las que tocan el portátil o tu casa se las doy al volver.)")
         if mejoras and self.auto_mejora_encendida():
             texto += " " + self._auto_mejoras_recibidas()
+        try:                                          # v3.74: los diseños que KiraOS me encargó, los hago yo
+            import disenos_kira as dz
+            if dz.pendientes_movil(self.dir):
+                self.hacer_disenos()
+        except Exception:
+            pass
         if (mejoras or tema) and callable(getattr(self, "al_sincronia", None)):
             try:
                 self.al_sincronia(texto)
@@ -3370,6 +3376,70 @@ class KiraGodCore:
 
         self._hilo_casa = threading.Thread(target=bucle, daemon=True)
         self._hilo_casa.start()
+        return True
+
+    # ---------- v3.74: DISEÑOS que KiraOS le encarga al móvil (los hace ella sola; KiraOS te los enseña antes) ----------
+    def hacer_encargo_diseno(self, e, al_progreso=None):
+        """Hace UN encargo de KiraOS: las imágenes con el pintor; el tema y las ventanas son solo datos. Lo apunta."""
+        import disenos_kira as dz
+        if e["tipo"] in dz.IMAGEN:
+            try:
+                r = self.pintar_imagen(dz.prompt_imagen(e), formato=dz.formato_de(e["tipo"]), al_progreso=al_progreso)
+                return dz.hecho(self.dir, e["id"], ruta_imagen_hecha=r.get("ruta"), nota=r.get("aviso", ""))
+            except Exception as ex:                    # noqa: BLE001 - sin pincel, sin memoria…: se le dice a KiraOS
+                if type(ex).__name__ == "Cancelada":
+                    raise
+                return dz.hecho(self.dir, e["id"], fallo=str(ex)[:200])
+        if e["tipo"] == "tema":
+            col, nota = None, "colores elegidos por las palabras de tu encargo"
+            try:
+                cer = getattr(self, "cerebro_ia", None)
+                if cer is not None and cer.local_disponible():
+                    resp = cer.chat_local(
+                        "Eres diseñadora. Contesta SOLO con un JSON de 4 colores #rrggbb: "
+                        '{"fondo": "...", "neon": "...", "acento": "...", "texto": "..."}. El texto tiene que leerse bien '
+                        "sobre el fondo.", [{"role": "user", "content": "Tema de colores para un sistema operativo: "
+                                             + e.get("descripcion", "")}], 160, parar=self.cancelado)
+                    col = dz.colores_de_respuesta(resp)
+                    if col:
+                        nota = "colores elegidos por mi cerebro"
+            except Exception:
+                col = None
+            return dz.hecho(self.dir, e["id"], colores=col or dz.colores_de_texto(e.get("descripcion", "")), nota=nota)
+        return dz.hecho(self.dir, e["id"], ventana=dz.ventana_de_texto(e.get("descripcion", "")),
+                        nota="medidas elegidas por las palabras de tu encargo")
+
+    def hacer_disenos(self, en_hilo=True):
+        """Hace los encargos de diseño pendientes, uno cada vez, y al acabar sincroniza para mandárselos a KiraOS."""
+        import disenos_kira as dz
+        if dz.pendientes_movil(self.dir) == 0 or getattr(self, "_hilo_disenos", None) is not None:
+            return False
+
+        def trabajo():
+            hechos = 0
+            try:
+                while not self.cancelado():
+                    e = dz.siguiente(self.dir)
+                    if not e:
+                        break
+                    self.hacer_encargo_diseno(e)
+                    hechos += 1
+                if hechos:
+                    try:
+                        self.sincronizar()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            finally:
+                self._hilo_disenos = None
+            return hechos
+
+        if not en_hilo:
+            self._hilo_disenos = True
+            return trabajo()
+        self._hilo_disenos = threading.Thread(target=trabajo, daemon=True)
+        self._hilo_disenos.start()
         return True
 
     def actividad(self):

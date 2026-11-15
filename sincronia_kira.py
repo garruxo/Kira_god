@@ -264,13 +264,17 @@ def paquete_movil(dir_, rec, maximo=MAX_REC):
                  for p in iv.listar(dir_) if not p.get("hecha")]
     foco = _foco(dir_)
     imgs, claves_img, quedan_img = _imagenes_nuevas(dir_, est.get("img_enviadas"))
+    import disenos_kira as dz                      # v3.74: los diseños que KiraOS le encargó y ya están hechos
+    disenos, ids_dis, quedan_dis = dz.resultados_por_enviar(dir_)
     paquete = {"v": VERSION, "origen": "móvil", "recuerdos": [r for _n, r in lista], "notas": notas,
                "soluciones": sols, "preguntas": preguntas, "foco": foco if foco.get("activo") else None,
-               "imagenes": imgs, "hay_mas": hasta < rec.total() or quedan_img, "cursor": est["cursor"]}
+               "imagenes": imgs, "disenos": disenos,
+               "hay_mas": hasta < rec.total() or quedan_img or quedan_dis, "cursor": est["cursor"]}
     marcas = {"rec_enviados": hasta,
               "notas_desde": max([est["notas_desde"]] + [n.get("cuando", 0) or 0 for n in notas]),
               "sol_desde": max([est["sol_desde"]] + [s.get("cuando", 0) or 0 for s in sols.values()]),
-              "enviados": len(lista) + len(notas) + len(sols) + len(imgs), "img_enviadas": claves_img}
+              "enviados": len(lista) + len(notas) + len(sols) + len(imgs) + len(ids_dis), "img_enviadas": claves_img,
+              "disenos_enviados": ids_dis}
     return paquete, marcas
 
 
@@ -307,6 +311,8 @@ def aplicar_en_kiraos(dir_, rec, paquete, maximo=MAX_REC):
     np_ = sum(1 for p in paquete.get("preguntas") or [] if isinstance(p, dict)
               and iv.anadir(dir_, p.get("texto", ""), recurrente=bool(p.get("recurrente"))))
     ni = guardar_imagenes_recibidas(dir_, paquete.get("imagenes"))     # v3.45: dibujos del pintor del móvil
+    import disenos_kira as dz
+    nd = dz.guardar_resultados(dir_, paquete.get("disenos"))            # v3.74: diseños encargados (esperan tu visto bueno)
     foco_m, foco_k, nf = paquete.get("foco"), _foco(dir_), 0
     if isinstance(foco_m, dict) and foco_m.get("tema") and not foco_k.get("activo"):
         _escribir(os.path.join(dir_, "foco.json"), foco_m)
@@ -314,8 +320,11 @@ def aplicar_en_kiraos(dir_, rec, paquete, maximo=MAX_REC):
     est["ultima"] = int(time.time())
     est["recibidos_total"] = est.get("recibidos_total", 0) + nuevos + nn + ns
     guardar_estado_kiraos(dir_, est)
-    resumen = {"recuerdos": nuevos, "notas": nn, "soluciones": ns, "preguntas": np_, "foco": nf, "imagenes": ni}
-    return resumen, paquete_para_movil(dir_, rec, paquete.get("cursor") or {}, est, maximo)
+    resumen = {"recuerdos": nuevos, "notas": nn, "soluciones": ns, "preguntas": np_, "foco": nf, "imagenes": ni,
+               "disenos": nd}
+    resp = paquete_para_movil(dir_, rec, paquete.get("cursor") or {}, est, maximo)
+    dz.marcar_entregados(dir_, [e["id"] for e in resp.get("encargos_diseno") or []])
+    return resumen, resp
 
 
 def paquete_para_movil(dir_, rec, cursor, est=None, maximo=MAX_REC):
@@ -329,11 +338,15 @@ def paquete_para_movil(dir_, rec, cursor, est=None, maximo=MAX_REC):
     tema = tema if tema and tema.get("v", 0) > cursor.get("tema_v", 0) else None
     entregadas = set(cursor.get("mejoras", []))
     mejoras = [m for m in mejoras_para_movil(dir_) if m["hash"] not in entregadas]
+    import disenos_kira as dz                      # v3.74: los diseños que KiraOS le encarga al móvil
+    ya_dis = list(cursor.get("disenos", []))
+    encargos = dz.para_movil(dir_, ya_dis)
     nuevo = {"rec": hasta, "sol_ts": max([sol_ts] + [s.get("cuando", 0) or 0 for s in sols.values()]),
              "tema_v": (tema or {}).get("v", cursor.get("tema_v", 0)),
-             "mejoras": sorted(entregadas | {m["hash"] for m in mejoras})[-500:]}
+             "mejoras": sorted(entregadas | {m["hash"] for m in mejoras})[-500:],
+             "disenos": (ya_dis + [e["id"] for e in encargos])[-300:]}
     return {"v": VERSION, "origen": "KiraOS", "recuerdos": [r for _n, r in lista], "soluciones": sols, "tema": tema,
-            "mejoras": mejoras, "hay_mas": hasta < rec.total(), "cursor": nuevo}
+            "mejoras": mejoras, "encargos_diseno": encargos, "hay_mas": hasta < rec.total(), "cursor": nuevo}
 
 
 # =====================================================================================
@@ -351,7 +364,10 @@ def aplicar_en_movil(dir_, rec, respuesta, marcas=None):
     if tema:
         _escribir(os.path.join(dir_, TEMA_KIRAOS), tema)
     nm = guardar_mejoras_recibidas(dir_, respuesta.get("mejoras"))
+    import disenos_kira as dz
+    nd = dz.recibir(dir_, respuesta.get("encargos_diseno"))             # v3.74: encargos de diseño de KiraOS
     if marcas:
+        dz.marcar_enviados(dir_, marcas.get("disenos_enviados"))
         for k in ("rec_enviados", "notas_desde", "sol_desde"):
             est[k] = max(est.get(k, 0), marcas.get(k, 0))
         est["enviados_total"] = est.get("enviados_total", 0) + marcas.get("enviados", 0)
@@ -361,7 +377,7 @@ def aplicar_en_movil(dir_, rec, respuesta, marcas=None):
         est["cursor"] = respuesta["cursor"]
     est["ultima"] = int(time.time())
     est["recibidos_total"] = est.get("recibidos_total", 0) + nuevos + ns
-    resumen = {"recuerdos": nuevos, "soluciones": ns, "tema": bool(tema), "mejoras": nm}
+    resumen = {"recuerdos": nuevos, "soluciones": ns, "tema": bool(tema), "mejoras": nm, "disenos": nd}
     est["resumen"] = texto_resumen(marcas or {}, resumen)
     guardar_estado_movil(dir_, est)
     return resumen
@@ -373,6 +389,8 @@ def texto_resumen(marcas, recibido):
     t = f"Envié {env} cosa(s) nueva(s) a KiraOS y recibí {rec}."
     if (recibido or {}).get("mejoras"):
         t += f" KiraOS me preparó {recibido['mejoras']} mejora(s): esperan tus dos toques en el panel."
+    if (recibido or {}).get("disenos"):
+        t += f" KiraOS me ha encargado {recibido['disenos']} diseño(s): me pongo a hacerlos."
     if (recibido or {}).get("tema"):
         t += " Y me ha cambiado el aspecto (se verá al volver a abrir la app)."
     return t

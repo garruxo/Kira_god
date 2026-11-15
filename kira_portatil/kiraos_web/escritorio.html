@@ -301,6 +301,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .fondo-i:hover{box-shadow:0 0 0 2px var(--cian)}
 .fmini{height:110px;display:flex;align-items:center;justify-content:center;background:#000;color:var(--tenue);font-size:12px;padding:4px;text-align:center}
 .fmini img{width:100%;height:110px;object-fit:cover}
+.dtema{width:100%;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.dtema span{display:inline-block;width:60px;height:6px;border-radius:3px}
+.dvent{width:70%;height:70px;display:grid;place-items:center;background:var(--panel);border:1px solid var(--borde);color:var(--texto)}
+.diseno{cursor:default}
+.dbot{padding:0 8px 8px;display:flex;gap:6px;flex-wrap:wrap}
 .fondo-i small{display:block;padding:6px 8px;font-size:12px;color:var(--tenue)}
 .tile img.icoimg{width:34px;height:34px;object-fit:cover;border-radius:8px}
 </style>
@@ -408,7 +413,7 @@ var ICONOS = [
   {id:"maquina",titulo:"Máquina virtual",sub:"Linux de pruebas"},{id:"cuaderno",titulo:"Cuaderno",sub:"lo que piensa"},
   {id:"programando",titulo:"Programando",sub:"verla escribir"},{id:"movil",titulo:"Móvil",sub:"Kira app"},
   {id:"terminal",titulo:"Terminal",sub:"Linux sin salir"},{id:"ajustes",titulo:"Ajustes",sub:"cerebro y voz"}];
-var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
+var OCULTAS={mejoras:"Mejoras", aplicaciones:"Todas las aplicaciones", fondos:"Fondo de pantalla", disenos:"Diseños del móvil"};               // v3.09: ventanas sin icono (Mejoras se abre desde el Cuaderno)
 var EXTRAS=[];                                   // v3.19: ventanas/secciones/botones que Kira se añadió (solo datos)
 var ACCESOS=[];                                  // v3.26: accesos directos de los programas que Kira creó (iconos)
 function nombreDe(id){ if(ASPECTO.nombres && ASPECTO.nombres[id]) return ASPECTO.nombres[id];
@@ -444,6 +449,14 @@ var FAKE = {
   apps_abrir:function(id){ return Promise.resolve({ok:true,texto:"Abriendo "+id+"…"}); },
   fondos:function(){ return Promise.resolve({texto:"Tengo 1 imagen.",imagenes:[{id:"abc",nombre:"atardecer",origen:"pintado en el móvil",mini:""}]}); },
   fondo_poner:function(id){ FAKE._aspecto=Object.assign({},FAKE._aspecto||{},{fondo:{id:id,v:1}}); return Promise.resolve({ok:true,texto:"Listo: tu fondo ahora es «atardecer»."}); },
+  disenos:function(){ var l=FAKE._dis||(FAKE._dis=[{id:"a1",tipo:"icono",nombre_tipo:"icono",descripcion:"un escudo azul",destino:"mapa",estado:"listo",nota:"",mini:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",colores:null,ventana:null},
+      {id:"a2",tipo:"tema",nombre_tipo:"tema (colores) del sistema",descripcion:"tonos violeta",destino:"",estado:"listo",nota:"",mini:"",colores:{fondo:"#0d0716",neon:"#a78bfa",acento:"#f472d0",texto:"#efe9fb"},ventana:null},
+      {id:"a3",tipo:"ventana",nombre_tipo:"estilo de las ventanas",descripcion:"muy redondeadas",destino:"",estado:"entregado",nota:"",mini:"",colores:null,ventana:{radio:26,borde:1,opacidad:0.97,sombra:true}}]);
+    return Promise.resolve({texto:"Tengo 2 diseño(s) de la Kira del móvil esperando tu visto bueno.",lista:l}); },
+  diseno_hacer:function(id,acc){ (FAKE._dis||[]).forEach(function(x){ if(x.id===id) x.estado=acc==="aplicar"?"aplicado":acc==="rechazar"?"rechazado":x.estado; });
+    if(acc==="aplicar"&&id==="a2") FAKE._aspecto=Object.assign({},FAKE._aspecto||{},{tema:"medida",colores:{fondo:"#0d0716",neon:"#a78bfa",acento:"#f472d0",texto:"#efe9fb"}});
+    return Promise.resolve({texto:acc==="aplicar"?"Listo: aplicado.":acc==="rechazar"?"Rechazado: no lo aplico.":"Se lo vuelvo a encargar.",aspecto:acc==="aplicar"}); },
+  salva_datos:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
   fondo_quitar:function(){ return Promise.resolve({ok:true,texto:"Listo."}); },
   fondo_datos:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
   icono_img:function(){ return Promise.resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="); },
@@ -684,6 +697,39 @@ function pintaFondos(){
       llama("fondo_poner", el.dataset.id).then(function(r){ aviso(esc((r&&r.texto)||""), 4); refrescaBarra(); }).catch(function(){}); }; });
   }).catch(function(){ c.innerHTML='<div class="texto">No he podido buscar las imágenes.</div>'; });
 }
+// ---------- v3.74: DISEÑOS que la Kira del móvil hizo por encargo (se ven ANTES de aplicarlos) ----------
+var ESTADO_DIS={pedido:"Esperando al móvil",entregado:"El móvil lo está haciendo",listo:"Listo: espera tu visto bueno",
+  aplicado:"Aplicado",rechazado:"Rechazado",fallido:"El móvil no pudo"};
+function vistaDiseno(x){
+  var ok=/^#[0-9a-fA-F]{6}$/;
+  if(/^data:image\//.test(x.mini||"")) return '<img src="'+esc(x.mini)+'" alt="">';
+  if(x.colores && ok.test(x.colores.fondo||"") && ok.test(x.colores.neon||"") && ok.test(x.colores.acento||"") && ok.test(x.colores.texto||"")){
+    var c=x.colores; return '<div class="dtema" style="background:'+c.fondo+';color:'+c.texto+'"><b style="color:'+c.neon+'">KIRA</b>'+
+      '<span style="background:'+c.neon+'"></span><span style="background:'+c.acento+'"></span><small>Así se leería el texto</small></div>'; }
+  if(x.ventana){ var v=x.ventana, r=Math.max(0,Math.min(28,+v.radio||0)), b=Math.max(0,Math.min(3,+v.borde||0));
+    return '<div class="dvent" style="border-radius:'+r+'px;border-width:'+b+'px;opacity:'+Math.max(.8,Math.min(1,+v.opacidad||1))+(v.sombra?';box-shadow:0 12px 30px rgba(0,0,0,.6)':'')+'">Ventana</div>'; }
+  return '<span>'+esc(x.nombre_tipo||x.tipo)+'</span>';
+}
+function pintaDisenos(){
+  var c=$("vcuerpo"); c.innerHTML='<div class="vacio">Mirando los diseños del móvil…</div>';
+  llama("disenos").then(function(d){ if(actual!=="disenos") return; d=d||{}; var l=d.lista||[];
+    c.innerHTML='<div class="texto">'+esc(d.texto||"")+'</div><div class="fondos disenos">'+l.map(function(x){
+      var bot=x.estado==="listo" ? '<button class="b mini prin" data-dz="aplicar" data-id="'+esc(x.id)+'" data-dos="1">Aplicar</button>'+
+        '<button class="b mini" data-dz="rechazar" data-id="'+esc(x.id)+'">Rechazar</button>' : '';
+      if(x.estado==="listo"||x.estado==="rechazado"||x.estado==="fallido"||x.estado==="aplicado") bot+='<button class="b mini" data-dz="otro" data-id="'+esc(x.id)+'">Pedir otro</button>';
+      return '<div class="fondo-i diseno" data-est="'+esc(x.estado)+'"><div class="fmini">'+vistaDiseno(x)+'</div><small><b>'+esc(x.nombre_tipo||x.tipo)+'</b>'+
+        (x.destino?' · para '+esc(x.destino):'')+' · «'+esc(x.descripcion)+'»<br>'+esc(ESTADO_DIS[x.estado]||x.estado)+(x.nota?' · '+esc(x.nota):'')+'</small>'+
+        (bot?'<div class="fbot dbot">'+bot+'</div>':'')+'</div>'; }).join("")+'</div><div class="resultado" id="resultado"></div>';
+    [].forEach.call(c.querySelectorAll("[data-dz]"), function(b){ b.onclick=function(ev){ ev.stopPropagation();
+      if(b.dataset.dos && !b.dataset.armado){ b.dataset.armado="1"; b.dataset.antes=b.textContent; b.textContent="¿Seguro? Pulsa otra vez"; b.classList.add("aviso");
+        setTimeout(function(){ if(b.dataset.armado){ delete b.dataset.armado; b.textContent=b.dataset.antes; b.classList.remove("aviso"); } }, 5000); return; }
+      delete b.dataset.armado;
+      llama("diseno_hacer", b.dataset.id, b.dataset.dz).then(function(r){ r=r||{};
+        if(r.aspecto) refrescaBarra(); pintaDisenos();
+        setTimeout(function(){ var res=$("resultado"); if(res){ res.className="resultado on"; res.textContent=r.texto||"Hecho."; } }, 400); }); }; });
+    window.KIRA_DISENOS={n:l.length};
+  }).catch(function(){ c.innerHTML='<div class="texto">No he podido mirar los diseños.</div>'; });
+}
 // ---------- v3.21: el ASPECTO que tú eliges («cambia el tema a bosque», «oculta el icono del mapa»…) ----------
 function claroDe(hex){ var h=String(hex||"").replace("#",""); if(h.length!==6) return false;
   var r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
@@ -701,6 +747,12 @@ function ponAspecto(a){
     $("fondo").style.background = "radial-gradient(1100px 700px at 72% 38%,"+c.neon+"26 0%,"+c.fondo+" 55%,"+c.fondo+" 100%)";
     document.body.dataset.tema = ASPECTO.tema||"";
   }
+  var vs=ASPECTO.ventanas||{}, vn=$("ventana");      // v3.74: el estilo de ventanas que diseñó el móvil
+  if(vn){ vn.style.borderRadius=(vs.radio!=null?Math.max(0,Math.min(28,+vs.radio))+"px":"");
+    vn.style.borderWidth=(vs.borde!=null?Math.max(0,Math.min(3,+vs.borde))+"px":"");
+    vn.style.boxShadow=(vs.sombra===false?"none":"");
+    if(vs.opacidad!=null){ var op=Math.max(.8,Math.min(1,+vs.opacidad)), cl=claroDe(c.fondo||"#05070f");
+      R.setProperty("--panel", cl ? "rgba(255,255,255,"+op+")" : "rgba(12,17,31,"+op+")"); } }
   ponFondo(ASPECTO.fondo);                             // v3.45: tu imagen de fondo (encima del color del tema)
   var ahora=JSON.stringify([ASPECTO.ocultos||[],ASPECTO.orden_iconos||[],ASPECTO.nombres||{},ASPECTO.dibujos||{},ASPECTO.iconos_img||{}]);
   if(ahora!==ponAspecto.ultimo){ ponAspecto.ultimo=ahora; pintaIconos(); }
@@ -714,7 +766,9 @@ function mostrarSalva(){
   box.innerHTML=""; box.classList.add("on"); box.dataset.estilo=est;
   var mover=function(el){ var w=innerWidth, h=innerHeight, ew=el.offsetWidth||200, eh=el.offsetHeight||200;
     el.style.left=Math.round(Math.random()*Math.max(1,w-ew))+"px"; el.style.top=Math.round(Math.random()*Math.max(1,h-eh))+"px"; };
-  if(est==="orbe"){ var o=document.createElement("div"); o.className="sorbe"; o.textContent="KIRA"; box.appendChild(o); mover(o);
+  if(est==="imagen"){ box.style.background="#000";        // v3.74: la imagen que diseñó el móvil
+    llama("salva_datos").then(function(u){ if(salvaOn() && /^data:image\//.test(u||"")) box.style.background='#000 center / cover no-repeat url("'+u+'")'; }).catch(function(){}); }
+  else if(est==="orbe"){ var o=document.createElement("div"); o.className="sorbe"; o.textContent="KIRA"; box.appendChild(o); mover(o);
     salvaReloj=setInterval(function(){ mover(o); }, 7000); }
   else if(est==="reloj"){ var r=document.createElement("div"); r.className="sreloj"; box.appendChild(r);
     var pon=function(){ var d=new Date(); r.innerHTML=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)+
@@ -732,7 +786,7 @@ function mostrarSalva(){
     paso(); }
   window.KIRA_SALVA={estilo:est, visto:true};
 }
-function quitarSalva(){ if(!salvaOn()) return; $("salva").classList.remove("on"); $("salva").innerHTML="";
+function quitarSalva(){ if(!salvaOn()) return; $("salva").classList.remove("on"); $("salva").innerHTML=""; $("salva").style.background="";
   if(salvaReloj){ clearInterval(salvaReloj); salvaReloj=null; } if(salvaAnim){ cancelAnimationFrame(salvaAnim); salvaAnim=null; } }
 ["mousemove","mousedown","keydown","wheel","touchstart"].forEach(function(ev){
   document.addEventListener(ev, function(e){ ultimoToque=Date.now();
@@ -790,6 +844,7 @@ function abrir(id, consulta, tipo){
   if(id==="terminal") return pintaTerminal();
   if(id==="aplicaciones") return pintaAplicaciones();   // v3.45
   if(id==="fondos") return pintaFondos();
+  if(id==="disenos") return pintaDisenos();
   if(id.indexOf("acceso:")===0) return pintaAcceso(id.slice(7));   // v3.26: un programa de Kira
   if(id==="mapa"){ c.className="vcuerpo marco"; c.innerHTML='<iframe src="mapa.html" title="Mapa de ataques"></iframe>'; return; }
   if(id==="programando"){
@@ -1174,7 +1229,7 @@ function hablarCon(texto){
           var ca=$("callar"); if(ca) ca.onclick=function(){ llama("callar"); quitaAviso(); };
           if(d.pedir_clave){ abrir("wifi"); }
           if(d.aspecto) refrescaBarra();                       // v3.21: cambiaste algo de mi sistema
-          if(d.abrir==="fondos"||d.abrir==="aplicaciones") abrir(d.abrir);   // v3.45
+          if(d.abrir==="fondos"||d.abrir==="aplicaciones"||d.abrir==="disenos") abrir(d.abrir);   // v3.45
           if(d.salvapantallas) setTimeout(function(){ refrescaBarra(); setTimeout(mostrarSalva, 600); }, 300);
         }
       }).catch(function(){});

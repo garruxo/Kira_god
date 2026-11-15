@@ -50,7 +50,7 @@ except Exception:                         # noqa: BLE001
 ALIAS_TEMA = {"verde": "bosque", "azul": "oceano", "naranja": "fuego", "rojo": "fuego", "morado": "violeta",
               "lila": "violeta", "blanco": "claro", "oscuro": "noche", "negro": "noche", "mar": "oceano",
               "normal": "noche", "original": "noche", "de siempre": "noche"}
-ESTILOS = ("orbe", "estrellas", "reloj", "negro")
+ESTILOS = ("orbe", "estrellas", "reloj", "negro", "imagen")     # v3.74: «imagen» = la que diseñó el móvil
 # iconos del escritorio que se pueden ocultar (Hablar y Ajustes, nunca: así siempre se puede deshacer)
 ICONOS_OCULTABLES = {"buscador": "buscador", "wifi": "wifi", "wi fi": "wifi", "red": "red", "mi red": "red",
                      "mapa": "mapa", "mapa de ataques": "mapa", "maquina": "maquina", "maquina virtual": "maquina",
@@ -74,7 +74,8 @@ ALIAS_DIBUJO = {"lupa": "buscador", "bocadillo": "hablar", "globo": "mapa", "mun
 DEFECTO = {"tema": "noche", "salvapantallas": {"activo": True, "minutos": 10, "estilo": "orbe"},
            "saludo": "", "despedida": "", "voz": {"velocidad": 0, "tono": 0}, "ocultos": [],
            "apagar_pantalla_min": 0, "brillo_xrandr": 1.0, "orden_iconos": [], "dibujos": {}, "nombres": {}, "salas": {},
-           "fondo": "", "iconos_img": {}}          # v3.45: fondo de pantalla e iconos con imagen (rutas de fondos_kira)
+           "fondo": "", "iconos_img": {},
+           "tema_medida": {}, "ventanas": {}, "salva_img": ""}   # v3.74: lo que diseña el móvil (con tu visto bueno)          # v3.45: fondo de pantalla e iconos con imagen (rutas de fondos_kira)
 MAX_FRASE = 140
 MAX_HISTORIAL = 30
 _MAC = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -108,9 +109,30 @@ def cargar(ruta=None):
                     d[k] = v
     except (OSError, ValueError):
         pass
-    if d.get("tema") not in TEMAS:
+    if d.get("tema") not in TEMAS and not (d.get("tema") == "medida" and _medida(d)):
         d["tema"] = "noche"
     return d
+
+
+def _medida(d):
+    """v3.74: el tema hecho a medida por el móvil (4 colores #rrggbb) o None."""
+    c = d.get("tema_medida")
+    ok = re.compile(r"^#[0-9a-fA-F]{6}$")
+    if isinstance(c, dict) and all(isinstance(c.get(k), str) and ok.match(c[k]) for k in ("fondo", "neon", "acento", "texto")):
+        return {k: c[k].lower() for k in ("fondo", "neon", "acento", "texto")}
+    return None
+
+
+def ventanas_limpias(v):
+    """v3.74: el estilo de las ventanas (radio, borde, opacidad, sombra) acotado; {} = el de siempre."""
+    if not isinstance(v, dict) or not v:
+        return {}
+    try:
+        return {"radio": max(0, min(28, int(v.get("radio", 16)))), "borde": max(0, min(3, int(v.get("borde", 1)))),
+                "opacidad": round(max(0.80, min(1.0, float(v.get("opacidad", 0.97)))), 2),
+                "sombra": bool(v.get("sombra", True))}
+    except (TypeError, ValueError):
+        return {}
 
 
 def guardar(d, ruta=None):
@@ -150,6 +172,8 @@ def deshacer(ruta=None):
 
 
 def colores(d):
+    if d.get("tema") == "medida" and _medida(d):
+        return _medida(d)
     return dict(TEMAS.get(d.get("tema"), TEMAS["noche"]))
 
 
@@ -157,11 +181,16 @@ def para_pantalla(ruta=None):
     """Lo que necesita la pantalla del escritorio para pintarse como tú quieres."""
     d = cargar(ruta)
     s = d.get("salvapantallas") or {}
+    est = s.get("estilo") if s.get("estilo") in ESTILOS else "orbe"
+    salva_img = _fondo_pantalla(d.get("salva_img")) if est == "imagen" else None
+    if est == "imagen" and not salva_img:
+        est = "orbe"
     return {"tema": d["tema"], "colores": colores(d), "ocultos": [i for i in d.get("ocultos") or []
                                                                     if i in ICONOS_OCULTABLES.values()],
             "salvapantallas": {"activo": bool(s.get("activo", True)),
                                "minutos": max(1, min(120, int(s.get("minutos") or 10))),
-                               "estilo": s.get("estilo") if s.get("estilo") in ESTILOS else "orbe"},
+                               "estilo": est, "imagen": salva_img},
+            "ventanas": ventanas_limpias(d.get("ventanas")),
             "saludo": str(d.get("saludo") or "")[:MAX_FRASE], "despedida": str(d.get("despedida") or "")[:MAX_FRASE],
             "orden_iconos": [str(i)[:60] for i in (d.get("orden_iconos") or []) if _id_icono_valido(i)][:60],
             "dibujos": {str(k)[:60]: v for k, v in (d.get("dibujos") or {}).items()
@@ -200,6 +229,55 @@ def _fondo_pantalla(ruta):
 def ruta_fondo(ruta_aj=None):
     r = cargar(ruta_aj).get("fondo")
     return r if _imagen_valida(r) else ""
+
+
+def ruta_salva_img(ruta_aj=None):
+    r = cargar(ruta_aj).get("salva_img")
+    return r if _imagen_valida(r) else ""
+
+
+def aplicar_diseno(e, ruta_img="", ruta=None, extras=()):
+    """v3.74: aplica un diseño que hizo el móvil y que TÚ has aprobado. `e` = el encargo (disenos_kira). Devuelve
+    el texto para ti. Todo con `cambiar` (así «deshaz el último cambio» lo quita)."""
+    tipo = (e or {}).get("tipo")
+    if tipo in ("icono", "logo", "fondo", "salvapantallas") and not _imagen_valida(ruta_img):
+        raise SistemaError("La imagen de ese diseño ya no está.")
+    if tipo == "fondo":
+        cambiar("fondo", ruta_img, ruta, que="fondo diseñado en el móvil")
+        return "Listo: tu fondo de pantalla es ahora el que diseñó la Kira del móvil."
+    if tipo == "salvapantallas":
+        d = cargar(ruta)
+        cambiar("salva_img", ruta_img, ruta, que="imagen del salvapantallas")
+        sv = dict(d.get("salvapantallas") or {})
+        sv.update(estilo="imagen", activo=True)
+        cambiar("salvapantallas", sv, ruta, que="salvapantallas con la imagen del móvil")
+        return "Listo: el salvapantallas enseña ahora la imagen que diseñó la Kira del móvil."
+    if tipo in ("icono", "logo"):
+        nombre = (e.get("destino") or "").strip() or ("hablar" if tipo == "logo" else "")
+        if not nombre:
+            raise SistemaError("Ese icono no dice para qué es. Pídelo así: «pídele al móvil un icono de … para el mapa».")
+        ident = resolver_icono(nombre, extras)
+        if ident is None:
+            raise SistemaError(f"No encuentro el icono «{nombre}». Los que hay: " + ", ".join(
+                list(ICONOS_BASE) + [t for _, t in extras]) + ".")
+        imgs = dict(cargar(ruta).get("iconos_img") or {})
+        imgs[ident] = ruta_img
+        cambiar("iconos_img", imgs, ruta, que="icono diseñado en el móvil")
+        return f"Listo: el icono «{ident}» lleva ahora el {tipo} que diseñó la Kira del móvil."
+    if tipo == "tema":
+        col = _medida({"tema_medida": e.get("colores")})
+        if not col:
+            raise SistemaError("Esos colores no valen.")
+        cambiar("tema_medida", col, ruta, que="colores del tema del móvil")
+        cambiar("tema", "medida", ruta, que="tema diseñado en el móvil")
+        return "Listo: KiraOS lleva ahora el tema de colores que diseñó la Kira del móvil."
+    if tipo == "ventana":
+        v = ventanas_limpias(e.get("ventana"))
+        if not v:
+            raise SistemaError("Ese estilo de ventana no vale.")
+        cambiar("ventanas", v, ruta, que="estilo de ventanas del móvil")
+        return "Listo: las ventanas tienen ahora el estilo que diseñó la Kira del móvil."
+    raise SistemaError("No sé aplicar ese diseño.")
 
 
 def ruta_icono_img(ident, ruta_aj=None):
@@ -597,6 +675,12 @@ def orden(texto):
     orig = re.sub(r"^(?:oye\s+|hola\s+)?kira\b[\s,:;]*", "", orig, flags=re.I)
     orig = re.sub(r"^por\s+favor\s*,?\s*", "", orig, flags=re.I)
     t = _plano(orig)
+    try:                                       # v3.74: «pídele al móvil un fondo…» es un ENCARGO de diseño, no esto
+        import disenos_kira
+        if disenos_kira.orden(orig):
+            return None
+    except Exception:
+        pass
     if not t:
         return None
     # --- v3.45: fondo de pantalla, iconos con imagen y el menú de aplicaciones ---

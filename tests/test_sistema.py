@@ -69,7 +69,7 @@ ok(sk.para_pantalla()["ocultos"] == ["terminal"], "oculta un icono")
 sk.responder("pon el salvapantallas de reloj")
 sk.responder("salvapantallas a los 3 minutos")
 s = sk.para_pantalla()["salvapantallas"]
-ok(s == {"activo": True, "minutos": 3, "estilo": "reloj"}, "salvapantallas: estilo y minutos")
+ok(s == {"activo": True, "minutos": 3, "estilo": "reloj", "imagen": None}, "salvapantallas: estilo y minutos")
 sk.responder("al encender dime: Buenos días, Papi")
 sk.responder("al apagar di: Hasta mañana")
 ok(sk.saludo() == "Buenos días, Papi" and sk.despedida() == "Hasta mañana", "saludo y despedida, tal cual los dijiste")

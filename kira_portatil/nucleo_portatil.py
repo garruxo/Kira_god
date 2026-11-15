@@ -584,6 +584,14 @@ def ejecutar(core, orden, paso):
     import maquina_kira as mq
     import wifi_kira as wk
     import sentidos_portatil as sp
+    import disenos_kira as dz_                    # v3.74: ENCARGAR un diseño a la Kira del móvil (antes que el sistema)
+    o_d = dz_.orden(o)
+    if o_d is not None:
+        if o_d[0] == "ver":
+            return {"texto": dz_.texto_lista(core.dir) + "\n\nLos que están listos los ves (y apruebas) en Ajustes ▸ "
+                    "Diseños del móvil."}
+        e_d = dz_.pedir(core.dir, o_d[1]["tipo"], o_d[1]["descripcion"], o_d[1]["destino"])
+        return {"texto": dz_.texto_pedido(e_d)}
     import sistema_kira as sis_                   # v3.21: cambiar SU sistema (aspecto, salvapantallas, voz, brillo,
     o_s = sis_.orden(o)                            # sonido, bluetooth…) — antes que las ventanas («pon el icono…»)
     if o_s is not None:
@@ -1253,7 +1261,16 @@ class Nucleo:
         """v2.87: lo nuevo del móvil entra en KiraOS (se suma, no se borra) y le devuelve lo nuevo de KiraOS."""
         import sincronia_kira as sc
         with self._lock_sinc:
-            return sc.aplicar_en_kiraos(self.datos, self.core.recuerdos, paquete)
+            res, resp = sc.aplicar_en_kiraos(self.datos, self.core.recuerdos, paquete)
+        if res.get("disenos"):                          # v3.74: han llegado diseños del móvil → te aviso (no se aplican)
+            try:
+                import avisos_kira as av
+                av.prioritario(f"La Kira del móvil me ha mandado {res['disenos']} diseño(s). Míralos en Ajustes ▸ "
+                               "Diseños del móvil: no se aplican hasta que les des el visto bueno.",
+                               titulo="Diseños del móvil")
+            except Exception:
+                pass
+        return res, resp
 
 
 def reiniciar_proceso_luego(segundos=15, salir=None):

@@ -337,6 +337,65 @@ class EscritorioMixin:
         except Exception:
             return ""
 
+    def salva_datos(self):
+        """v3.74: la imagen del salvapantallas (la que diseñó el móvil), como «data:»."""
+        try:
+            import sistema_kira
+            import fondos_kira as fk
+            r = sistema_kira.ruta_salva_img(getattr(self, "ruta_sistema", None))
+            return fk.fondo(r, ancho=1920) if r else ""
+        except Exception:
+            return ""
+
+    # ---------- v3.74: DISEÑOS que la Kira del móvil hizo por encargo (te los enseño ANTES de aplicarlos) ----------
+    def disenos(self):
+        import disenos_kira as dz
+        import fondos_kira as fk
+        lista = []
+        for e in reversed(dz.encargos(DATOS_NUCLEO)[-24:]):
+            x = {"id": e["id"], "tipo": e["tipo"], "nombre_tipo": dz.NOMBRE_TIPO.get(e["tipo"], e["tipo"]),
+                 "descripcion": e.get("descripcion", ""), "destino": e.get("destino", ""), "estado": e.get("estado", ""),
+                 "nota": e.get("nota", ""), "mini": "", "colores": e.get("colores") or None,
+                 "ventana": e.get("ventana") or None}
+            r = dz.ruta_imagen(DATOS_NUCLEO, e)
+            if r:
+                try:
+                    x["mini"] = fk.miniatura(r, 260)
+                except Exception:
+                    x["mini"] = ""
+            lista.append(x)
+        n = sum(1 for x in lista if x["estado"] == "listo")
+        texto = ((f"Tengo {n} diseño(s) de la Kira del móvil esperando tu visto bueno. Míralos: NO se aplican hasta que "
+                  "pulses «Aplicar» (dos toques). Con «Pedir otro» se lo vuelvo a encargar.") if n else
+                 dz.texto_lista(DATOS_NUCLEO))
+        return {"texto": texto, "lista": lista}
+
+    def diseno_hacer(self, ident, accion):
+        import disenos_kira as dz
+        e = dz.uno(DATOS_NUCLEO, ident)
+        if not e:
+            return {"texto": "Ese diseño ya no está."}
+        if accion == "aplicar":
+            if e.get("estado") != "listo":
+                return {"texto": "Ese diseño no está listo para aplicar."}
+            try:
+                import sistema_kira
+                ex = [(v["id"], v["titulo"]) for v in self.ventanas_extra() if v.get("en") == "escritorio"]
+                txt = sistema_kira.aplicar_diseno(e, dz.ruta_imagen(DATOS_NUCLEO, e),
+                                                  ruta=getattr(self, "ruta_sistema", None), extras=ex)
+            except Exception as ex_:                  # noqa: BLE001
+                return {"texto": f"[x] No he podido aplicarlo: {ex_}"}
+            dz.marcar(DATOS_NUCLEO, ident, "aplicado")
+            return {"texto": txt + " (Si no te gusta: «deshaz el último cambio».)", "aspecto": True}
+        if accion == "rechazar":
+            dz.marcar(DATOS_NUCLEO, ident, "rechazado")
+            return {"texto": "Rechazado: no lo aplico."}
+        if accion == "otro":
+            n = dz.otro(DATOS_NUCLEO, ident)
+            return {"texto": "Se lo vuelvo a encargar a la Kira del móvil (otro distinto) en la próxima sincronía."
+                    if n else "No he podido pedir otro."}
+        return {"texto": "No conozco ese botón."}
+
     def icono_img(self, ident):
         try:
             import sistema_kira
@@ -509,10 +568,23 @@ class EscritorioMixin:
 
     def _contestar(self, t, texto):
         try:
+            o_d = None
+            try:                                                   # v3.74: encargar un diseño al móvil / verlos
+                import disenos_kira
+                o_d = disenos_kira.orden(texto)
+            except Exception:
+                o_d = None
+            if o_d is not None:
+                if o_d[0] == "ver":
+                    t["respuesta"] = "Te enseño los diseños que le he encargado al móvil."
+                    t["abrir"] = "disenos"
+                else:
+                    e_d = disenos_kira.pedir(DATOS_NUCLEO, o_d[1]["tipo"], o_d[1]["descripcion"], o_d[1]["destino"])
+                    t["respuesta"] = disenos_kira.texto_pedido(e_d)
             o_s = None
             try:                                                   # v3.21: cambiar el sistema se hace AQUÍ, al
                 import sistema_kira                                # momento (no espera en la cola del núcleo)
-                o_s = sistema_kira.orden(texto)
+                o_s = None if o_d is not None else sistema_kira.orden(texto)
             except Exception:
                 o_s = None
             inst_esto = False                                      # v3.31: «descarga e instala esto» (lo que ve en el Buscador)
@@ -529,7 +601,9 @@ class EscritorioMixin:
                                  (_aex.quiere_forzar(texto) and getattr(self, "_app_bloqueada", "")))
             except Exception:
                 inst_esto = False
-            if o_s is not None:
+            if o_d is not None:
+                pass                                               # v3.74: ya contestado arriba
+            elif o_s is not None:
                 try:
                     ex = [(v["id"], v["titulo"]) for v in self.ventanas_extra() if v.get("en") == "escritorio"]
                 except Exception:
@@ -635,7 +709,7 @@ class EscritorioMixin:
         for k in ("aspecto", "salvapantallas"):
             if t.get(k):
                 r[k] = True
-        if t.get("abrir") in ("fondos", "aplicaciones"):        # v3.45: abre esa ventana
+        if t.get("abrir") in ("fondos", "aplicaciones", "disenos"):   # v3.45/v3.74: abre esa ventana
             r["abrir"] = t["abrir"]
         return r
 
@@ -1106,6 +1180,7 @@ class EscritorioMixin:
         return {"titulo": "Ajustes", "texto": texto,
                 "botones": [{"texto": "Todas las aplicaciones", "accion": "app:aplicaciones"},     # v3.45
                             {"texto": "Fondo de pantalla", "accion": "app:fondos"},
+                            {"texto": "Diseños del móvil", "accion": "app:disenos"},      # v3.74
                             {"texto": "Cerebro rápido", "accion": "hacer:rapido"},
                             {"texto": "Cerebro grande", "accion": "hacer:grande"},
                             {"texto": "Con voz", "accion": "hacer:voz_si"},
