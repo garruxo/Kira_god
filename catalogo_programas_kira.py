@@ -99,6 +99,90 @@ def anotar_web(dir_, pag, tema=""):
     return e
 
 
+# ---------- v3.89: lo que ESTUDIA de un programa sirve luego para instalarlo y arrancarlo ----------
+MAX_GUIA = 200_000
+
+
+def _carpeta_guias(dir_):
+    return os.path.join(dir_, "guias_programas")
+
+
+def _ruta_guia(dir_, iid):
+    return os.path.join(_carpeta_guias(dir_), re.sub(r"[^\w]", "", str(iid))[:20] + ".md")
+
+
+def _de_quien(dir_, pag, tema=""):
+    """¿De qué programa es esta página? El suyo si ES un programa; si no, el programa ya apuntado de la misma web
+    (sus páginas de documentación, de instalación…) o el que nombra el tema que estudias. → id o None."""
+    p = es_programa(pag)
+    if p:
+        return _id(p["fuente"])
+    url = str((pag or {}).get("url") or "")
+    dom = urllib.parse.urlsplit(url).netloc.lower()
+    r = repo_de(re.sub(r"/(wiki|issues|discussions|pulls?)(/.*)?$", "", url))   # la wiki de un repo es suya
+    if r:
+        return _id(f"https://github.com/{r[0]}/{r[1]}")
+    tema_l = str(tema or "").lower()
+    for e in _leer(dir_):
+        edom = urllib.parse.urlsplit(str(e.get("pagina") or e.get("fuente") or "")).netloc.lower()
+        if dom and edom and dom == edom and "github.com" not in dom:
+            return e.get("id")
+        nom = str(e.get("nombre") or "").lower()
+        if len(nom) >= 4 and nom in tema_l:
+            return e.get("id")
+    return None
+
+
+def guardar_guia(dir_, pag, tema=""):
+    """Guarda TAL CUAL (sin resumir: el resumen pierde las órdenes) lo que dice la página sobre cómo instalar y
+    arrancar el programa: su texto con los bloques de código en su sitio. Cada página una vez; tope 200 KB.
+    Devuelve el id del programa o None. Lo usa Kira al instalarlo / si no arranca."""
+    iid = _de_quien(dir_, pag, tema)
+    texto = str((pag or {}).get("texto") or "")
+    if not iid or len(texto) < 40:
+        return None
+    url = str((pag or {}).get("url") or "")
+    ruta = _ruta_guia(dir_, iid)
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            viejo = f.read()
+    except OSError:
+        viejo = ""
+    cab = f"\n\n<!-- página: {url} -->\n# {str((pag or {}).get('titulo') or '')[:120]}\n\n"
+    if f"<!-- página: {url} -->" in viejo or len(viejo) >= MAX_GUIA:
+        return iid
+    nuevo = (viejo + cab + texto[:60_000])[:MAX_GUIA]
+    try:
+        os.makedirs(_carpeta_guias(dir_), mode=0o700, exist_ok=True)
+        tmp = ruta + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(nuevo)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, ruta)
+    except OSError:
+        return None
+    return iid
+
+
+def guia_de(dir_, fuente="", pagina="", nombre=""):
+    """Lo estudiado de ese programa (texto con sus órdenes), o ''. Por su fuente, su página o su nombre."""
+    ids = [_id(f) for f in (fuente, pagina) if f]
+    for f in (fuente, pagina):
+        r = repo_de(str(f or ""))
+        if r:
+            ids.append(_id(f"https://github.com/{r[0]}/{r[1]}"))
+    nom = str(nombre or "").lower().strip()
+    if nom:
+        ids += [e.get("id") for e in _leer(dir_) if str(e.get("nombre") or "").lower().strip() == nom]
+    for iid in ids:
+        try:
+            with open(_ruta_guia(dir_, iid), encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            continue
+    return ""
+
+
 def web(dir_):
     return list(reversed(_leer(dir_)))
 

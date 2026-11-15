@@ -1883,6 +1883,7 @@ class KiraGodCore:
         try:                                              # v3.84: si la página es un PROGRAMA, va a «Mis programas»
             import catalogo_programas_kira as cpk
             cpk.anotar_web(self.dir, pag, tema)
+            cpk.guardar_guia(self.dir, pag, tema)        # v3.89: cómo se instala/arranca, tal cual (sin resumir)
         except Exception:
             pass
         return bool(n), resumen

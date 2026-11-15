@@ -375,7 +375,38 @@ def ordenes_de_texto(texto):
     return sal[:80]
 
 
-def leer_readme(carpeta):
+DATOS = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_portatil/kira_datos"))
+
+
+def guia_estudiada(carpeta):
+    """v3.89: lo que Kira ESTUDIÓ (o está estudiando) de ese programa en internet —su página, su wiki, su guía de
+    instalación—, guardado tal cual. Se busca por el icono que tiene esa carpeta. '' si no estudió nada."""
+    try:
+        import accesos_kira as ak
+        import catalogo_programas_kira as cpk
+    except ImportError:
+        return ""
+    try:
+        real = os.path.realpath(carpeta or "")
+        for a in ak.listar(DATOS):
+            if a.get("carpeta") and os.path.realpath(a["carpeta"]) == real:
+                return cpk.guia_de(DATOS, a.get("fuente") or "", a.get("pagina") or "", a.get("titulo") or "")
+    except Exception:                                 # noqa: BLE001
+        pass
+    return ""
+
+
+def leer_readme(carpeta, con_estudio=True):
+    """Su README (o INSTALL…) y, detrás, lo que Kira estudió de ese programa (v3.89)."""
+    base = _leer_readme_carpeta(carpeta)
+    if con_estudio:
+        extra = guia_estudiada(carpeta)
+        if extra:
+            base = (base + "\n\n" if base else "") + extra
+    return base
+
+
+def _leer_readme_carpeta(carpeta):
     for raiz, dirs, fich in os.walk(carpeta or ""):
         if raiz[len(carpeta):].count(os.sep) > 1:
             dirs[:] = []
