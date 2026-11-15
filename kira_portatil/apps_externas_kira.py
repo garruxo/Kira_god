@@ -121,6 +121,9 @@ def metodo(fuente):
         return "appimage" if low.endswith(".appimage") else "descarga"
     if ".appimage" in low:
         return "appimage"
+    if "github.com" in low and ("/releases/download/" in low or "/raw/" in low
+                                or "objects.githubusercontent" in low):
+        return "descarga"           # v3.86: un archivo de sus versiones se BAJA, no se clona el repositorio
     if "github.com" in low or re.match(r"^[\w.-]+/[\w.-]+$", f):
         return "github"
     if low.startswith("http://") or low.startswith("https://"):
@@ -211,25 +214,76 @@ def _traer_texto(url, traer=None):
         return r.read(3_000_000).decode("utf-8", "ignore")
 
 
+_GH_REPO = re.compile(r"^https?://(?:www\.)?github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?(?:/.*)?$", re.I)
+_GH_NO = {"topics", "features", "marketplace", "about", "orgs", "sponsors", "collections", "trending", "search",
+          "explore", "settings", "login", "join"}
+
+
 def _url_github(fuente):
+    """La dirección para clonar: SIEMPRE la raíz del repositorio (v3.86: «…/tree/<código>», «…/commit/…»,
+    «…/releases» o «…/blob/…» clonaban con un nombre raro)."""
     f = str(fuente or "").strip()
     if re.match(r"^[\w.-]+/[\w.-]+$", f):
         return "https://github.com/" + f + ".git"
+    m = re.match(r"^https?://codeload\.github\.com/([\w.-]+)/([\w.-]+)", f, re.I)
+    if m:
+        return f"https://github.com/{m.group(1)}/{m.group(2)}.git"
+    m = _GH_REPO.match(f.split("?")[0].split("#")[0])
+    if m and m.group(1).lower() not in _GH_NO:
+        return f"https://github.com/{m.group(1)}/{m.group(2)}.git"
     if f.startswith("http") and "github.com" in f:
         return f if f.endswith(".git") else f.rstrip("/") + ".git"
     return f
 
 
+_RELLENO = {"archive", "archives", "zip", "zipball", "tarball", "tar", "download", "downloads", "releases", "release",
+            "refs", "heads", "tags", "tag", "tree", "blob", "commit", "commits", "raw", "main", "master", "latest",
+            "files", "file", "dl", "get", "src", "source", "bin", "linux", "x86_64", "amd64", "d"}
+
+
+def _parece_codigo(trozo):
+    """«274c0e1e2d4785a76ef7» (un código de git), «v1.2.3», «1.0» o cosas de relleno: no sirven de nombre."""
+    t = str(trozo or "").lower()
+    return (not t or t in _RELLENO or re.fullmatch(r"[0-9a-f]{7,64}", t) is not None
+            or re.fullmatch(r"v?\d+([._-]\d+)*([._-]?(rc|beta|alpha|b|a)\d*)?", t) is not None)
+
+
 def _nombre_de(fuente):
+    """Un nombre que se entienda para el icono: el del programa, no un código de versión. v3.86: si lo último del
+    enlace es un código de git, una versión o «archive/main/download…», se mira hacia atrás (el repositorio de GitHub,
+    o la carpeta de antes)."""
     f = str(fuente or "").strip().rstrip("/").split("?")[0].split("#")[0]
-    base = f.split("/")[-1] or "app"
-    base = re.sub(r"\.(?:git|appimage|deb|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2|tar|zip|run|sh|bin|x86_64)$", "",
-                  base, flags=re.I)
-    return base.replace("_", " ").replace("-", " ").strip()[:60] or "app"
+    m = _GH_REPO.match(f)
+    if m and m.group(1).lower() not in _GH_NO:
+        return m.group(2).replace("_", " ").replace("-", " ").strip()[:60] or "app"
+    m = re.match(r"^https?://codeload\.github\.com/[\w.-]+/([\w.-]+)", f, re.I)
+    if m:
+        return m.group(1).replace("_", " ").replace("-", " ").strip()[:60]
+    trozos = [t for t in re.split(r"/+", re.sub(r"^\w+://[^/]+", "", f)) if t]
+    for t in reversed(trozos or [f.split("/")[-1]]):
+        base = re.sub(r"\.(?:git|appimage|deb|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2|tar|zip|run|sh|bin|x86_64)$", "",
+                      t, flags=re.I)
+        base = re.sub(r"[_-]?v?\d+(?:\.\d+)+.*$", "", base) or base          # «programa-1.2.3-linux» → «programa»
+        if not _parece_codigo(base):
+            return base.replace("_", " ").replace("-", " ").strip()[:60] or "app"
+    dom = re.sub(r"^\w+://", "", f).split("/")[0]
+    return (dom.split(".")[-2] if dom.count(".") >= 1 else dom)[:60] or "app"
 
 
 def _carpeta_id(nombre):
     return re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")[:40] or "app"
+
+
+_NO_MIRAR = {".git", ".github", ".gitlab", ".svn", ".hg", "node_modules", "__pycache__", ".venv", "venv", ".tox",
+             ".idea", ".vscode", "tests", "test", "docs", "doc", "examples", "CMakeFiles"}
+_NO_PROGRAMA = re.compile(r"(?i)(\.(sample|so(\.\d+)*|a|o|txt|md|rst|desktop|json|ya?ml|toml|cfg|ini|png|jpe?g|svg|"
+                          r"ico|html?|css|js|map|lock|pem|crt|log)$|^(configure|config\.(guess|sub|status)|install-sh|"
+                          r"missing|depcomp|compile|ltmain\.sh|libtool|test-driver|mkinstalldirs|gradlew(\.bat)?|mvnw)$)")
+
+
+def _no_es_programa(nombre):
+    """Archivos ejecutables que NO son el programa: ejemplos de git (*.sample), librerías, ayudantes de compilar…"""
+    return bool(_NO_PROGRAMA.search(str(nombre or "")))
 
 
 def como_arrancar(carpeta):
@@ -252,7 +306,7 @@ def como_arrancar(carpeta):
         return ["npm", "start"]
     for f in ficheros:
         p = os.path.join(carpeta, f)
-        if os.path.isfile(p) and os.access(p, os.X_OK):
+        if os.path.isfile(p) and os.access(p, os.X_OK) and not _no_es_programa(f):
             return [p]
     return None
 
@@ -333,6 +387,7 @@ def buscar_lanzador(carpeta):
         return d
     binarios = []
     for raiz, dirs, fich in os.walk(carpeta):
+        dirs[:] = [d for d in dirs if d not in _NO_MIRAR]      # v3.86: nunca dentro de .git (ahí hay ejemplos ejecutables)
         if raiz[len(carpeta):].count(os.sep) > 4:
             dirs[:] = []
             continue
@@ -355,14 +410,15 @@ def buscar_lanzador(carpeta):
                 break
         for f in fich:
             p = os.path.join(raiz, f)
-            if os.path.isfile(p) and os.access(p, os.X_OK) and not f.lower().endswith((".so", ".txt", ".md", ".desktop")):
+            if os.path.isfile(p) and os.access(p, os.X_OK) and not _no_es_programa(f):
                 binarios.append((pri, p))
     if binarios:
         binarios.sort(reverse=True)
         return [binarios[0][1]]
-    for raiz, _d, fich in os.walk(carpeta):
-        for f in fich:
-            if f.lower().endswith(".sh"):
+    for raiz, dirs, fich in os.walk(carpeta):
+        dirs[:] = [d for d in dirs if d not in _NO_MIRAR]
+        for f in sorted(fich):
+            if f.lower().endswith(".sh") and not _no_es_programa(f):
                 return ["bash", os.path.join(raiz, f)]
     return None
 
