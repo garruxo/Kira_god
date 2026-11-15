@@ -1095,7 +1095,8 @@ def tipo_programa(acceso):
 
 
 def es_de_terminal(acceso):
-    return tipo_programa(acceso) == "terminal"
+    """v3.88: también si para arrancar necesita un PUENTE encendido aparte (se ve en la terminal)."""
+    return tipo_programa(acceso) == "terminal" or tiene_puente(acceso)
 
 
 def necesita_terminal(salida):
@@ -1118,48 +1119,156 @@ def _linea_paso(tipo, args, cwd, carpeta):
     return f"kira_paso {q(cwd or carpeta)} " + " ".join(q(str(x)) for x in orden)
 
 
+# ---------- v3.88: programas PUENTE (un servidor/ayudante que tiene que quedarse encendido en OTRA terminal) ----------
+_OTRA_TERMINAL = re.compile(
+    r"(?i)(another|new|second|separate|other|2nd)\s+(terminal|shell|tab|console|window)|otra\s+(terminal|consola|pesta[ñn]a|ventana)|"
+    r"(nueva|segunda)\s+(terminal|consola)|keep\s+(it\s+|this\s+)?running|leave\s+(it\s+)?running|in\s+the\s+background|"
+    r"segundo\s+plano|d[ée]jal[oa]\s+(abiert|funcionando|encendid)|first,?\s+(start|run|launch)\s+the\s+(server|backend|daemon|api)|"
+    r"primero\s+(arranca|inicia|lanza|enciende)\s+el\s+(servidor|backend|demonio)|start\s+the\s+(server|backend|daemon|api|bridge)")
+_PALABRA_PUENTE = re.compile(r"(?i)(^|[\s/._:-])(serve|server|servidor|daemon|backend|api|worker|broker|bridge|puente|"
+                             r"proxy|gateway|websocket)([\s/._:-]|$)")
+PUENTES_SISTEMA = {                     # ayudantes conocidos que no están en su carpeta (solo si ya están instalados)
+    "ollama": ["ollama", "serve"],
+    "redis-server": ["redis-server"],
+}
+
+
+def _contexto(readme, linea, antes=5):
+    """Las líneas del README que van justo antes de esa orden (para ver si dice «en otra terminal…»). PURO."""
+    lineas = str(readme or "").splitlines()
+    for i, l in enumerate(lineas):
+        if linea and linea in l:
+            return "\n".join(lineas[max(0, i - antes):i + 1])
+    return ""
+
+
+def es_puente(linea, readme="", hay_despues=True):
+    """¿Esta orden del README arranca algo que tiene que QUEDARSE ENCENDIDO aparte (un servidor, un ayudante) para que
+    el programa funcione? Por lo que dice el README alrededor («en otra terminal», «déjalo funcionando»…) o por la
+    propia orden (server, daemon, serve, backend…). PURO."""
+    l = str(linea or "")
+    if re.search(r"(?i)\b(install|build|compile|setup\.py\s+build|test|download|descargar?|clone|make|cmake|pip3?)\b", l):
+        return False
+    if _OTRA_TERMINAL.search(_contexto(readme, l)):
+        return True
+    # por la palabra (server, daemon…) solo si DESPUÉS el README arranca otra cosa (el programa de verdad): si es la
+    # única orden, ese «servidor» ES el programa
+    return bool(hay_despues and _PALABRA_PUENTE.search(l))
+
+
+def puerto_de(linea, readme=""):
+    """El puerto en el que escucha el puente (para esperar a que esté listo), o 0 si no se sabe. PURO."""
+    for t in (str(linea or ""), _contexto(readme, str(linea or ""), 3)):
+        for pat in (r"(?:--port|-p|--listen|PORT=)\s*=?\s*(\d{2,5})\b", r"(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d{2,5})\b"):
+            m = re.search(pat, t)
+            if m and 1 <= int(m.group(1)) <= 65535:
+                return int(m.group(1))
+    return 0
+
+
+def _puente_sistema(linea, which=shutil.which):
+    """«ollama serve», «redis-server»… solo si ese programa ya está instalado. Lista de argumentos o None."""
+    try:
+        a = shlex.split(str(linea or ""))
+    except ValueError:
+        return None
+    if not a:
+        return None
+    pref = PUENTES_SISTEMA.get(os.path.basename(a[0]))
+    if pref and a[:len(pref)] == pref[:len(a)] and len(a) <= len(pref) + 2 and which(pref[0]):
+        extra = [x for x in a[len(pref):] if re.match(r"^--?[\w-]{1,20}(=\w{1,20})?$|^\d{2,5}$", x)]
+        return [which(pref[0])] + pref[1:] + extra
+    return None
+
+
 def pasos_terminal(acceso, admin=False):
     """Las líneas que Kira escribirá en la terminal ANTES de arrancar: los pasos de su README (descargas, preparar…)
     que pasan los candados. Si ya se preparó una vez (marca), ninguno. Devuelve [(texto_para_ver, linea_bash)]."""
     carpeta = acceso.get("carpeta") or ""
-    if not carpeta or not os.path.isdir(carpeta) or os.path.exists(os.path.join(carpeta, MARCA)):
+    if not carpeta or not os.path.isdir(carpeta):
         return []
+    preparado = os.path.exists(os.path.join(carpeta, MARCA))   # ya preparado: solo vuelven a arrancar los PUENTES
+    readme = leer_readme(carpeta)
+    ident = re.sub(r"[^\w.-]", "_", str(acceso.get("id") or acceso.get("titulo") or "app"))[:50]
     lan = [str(x) for x in (acceso.get("lanzar") or [])]
     final = os.path.basename(lan[1] if len(lan) > 1 and os.path.basename(lan[0]) in ("python3", "python", "bash",
                                                                                          "sh", "node") else
                              (lan[0] if lan else ""))
     cwd, out, vistos = carpeta, [], set()
-    for linea in ordenes_de_texto(leer_readme(carpeta)):
-        for t in partir_linea(linea):
-            tt = t.strip()
-            m = re.match(r"^cd\s+(\S+)$", tt)
-            if m:
-                nuevo = _abs(cwd, m.group(1)) if not m.group(1).startswith("~") else ""
-                if nuevo and _dentro(carpeta, nuevo):
-                    cwd = nuevo
+    todas = [t.strip() for linea in ordenes_de_texto(readme) for t in partir_linea(linea)]
+
+    def _arranca(x):
+        o = orden_segura(x, carpeta, admin, carpeta)
+        return bool((o and o[0] == "lanzar") or _puente_sistema(x))
+
+    arrancan = [i for i, x in enumerate(todas) if _arranca(x)]
+    for n_orden, tt in enumerate(todas):
+        despues = any(i > n_orden for i in arrancan)
+        sis = _puente_sistema(tt)
+        if sis and es_puente(tt, readme, despues):
+            clave = repr(("puente", sis))
+            if clave not in vistos:
+                vistos.add(clave)
+                out.append((tt + "   (puente)", _linea_puente(sis, cwd, carpeta, puerto_de(tt, readme),
+                                                             ident, len(vistos))))
+            continue
+        m = re.match(r"^cd\s+(\S+)$", tt)
+        if m:
+            nuevo = _abs(cwd, m.group(1)) if not m.group(1).startswith("~") else ""
+            if nuevo and _dentro(carpeta, nuevo):
+                cwd = nuevo
+            continue
+        m = re.match(r"^mkdir\s+(?:-p\s+)?(\S+)$", tt)
+        if m:
+            nuevo = _abs(cwd, m.group(1))
+            if _dentro(carpeta, nuevo):
+                out.append((tt, f"kira_paso {shlex.quote(carpeta)} mkdir -p {shlex.quote(nuevo)}"))
+            continue
+        o = orden_segura(tt, carpeta, admin, cwd)
+        if not o:
+            continue
+        tipo, args = o
+        if tipo == "lanzar":                       # arrancar el propio programa ya va al final
+            base = os.path.basename(args[1] if len(args) > 1 and args[0] in ("python3", "bash", "node")
+                                    else args[0])
+            if base == final:
                 continue
-            m = re.match(r"^mkdir\s+(?:-p\s+)?(\S+)$", tt)
-            if m:
-                nuevo = _abs(cwd, m.group(1))
-                if _dentro(carpeta, nuevo):
-                    out.append((tt, f"kira_paso {shlex.quote(carpeta)} mkdir -p {shlex.quote(nuevo)}"))
+            if es_puente(tt, readme, despues):     # v3.88: un servidor/ayudante → aparte y encendido
+                clave = repr(("puente", args, cwd))
+                if clave not in vistos:
+                    vistos.add(clave)
+                    out.append((tt + "   (puente)", _linea_puente(args, cwd, carpeta, puerto_de(tt, readme),
+                                                                  ident, len(vistos))))
                 continue
-            o = orden_segura(tt, carpeta, admin, cwd)
-            if not o:
+            if args[:1] == ["npm"]:
                 continue
-            tipo, args = o
-            if tipo == "lanzar":                       # arrancar el propio programa ya va al final
-                base = os.path.basename(args[1] if len(args) > 1 and args[0] in ("python3", "bash", "node")
-                                        else args[0])
-                if base == final or args[:1] == ["npm"]:
-                    continue
-                tipo = "arreglo"                       # p. ej. «python3 descargar_modelo.py»: un paso más
-            clave = repr((tipo, args, cwd))
-            if clave in vistos:
-                continue
-            vistos.add(clave)
-            out.append((tt, _linea_paso(tipo, args, cwd, carpeta)))
+            tipo = "arreglo"                       # p. ej. «python3 descargar_modelo.py»: un paso más
+        if preparado:
+            continue
+        clave = repr((tipo, args, cwd))
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        out.append((tt, _linea_paso(tipo, args, cwd, carpeta)))
     return out[:15]
+
+
+def _linea_puente(args, cwd, carpeta, puerto, ident, n):
+    q = shlex.quote
+    log = os.path.join(REGISTROS, f"{ident}_puente{n}.log")
+    return f"kira_puente {q(cwd or carpeta)} {int(puerto)} {q(log)} " + " ".join(q(str(x)) for x in args)
+
+
+def es_puente_linea(linea_bash):
+    return str(linea_bash or "").startswith("kira_puente ")
+
+
+def tiene_puente(acceso):
+    """¿Para arrancar necesita un puente encendido aparte? (entonces se abre en la terminal, a la vista)."""
+    try:
+        return any(es_puente_linea(b) for _t, b in pasos_terminal(acceso))
+    except Exception:                                 # noqa: BLE001
+        return False
 
 
 def guion_terminal(acceso, pasos):
@@ -1173,10 +1282,13 @@ def guion_terminal(acceso, pasos):
          'kira_paso() { local d="$1"; shift; echo; printf "\\033[1;36m$ %s\\033[0m\\n" "$*"; '
          '( cd "$d" && "$@" ) || { echo "  (este paso ha fallado)"; kira_ok=0; }; }',
          f"cd {q(carpeta)} || {{ echo 'No encuentro su carpeta'; read -r _; exit 1; }}"]
+    if any(es_puente_linea(b) for _t, b in pasos):     # v3.88: ayudantes que se quedan encendidos aparte
+        l += _bash_puentes(which=shutil.which)
     if pasos:
         l.append(f"echo {q('── Kira prepara «' + titulo + '»: escribo los pasos de su README ──')}")
         l += [b for _t, b in pasos]
-        l.append(f'[ "$kira_ok" = 1 ] && touch {q(os.path.join(carpeta, MARCA))}')
+        if not all(es_puente_linea(b) for _t, b in pasos):
+            l.append(f'[ "$kira_ok" = 1 ] && touch {q(os.path.join(carpeta, MARCA))}')
     for k, v in (acceso.get("entorno") or {}).items():
         if re.match(r"^[A-Z_][A-Z0-9_]{0,40}$", str(k)):
             l.append(f"export {k}={q(str(v))}")
@@ -1188,6 +1300,37 @@ def guion_terminal(acceso, pasos):
         l.append(f'echo; echo "── «{titulo.replace(chr(34), "")}» ha terminado (código $kira_rc) ──"')
     l.append('read -r -p "Pulsa Intro para cerrar esta ventana… " _')
     return "\n".join(l) + "\n"
+
+
+def _bash_puentes(which=shutil.which):
+    """Las funciones bash para arrancar un PUENTE: se queda encendido en su propia sesión (su salida a un registro),
+    Kira espera a que esté listo (su puerto o unos segundos), y al cerrar el programa principal lo APAGA. Si te lo
+    abro con la terminal de Xubuntu, además abre OTRA ventana de terminal donde ves los mensajes del puente."""
+    ver = ""
+    for prog, op_titulo, op_ej, cadena in TERMINALES:
+        ruta = which(prog)
+        if not ruta:
+            continue
+        cab = " ".join(shlex.quote(x) for x in [ruta] + (op_titulo + ["Kira · puente"] if op_titulo else []) + [op_ej])
+        ver = (f'{cab} "tail -n +1 -f $(printf %q "$1")"' if cadena else f'{cab} tail -n +1 -f "$1"')
+        break
+    return [
+        "kira_puentes=()",
+        "kira_ver_puente() { " + (ver + " >/dev/null 2>&1 & }" if ver else ": ; }"),
+        'kira_apagar_puentes() { for p in "${kira_puentes[@]}"; do kill -- -"$p" 2>/dev/null || kill "$p" 2>/dev/null; done; }',
+        "trap kira_apagar_puentes EXIT",
+        'kira_puente() { local d="$1" puerto="$2" log="$3"; shift 3; echo; '
+        'printf "\\033[1;35m$ %s   (puente: se queda encendido aparte)\\033[0m\\n" "$*"; '
+        'if command -v setsid >/dev/null; then ( cd "$d" && exec setsid "$@" ) >"$log" 2>&1 & '
+        'else ( cd "$d" && exec "$@" ) >"$log" 2>&1 & fi; '
+        'local pid=$!; kira_puentes+=("$pid"); '
+        '[ "${KIRA_VER_PUENTE:-}" = 1 ] && kira_ver_puente "$log"; '
+        'local i=0; if [ "$puerto" != 0 ]; then echo "  espero a que el puente abra el puerto $puerto…"; '
+        'while [ $i -lt 90 ]; do (echo >/dev/tcp/127.0.0.1/$puerto) 2>/dev/null && break; '
+        'kill -0 $pid 2>/dev/null || break; sleep 1; i=$((i+1)); done; else sleep 6; fi; '
+        'if kill -0 $pid 2>/dev/null; then echo "  puente encendido. Sus mensajes: $log"; tail -n 4 "$log"; '
+        'else echo "  (el puente se ha cerrado; esto es lo último que dijo:)"; tail -n 15 "$log"; kira_ok=0; fi; }',
+    ]
 
 
 def orden_terminal(guion, titulo, which=shutil.which):
@@ -1223,6 +1366,13 @@ def guion_para(acceso, admin=None, correr=None):
 
 
 def _texto_pasos(titulo, pasos, donde):
+    puentes = [t for t, b in pasos if es_puente_linea(b)]
+    if puentes:
+        otros = len(pasos) - len(puentes)
+        return (f"Abro {titulo} en {donde}. Para arrancar necesita {'un programa puente' if len(puentes) == 1 else f'{len(puentes)} programas puente'} "
+                f"encendido aparte ({', '.join(t.replace('   (puente)', '') for t in puentes)[:160]}): "
+                + (f"primero escribo {otros} paso(s) de su README, luego " if otros else "")
+                + "lo enciendo, espero a que esté listo y arranco el programa. Al cerrarlo, apago el puente.")
     if pasos:
         cuantos = "el paso" if len(pasos) == 1 else f"los {len(pasos)} pasos"
         return (f"Abro {titulo} en {donde}: primero escribo {cuantos} de su README (descargas y lo que "
@@ -1241,6 +1391,7 @@ def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, cor
                                       "Xubuntu (xfce4-terminal). Instálala con «sudo apt install xfce4-terminal»."}
     env = dict(os.environ)
     env.setdefault("DISPLAY", ":0")
+    env["KIRA_VER_PUENTE"] = "1"                      # v3.88: el puente, en OTRA ventana de terminal a la vista
     try:
         p = (popen or subprocess.Popen)(orden, env=env, start_new_session=True, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
