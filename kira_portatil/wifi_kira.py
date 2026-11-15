@@ -486,6 +486,8 @@ def orden_wifi(texto):
         pass
     if re.match(r"^(?:que es|que son|como funciona|para que sirve|explica|explicame|cuentame|historia)\b", t):
         return None                                   # preguntar POR la wifi es charla, no una orden
+    if re.match(r"^(?:estudia|aprende|investiga|preguntate|averigua|experimenta|programa|escribeme|hazme)\b", t):
+        return None                                   # v3.80: «estudia la wifi» es estudiar, no mirar la WiFi
     if re.match(r"^(?:olvida|borra|elimina|quita)\b", t):
         return "olvidar", _nombre_red(texto)
     if re.match(r"^(?:apaga|desactiva)\b", t):

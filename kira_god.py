@@ -1224,6 +1224,14 @@ class KiraGodCore:
         acc = nk.interpretar(command, juegos_extra=list(self.juegos_modulos))
         if not acc:
             return None
+        if getattr(self, "es_kiraos", False) and not movil.disponible():   # v3.80: en el portátil, decir qué SÍ vale
+            if acc.get("tipo") in ("marcar", "llamar_nombre"):
+                return "[x] Llamar por teléfono solo lo hago desde el móvil."
+            if acc.get("tipo") == "web" or (acc.get("tipo") == "app" and acc.get("seguro")):
+                return ("[x] Eso no lo encuentro entre los programas del portátil («qué apps tengo» para verlos). "
+                        "Las webs («abre youtube», «abre github.com») te las abro en el navegador cuando me lo "
+                        "escribes en la barra de la pantalla del portátil.")
+            return None
         hecho, texto = movil.hacer(acc, en_fondo=self.en_segundo_plano)
         if hecho is None:
             return None

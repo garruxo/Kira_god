@@ -63,6 +63,40 @@ except Exception:                                 # noqa: BLE001
     VERSION_AL_ABRIR = "?"
 
 
+SITIOS_WEB = {                                   # v3.80: «abre youtube» en KiraOS = esa web en el navegador
+    "youtube": "https://www.youtube.com", "google": "https://www.google.com", "gmail": "https://mail.google.com",
+    "correo": "https://mail.google.com", "wikipedia": "https://es.wikipedia.org", "github": "https://github.com",
+    "google maps": "https://maps.google.com", "maps": "https://maps.google.com", "traductor": "https://translate.google.com",
+    "google translate": "https://translate.google.com", "drive": "https://drive.google.com",
+    "google drive": "https://drive.google.com", "netflix": "https://www.netflix.com", "twitch": "https://www.twitch.tv",
+    "reddit": "https://www.reddit.com", "amazon": "https://www.amazon.es", "facebook": "https://www.facebook.com",
+    "instagram": "https://www.instagram.com", "twitter": "https://x.com", "x": "https://x.com",
+    "whatsapp": "https://web.whatsapp.com", "whatsapp web": "https://web.whatsapp.com", "spotify": "https://open.spotify.com",
+    "chatgpt": "https://chatgpt.com", "claude": "https://claude.ai", "stack overflow": "https://stackoverflow.com",
+    "stackoverflow": "https://stackoverflow.com", "duckduckgo": "https://duckduckgo.com", "el tiempo": "https://www.aemet.es",
+    "aemet": "https://www.aemet.es",
+}
+
+
+def web_de_frase(texto):
+    """v3.80: la web que pide «abre youtube» / «abre github.com» / «busca en google X» (o None). En KiraOS se abre
+    en el navegador de verdad (antes decía «abrir cosas fuera de mí solo funciona en el móvil»)."""
+    try:
+        import navegar_kira as nk
+        acc = nk.interpretar(texto)
+    except Exception:
+        return None
+    if not acc:
+        return None
+    if acc.get("tipo") == "web" and re.match(r"^https?://\S+$", str(acc.get("url") or "")):
+        return acc["url"]
+    if acc.get("tipo") == "app":
+        n = re.sub(r"\s+", " ", str(acc.get("nombre") or "")).strip().lower()
+        n = re.sub(r"^(?:la (?:web|pagina) (?:de |del )?|el |la )", "", n)
+        return SITIOS_WEB.get(n)
+    return None
+
+
 def version_en_disco(ruta=None):
     """v3.17: la versión que hay DESCARGADA en el disco (tras «implementa las mejoras»), sin importarla otra vez."""
     ruta = ruta or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "version_kira.py")
@@ -660,6 +694,9 @@ class EscritorioMixin:
                 t["estado"] = "hablando"
                 t["respuesta"] = self.preparar_por_dentro(o_acc[0], o_acc[1], t["lineas"].append)
                 t["abrir"] = "taller"
+            elif web_de_frase(texto):                              # v3.80: «abre youtube» → el navegador
+                t["estado"] = "hablando"
+                t["respuesta"] = self.abrir_navegador(web_de_frase(texto)).get("texto", "")
             elif self.cli is None:
                 t["respuesta"] = ("No encuentro mi cerebro de casa (el servidor de Kira). Si acabas de encender, "
                                   "espera un minuto y vuelve a hablarme.")

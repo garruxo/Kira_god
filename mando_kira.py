@@ -110,6 +110,29 @@ _HARDWARE = re.compile(r"\b(?:estudia|analiza|mira|revisa|conoce|aprende)\b.*\b(
                        r"piezas|componentes|packard\s*bell|xubuntu)\b")
 
 
+# v3.80: órdenes que SOLO entiende KiraOS (antes, dichas en el móvil, se quedaban aquí y salía «no te entiendo»)
+_DEL_PORTATIL = re.compile(
+    r"^(?:por favor\s+)?(?:"
+    r"instala(?:me)?\s+(?:lo que (?:he|has)?\s*(?:descargado|bajado)|lo ultimo que|el archivo que)|"
+    r"(?:instala|descarga|baja|bajate)(?:me|te)?\s+.+\s+(?:de|desde)\s+github$|"
+    r"(?:instala|descarga|baja|consigue)(?:me|te)?\s+(?:las\s+)?(?:dependencias|librerias)\s+de\b|"
+    r"(?:descarga|baja)(?:me|te)?\s+lo que (?:necesita|le falta)\b|"
+    r"trabaja (?:con|dentro de)\s+\S+\s*:|abre el taller de\b|maneja\s+\S+\s+por dentro\b|"
+    r"(?:aumenta|amplia|mejora)\s+tu cerebro|(?:descarga|bajate|ponte)\s+(?:tu\s+)?(?:el\s+)?cerebro (?:grande|de 4b)|"
+    r"(?:conoce|estudia)\s+tu entorno|que (?:herramientas|librerias|recursos) tienes|donde estas instalada|"
+    r"(?:crea|pon|anade|cambia|modifica|quita)(?:me|le)?\s+(?:.+\s+)?(?:una|la|un|el)\s+(?:ventana|seccion|apartado|"
+    r"boton|pestana|icono)\b.*\b(?:wifi|cuaderno|programando|escritorio|maquina|mapa|ajustes|terminal|buscador|"
+    r"red|kira ?os|portatil)\b|"
+    r"(?:ordenes|como manejo)\s+(?:de\s+)?\S+.*\s+(?:en|del)\s+(?:el\s+)?portatil|que apps tiene el portatil"
+    r")")
+
+
+def es_del_portatil(texto):
+    """v3.80: ¿es una orden que solo tiene sentido en KiraOS? (instalar programas en el portátil, el taller de
+    programas, su cerebro grande, su entorno, sus ventanas…). Se le pasa a KiraOS."""
+    return bool(_DEL_PORTATIL.match(_norm(texto)))
+
+
 def es_de_hardware(texto):
     """v3.44: «estudia tu hardware / los drivers / los controladores del portátil / todo el sistema xubuntu»."""
     t = _norm(texto)
@@ -126,6 +149,8 @@ def es_trabajo(texto):
         # v3.35: el taller de kernel vive en KiraOS (v3.39: también con faltas como «kermel»)
         return True
     if es_de_hardware(texto):                     # v3.44: estudiar el hardware/drivers del portátil es de KiraOS
+        return True
+    if es_del_portatil(texto):                    # v3.80: instalar programas, el taller, su cerebro, sus ventanas…
         return True
     if _CAMARA.match(t):
         return False

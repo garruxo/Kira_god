@@ -899,6 +899,56 @@ AVISO_CHARLA = ("Para charlar, háblame en el móvil: allí te contesto rápido.
                 "aquí, dime «activa la charla aquí» (con este procesador tardaré en contestar).")
 
 
+AYUDA_KIRAOS = (
+    "Esto es lo que puedes pedirme aquí en el portátil (escrito o hablado):\n"
+    "• Estudiar: «estudia python», «estudia ciberseguridad», «estudia esta página y sus enlaces: …».\n"
+    "• Pensar: «piensa», «deja de pensar», «piensa en X hasta resolverlo», «investiga X», «tu cuaderno».\n"
+    "• Programar: «escríbeme un programa que…», «hazme un juego de…», «experimenta con…», "
+    "«hazme una app android que…».\n"
+    "• Programas: «instala X», «instala X de github», «abre X», «cierra X», «órdenes de X», "
+    "«trabaja con ffmpeg: …», «qué apps tengo».\n"
+    "• Mi sistema: «pon el tema bosque», «pon de fondo…», «sube el brillo», «pon el volumen al 50», "
+    "«apaga el bluetooth», «mueve el icono del mapa al principio».\n"
+    "• Ventanas: «crea un botón en la wifi que…», «crea una ventana llamada X con estos botones: …».\n"
+    "• Red y defensa: «busca redes wifi», «conéctate a la wifi X», «revisa mi red», «mapa de ataques».\n"
+    "• Mi máquina y el kernel: «arranca tu máquina», «programa el kernel: …», «prepara el USB del kernel».\n"
+    "• Mejoras: «¿hay mejoras?», «implementa las mejoras», «mejórate: …» (siempre con tus dos toques).\n"
+    "Para charlar, mejor en el móvil.")
+
+_RAPIDA_AYUDA = re.compile(r"^(?:ayuda|ayudame|help|que (?:puedes|sabes) hacer|que haces|que ordenes (?:hay|tienes|"
+                           r"entiendes)|(?:tus|las) ordenes|comandos|lista de ordenes|como te (?:uso|hablo|pido cosas))$")
+_RAPIDA_HORA = re.compile(r"^(?:que hora es|dime la hora|la hora|que horas son|hora)$")
+_RAPIDA_FECHA = re.compile(r"^(?:que dia es hoy|que dia es|que fecha es(?: hoy)?|a que (?:dia|fecha) estamos|dime la fecha|"
+                           r"la fecha|fecha de hoy|en que dia estamos)$")
+_RAPIDA_APAGAR = re.compile(r"^(?:apaga(?:te)?|reinicia(?:te)?|suspende(?:te)?)(?:\s+(?:el|tu|mi)?\s*"
+                            r"(?:portatil|ordenador|equipo|pc|sistema|kira ?os))?$")
+_DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+          "noviembre", "diciembre")
+
+
+def respuesta_rapida(t, ahora=None):
+    """v3.80: lo que se contesta AL MOMENTO, sin el cerebro (en el Packard Bell, el cerebro tarda minutos):
+    la ayuda, la hora, la fecha, y cómo apagar/reiniciar (por voz NO: se hace con el menú K, con dos toques)."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(t or "").lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = re.sub(r"\s+", " ", re.sub(r"^(?:oye\s+|hola\s+)?kira\b[\s,]*", "", t)).strip(" .!¡?¿,")
+    if not t:
+        return None
+    ahora = ahora or time.localtime()
+    if _RAPIDA_AYUDA.match(t):
+        return AYUDA_KIRAOS
+    if _RAPIDA_HORA.match(t):
+        return f"Son las {ahora.tm_hour}:{ahora.tm_min:02d}."
+    if _RAPIDA_FECHA.match(t):
+        return f"Hoy es {_DIAS[ahora.tm_wday]}, {ahora.tm_mday} de {_MESES[ahora.tm_mon - 1]} de {ahora.tm_year}."
+    if _RAPIDA_APAGAR.match(t):
+        return ("Para apagar o reiniciar el portátil usa el menú K (abajo a la izquierda) ▸ Apagar o Reiniciar, con "
+                "dos toques: así no se apaga por una frase mal oída.")
+    return None
+
+
 def charla_aqui(core):
     try:
         with open(os.path.join(core.dir, "charla_portatil.json"), encoding="utf-8") as f:
@@ -931,6 +981,9 @@ def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
     if _CHARLA_OFF.match(t):
         poner_charla_aqui(core, False)
         return {"texto": "Hecho: la charla, en el móvil. Aquí guardo el cerebro para trabajar."}
+    rapida = respuesta_rapida(t)                  # v3.80: ayuda, hora, fecha, apagar… sin gastar el cerebro
+    if rapida:
+        return {"texto": rapida}
     if not charla_aqui(core):
         return {"texto": AVISO_CHARLA}
     hist = getattr(core, "_charla_kiraos", None)
