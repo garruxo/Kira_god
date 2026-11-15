@@ -215,3 +215,147 @@ def pedido_cambio(v, codigo, cambios):
     nueva versión sustituye a la vieja, y «Volver atrás» devuelve la de antes)."""
     return (f"Cambia mi módulo «{v['modulo']}» (su ventana «{v['id']}»). Mantén NOMBRE: {v['modulo']} y todo lo que ya "
             f"hace, y cambia SOLO esto: {cambios}\nCódigo actual:\n```python\n{str(codigo).strip()}\n```")
+
+
+# ---------- v3.75: la ventana / el botón se CONSTRUYE directamente de tu frase (sin depender del cerebro) ----------
+# Una ventana es solo DATOS, así que no hace falta que el cerebro pequeño la escriba (se equivocaba: hacía una orden
+# normal y la ventana no salía). Si la frase se entiende, se arma el módulo aquí; si no, se le pide al cerebro.
+import unicodedata as _ud
+
+_SALAS = [("pantalla principal", "escritorio"), ("escritorio", "escritorio"), ("inicio", "escritorio"),
+          ("maquina virtual", "maquina"), ("maquina", "maquina"), ("wi fi", "wifi"), ("wifi", "wifi"),
+          ("mi red", "red"), ("red", "red"), ("cuaderno", "cuaderno"), ("movil", "movil"), ("ajustes", "ajustes"),
+          ("configuracion", "ajustes"), ("terminal", "terminal"), ("buscador", "buscador"), ("mapa", "mapa"),
+          ("programando", "programando"), ("hablar", "hablar")]
+_NOMBRE_SALA = {"maquina": "tu máquina", "wifi": "la wifi", "red": "la red", "cuaderno": "tu cuaderno",
+                "movil": "el móvil", "terminal": "la terminal", "mapa": "el mapa", "buscador": "el buscador"}
+_SUBJ = {"muestre": "enséñame", "ensene": "enséñame", "enseñe": "enséñame", "diga": "dime", "haga": "haz",
+         "ponga": "pon", "abra": "abre", "busque": "busca", "encienda": "enciende", "apague": "apaga",
+         "estudie": "estudia", "lea": "lee", "compruebe": "comprueba", "mire": "mira", "revise": "revisa",
+         "arregle": "arregla", "conecte": "conecta", "desconecte": "desconecta", "cierre": "cierra",
+         "borre": "borra", "cuente": "cuenta", "calcule": "calcula", "piense": "piensa", "pinte": "pinta",
+         "guarde": "guarda", "investigue": "investiga", "resuma": "resume", "explique": "explica",
+         "actualice": "actualiza", "liste": "lista", "escanee": "escanea", "vigile": "vigila",
+         "reinicie": "reinicia", "programe": "programa", "traiga": "trae", "lance": "lanza", "ejecute": "ejecuta"}
+_INF = {"mostrar": "enséñame", "ensenar": "enséñame", "ver": "enséñame", "decir": "dime", "hacer": "haz",
+        "poner": "pon", "abrir": "abre", "buscar": "busca", "encender": "enciende", "apagar": "apaga",
+        "estudiar": "estudia", "leer": "lee", "comprobar": "comprueba", "mirar": "mira", "revisar": "revisa",
+        "arreglar": "arregla", "conectar": "conecta", "desconectar": "desconecta", "cerrar": "cierra",
+        "borrar": "borra", "contar": "cuenta", "calcular": "calcula", "pensar": "piensa", "pintar": "pinta",
+        "guardar": "guarda", "investigar": "investiga", "resumir": "resume", "explicar": "explica",
+        "actualizar": "actualiza", "listar": "lista", "escanear": "escanea", "vigilar": "vigila",
+        "reiniciar": "reinicia", "programar": "programa", "lanzar": "lanza", "ejecutar": "ejecuta"}
+
+
+def _sin_tildes(t):
+    return "".join(c for c in _ud.normalize("NFD", str(t or "")) if _ud.category(c) != "Mn")
+
+
+def _sala_de(plano):
+    for pal, sala in _SALAS:
+        if re.search(r"\b(?:en|dentro\s+de|a)\s+(?:la\s+|el\s+|mi\s+|tu\s+)?(?:ventana\s+|sala\s+|seccion\s+|pantalla\s+)?"
+                     r"(?:de\s+|del\s+)?(?:la\s+|el\s+|mi\s+|tu\s+)?" + pal + r"\b", plano):
+            return sala
+    return None
+
+
+def _a_orden(frase, sala):
+    """«que me muestre las redes guardadas» → «enséñame las redes guardadas»; «para encenderla» → «enciende tu máquina»."""
+    f = re.sub(r"^(?:que\s+|para\s+que\s+|para\s+|y\s+)", "", frase.strip(" ,.:;"), flags=re.I).strip()
+    f = re.sub(r"^(?:me\s+|te\s+|nos\s+)", "", f, flags=re.I)
+    palabras = f.split()
+    if not palabras:
+        return ""
+    p0 = _sin_tildes(palabras[0]).lower()
+    clitico = ""
+    m = re.match(r"^([a-z]+?(?:ar|er|ir))(la|lo|las|los|me)?$", p0)
+    if p0 in _SUBJ:
+        palabras[0] = _SUBJ[p0]
+    elif m and m.group(1) in _INF:
+        palabras[0], clitico = _INF[m.group(1)], m.group(2) or ""
+    o = " ".join(palabras)
+    if clitico in ("la", "lo", "las", "los") and sala in _NOMBRE_SALA and len(palabras) == 1:
+        o += " " + _NOMBRE_SALA[sala]
+    return o.strip()[:MAX_ORDEN]
+
+
+def _corto(t, n=MAX_TEXTO_BOTON):
+    t = t.strip(" ,.:;«»\"'")
+    t = t[:1].upper() + t[1:]
+    return t if len(t) <= n else t[:n - 1].rstrip() + "…"
+
+
+def construir(pedido):
+    """(nombre, código, datos) armado directamente desde la frase, o None si no se entiende bien.
+    El código es un módulo de Kira normal (registrar() con «ventana <id>»): pasa por el laboratorio y tus dos toques."""
+    orig = re.sub(r"\s+", " ", str(pedido or "")).strip().rstrip(" .!?")
+    plano = _sin_tildes(orig).lower()
+    if not re.search(r"\b(?:ventana|boton(?:es)?|seccion|apartado|menu|pestana|icono)\b", plano):
+        return None
+    sala = _sala_de(plano)
+    es_seccion = bool(re.search(r"\b(?:seccion|apartado)\b", plano))
+    titulo = ""
+    mt = re.search(r"[«\"“']([^«»\"”']{2,40})[»\"”']", orig) or \
+        re.search(r"\b(?:llamad[oa]|que\s+se\s+llame|con\s+el\s+nombre(?:\s+de)?|de\s+nombre)\s+([^,.:;]{2,40}?)"
+                  r"(?=\s+(?:que|para|con|en|y)\b|[,.:;]|$)", orig, re.I)
+    if mt:
+        titulo = mt.group(1).strip()
+    botones = []
+    ml = re.search(r"\b(?:botones|funciones|opciones|cosas)\b[^:]*:\s*(?P<l>.+)$", orig, re.I)
+    if ml:
+        for it in re.split(r"\s*(?:,|;|\by\b|\be\b)\s*", ml.group("l")):
+            it = it.strip(" .«»\"'")
+            if len(it) >= 2:
+                o = _a_orden(it, sala)
+                botones.append({"texto": _corto(it), "orden": o or it})
+    else:
+        # lo que hace el botón: lo que va tras «que / para» después de la palabra botón/sección/ventana
+        ma = re.search(r"\b(?:bot[oó]n(?:es)?|secci[oó]n|apartado|ventana|men[uú]|icono)\b(?P<r>.*)$", orig, re.I)
+        resto = ma.group("r") if ma else ""
+        resto = re.sub(r"[«\"“'][^«»\"”']{2,40}[»\"”']", " ", resto)
+        resto = re.sub(r"\b(?:llamad[oa]|que\s+se\s+llame|con\s+el\s+nombre(?:\s+de)?|de\s+nombre)\s+[^,.:;]{2,40}?"
+                       r"(?=\s+(?:que|para|con|en|y)\b|[,.:;]|$)", " ", resto, flags=re.I)
+        # quita «en la ventana de X» (la sala) del resto
+        resto = re.sub(r"\b(?:en|dentro\s+de)\s+(?:la\s+|el\s+|mi\s+|tu\s+)?(?:ventana\s+|sala\s+|pantalla\s+)?"
+                       r"(?:de\s+|del\s+)?(?:la\s+|el\s+|mi\s+|tu\s+)?[\wáéíóúñ ]{2,20}?(?=\s+(?:que|para|con)\b|[,.:;]|$)",
+                       " ", resto, flags=re.I)
+        resto = re.sub(r"\b(?:nuev[oa]s?|con\s+un\s+bot[oó]n|con\s+bot[oó]n|un\s+bot[oó]n)\b", " ", resto, flags=re.I)
+        mq = re.search(r"\b(?:que|para(?:\s+que)?)\b\s+(?P<a>.+)$", resto, re.I)
+        accion = mq.group("a").strip(" ,.") if mq else ""
+        if accion:
+            o = _a_orden(accion, sala)
+            if o:
+                botones.append({"texto": _corto(titulo or o), "orden": o})
+    if not botones:
+        return None
+    if not titulo:
+        titulo = botones[0]["texto"] if len(botones) == 1 else ("Mis atajos" if sala and sala != "escritorio" else "Mi ventana")
+    titulo = _corto(titulo, MAX_TITULO)
+    ident = re.sub(r"[^a-z0-9 ]+", "", _sin_tildes(titulo).lower()).strip()[:40] or "mi ventana"
+    if not _ID.match(ident):
+        ident = "mi ventana"
+    datos = {"en": sala or "escritorio", "titulo": titulo,
+             "texto": "Me la añadí cuando me lo pediste: «" + orig[:150] + "».", "botones": botones[:MAX_BOTONES]}
+    if es_seccion and sala and sala != "escritorio":
+        datos["lugar"] = "arriba"
+    validar(ident, datos)                              # si algo no vale, mejor saberlo ya (lanza VentanaError)
+    nombre = ("ventana_" + re.sub(r"[^a-z0-9]+", "_", ident).strip("_"))[:31]
+    codigo = ("# Mejora de KiraOS: una ventana/botón pedido por el dueño (solo datos: texto y botones).\n"
+              "def registrar():\n"
+              "    def ventana(texto):\n"
+              f"        return {datos!r}\n"
+              f"    return {{{('ventana ' + ident)!r}: ventana}}\n")
+    return nombre, codigo, datos
+
+
+def texto_construida(datos):
+    donde = "en el escritorio (un icono nuevo)" if datos["en"] == "escritorio" else (
+        f"dentro de «{datos['en']}» " + ("(una tarjeta arriba)" if datos.get("lugar") == "arriba" else
+                                       "(un botón «+ " + datos["titulo"] + "» arriba, en la cabecera)"))
+    bots = "; ".join(f"«{b['texto']}» → me dice «{b['orden']}»" for b in datos["botones"])
+    return f"He preparado «{datos['titulo']}» {donde}, con: {bots}."
+
+
+def tiene_ventana(codigo):
+    """¿El módulo declara de verdad alguna «ventana …»? (si no, no saldría nada en la pantalla)."""
+    return bool(re.search(r"""["']ventana\s+[^"']+["']\s*:""", str(codigo or "")))

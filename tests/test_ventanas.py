@@ -129,6 +129,10 @@ class PanelFalso:
         self.llamadas.append((pedido, nombre, extra))
         return {"aprobable": True}
 
+    def probar_modulo(self, codigo, nombre, pedido=""):      # v3.75: la ventana se arma de la frase, sin cerebro
+        self.llamadas.append((pedido, None, codigo))
+        return {"aprobable": True}
+
 
 pan = PanelFalso()
 core._panel = pan
@@ -136,6 +140,8 @@ pasos = []
 r = npk.ejecutar(core, "crea en la wifi una sección con un botón que diga qué redes tengo guardadas", lambda f, t: pasos.append(t))
 ok(r["ok"] and "Cuaderno ▸ Mejoras" in r["texto"] and pan.llamadas[-1][1] is None, "«crea…» = una mejora que espera tus dos toques")
 ok("sección" in pan.llamadas[-1][0], "…con lo que pediste")
+ok(vk.tiene_ventana(pan.llamadas[-1][2]) and "'en': 'wifi'" in pan.llamadas[-1][2] and "lugar" in pan.llamadas[-1][2],
+   "v3.75: la ventana se arma DIRECTAMENTE de la frase (en la wifi, como sección), sin depender del cerebro")
 r = npk.ejecutar(core, "Kira, cambia la ventana mis redes: que tenga también un botón para apagar la wifi", lambda f, t: None)
 p, nombre, extra = pan.llamadas[-1]
 ok(r["ok"] and nombre == "mis_redes", "«cambia la ventana…»: la versión nueva SUSTITUYE a la misma mejora")

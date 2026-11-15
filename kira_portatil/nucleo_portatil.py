@@ -220,7 +220,36 @@ def orden_ventana(core, o, paso):
     a la vieja (con copia: «Volver atrás»)."""
     import ventanas_kira as vk
     if o[0] == "crear":
-        return mejora_para_kiraos(core, o[1], paso)
+        # v3.75: una ventana es solo DATOS → se arma directamente de tu frase (el cerebro pequeño se equivocaba: hacía
+        # una orden normal y no salía nada en la pantalla). Pasa igual por el laboratorio y espera tus dos toques.
+        try:
+            hecha = vk.construir(o[1])
+        except vk.VentanaError:
+            hecha = None
+        if hecha:
+            nombre, codigo, datos = hecha
+            paso(0.3, "Preparo la ventana y la pruebo en mi laboratorio…")
+            try:
+                r = panel_de(core).probar_modulo(codigo, nombre, o[1])
+            except Exception as e:                    # noqa: BLE001
+                r = {"aprobable": False, "texto": str(e)}
+            if r.get("aprobable"):
+                return {"texto": vk.texto_construida(datos) + " Aprobada por mi laboratorio. NO la he puesto aún: "
+                                 "Cuaderno ▸ Mejoras ▸ «Instalar o deshacer mis mejoras» ▸ «Instalar» (dos toques) y "
+                                 "aparece en unos segundos" + ("" if datos["en"] == "escritorio" else
+                                 f" (abre «{datos['en']}» y mira arriba)") + ".",
+                        "codigo": codigo, "nombre": nombre, "ok": True}
+        r = mejora_para_kiraos(core, o[1], paso)
+        if r.get("ok") and not vk.tiene_ventana(r.get("codigo")):
+            try:                                      # el cerebro escribió una orden pero NINGUNA ventana: no vale
+                panel_de(core).rechazar("no declaraba ninguna ventana")
+            except Exception:
+                pass
+            return {"texto": "[x] Mi cerebro ha escrito una orden pero NINGUNA ventana, así que no saldría nada en la "
+                             "pantalla y no la he guardado. Pídemelo diciendo DÓNDE y QUÉ hace el botón, por ejemplo: "
+                             "«crea un botón en la wifi que me enseñe las redes guardadas» o «crea en el escritorio una "
+                             "ventana \"Mi día\" con estos botones: la hora, mis tareas».", "ok": False}
+        return r
     ventanas = core.ventanas_lista() if callable(getattr(core, "ventanas_lista", None)) else []
     v = vk.buscar(ventanas, o[1])
     if v is None:
