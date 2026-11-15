@@ -62,7 +62,7 @@ ok(not ak.existe(T, "sale sola"), "lo que saca por su cuenta ya NO se instala so
 # ---------- filas / botones ----------
 ak.anadir(T, "Mi juego", "print('hola')")
 f = cpk.filas(w, mios, ak.listar(T))
-ok([b["texto"] for b in f["web"][0]["botones"]] == ["Instalar", "Quitar de la lista"]
+ok([b["texto"] for b in f["web"][0]["botones"]] == ["Instalar", "No, gracias"]
    and f["web"][0]["botones"][0]["accion"] == "decir:instala https://github.com/ggml-org/llama.cpp",
    "web: Instalar le dice a Kira «instala <fuente>»")
 ok(f["propios"][0]["botones"][0]["accion"].startswith("hacer:prog:instalar:"), "por su cuenta: Instalar")

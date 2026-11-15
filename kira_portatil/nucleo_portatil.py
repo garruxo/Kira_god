@@ -564,6 +564,11 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
     v3.35: si hay varias versiones, pregunta cuál antes de bajar nada."""
     import apps_externas_kira as aex
     import accesos_kira as ak
+    try:                                               # v3.90: «instala X» = tu sí a lo que esperaba aprobación
+        import catalogo_programas_kira as cpk
+        cpk.aprobar(core.dir, fuente)
+    except Exception:
+        pass
     if not sin_versiones and not forzar:
         ops = _versiones_de(fuente, paso)
         if len(ops) >= 2:

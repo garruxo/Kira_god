@@ -93,10 +93,118 @@ def anotar_web(dir_, pag, tema=""):
         return None
     texto = " ".join(str((pag or {}).get("texto") or "").split())
     e = {"id": iid, "nombre": p["nombre"], "fuente": p["fuente"], "pagina": str((pag or {}).get("url") or "")[:500],
-         "desc": texto[:200], "tema": str(tema or "")[:80], "archivos": p["archivos"], "cuando": int(time.time())}
+         "desc": texto[:200], "tema": str(tema or "")[:80], "archivos": p["archivos"], "cuando": int(time.time()),
+         "espera": True}                                   # v3.90: espera tu aprobación (nunca se instala sola)
     lista.append(e)
     _guardar(dir_, lista)
     return e
+
+
+# ---------- v3.90: lo que el estudio dice que HACE FALTA instalar → espera tu aprobación ----------
+_APT = re.compile(r"(?:^|[\s;&|(])(?:sudo\s+)?(?:apt|apt-get|aptitude)\s+(?:-\S+\s+)*install\s+([^\n;&|#`]+)", re.I | re.M)
+_FLAT = re.compile(r"(?:^|[\s;&|(])(?:sudo\s+)?flatpak\s+install\s+(?:-\S+\s+)*(?:flathub\s+)?"
+                   r"([A-Za-z][\w-]*(?:\.[\w-]+){2,})", re.I | re.M)
+_PAQUETE = re.compile(r"^[a-z0-9][a-z0-9.+-]{1,60}$")
+_NO_PAQUETE = {"install", "sudo", "apt", "apt-get", "y", "yes", "and", "the", "or", "then", "luego", "o", "e", "to",
+               "with", "con", "para", "first", "primero", "if", "si"}
+MAX_PEDIDOS = 8
+
+
+def programas_que_pide(pag):
+    """Lo que la página dice que hay que instalar para que algo funcione: «sudo apt install a b», «flatpak install
+    flathub org.x.Y». → [{nombre, fuente, tipo}] (fuente = la orden que entiende «instala …»). PURO, sin repetir."""
+    textos = [str((pag or {}).get("texto") or "")] + [str(c) for c in (pag or {}).get("codigos") or []]
+    sal, vistos = [], set()
+    for t in textos:
+        for m in _APT.finditer(t):
+            for pal in m.group(1).split():
+                pal = pal.strip().strip("\"'`,.").lower()
+                if pal.startswith("-"):
+                    continue                                  # opciones (-y, --no-install-recommends)
+                if pal in _NO_PAQUETE or not _PAQUETE.match(pal):
+                    break                                     # se acabó la lista de paquetes (texto normal detrás)
+                if pal not in vistos:
+                    vistos.add(pal)
+                    sal.append({"nombre": pal, "fuente": pal, "tipo": "sistema"})
+        for m in _FLAT.finditer(t):
+            app = m.group(1)
+            if app.lower() not in vistos:
+                vistos.add(app.lower())
+                sal.append({"nombre": app.split(".")[-1], "fuente": "flatpak " + app, "tipo": "flatpak"})
+    return sal[:MAX_PEDIDOS]
+
+
+def anotar_pedidos(dir_, pag, tema=""):
+    """Apunta (sin repetir) lo que la página pide instalar, esperando tu aprobación. Devuelve los apuntes nuevos."""
+    pedidos = programas_que_pide(pag)
+    if not pedidos:
+        return []
+    lista = _leer(dir_)
+    ids = {e.get("id") for e in lista}
+    titulo = " ".join(str((pag or {}).get("titulo") or "").split())[:80] or \
+        urllib.parse.urlsplit(str((pag or {}).get("url") or "")).netloc
+    nuevos = []
+    for p in pedidos:
+        iid = _id(p["tipo"] + ":" + p["fuente"])
+        if iid in ids:
+            continue
+        ids.add(iid)
+        e = {"id": iid, "nombre": p["nombre"], "fuente": p["fuente"],
+             "pagina": str((pag or {}).get("url") or "")[:500], "desc": f"Lo pide «{titulo}» para instalarse",
+             "tema": str(tema or "")[:80], "archivos": [], "cuando": int(time.time()), "espera": True,
+             "tipo": p["tipo"], "pedido_por": titulo}
+        lista.append(e)
+        nuevos.append(e)
+    if nuevos:
+        _guardar(dir_, lista)
+    return nuevos
+
+
+def aprobar(dir_, fuente):
+    """Le has dicho «instala X»: si estaba esperando tu aprobación, queda aprobado (sale de la espera)."""
+    f = str(fuente or "").strip()
+    if not f:
+        return False
+    lista, hubo = _leer(dir_), False
+    for e in lista:
+        if e.get("espera") and f in (e.get("fuente"), e.get("pagina")):
+            e["espera"] = False
+            e["aprobado"] = int(time.time())
+            hubo = True
+    if hubo:
+        _guardar(dir_, lista)
+    return hubo
+
+
+def nuevos_desde(dir_, antes, accesos=()):
+    """Lo apuntado esperando tu aprobación que NO estaba en `antes` (ids apuntados antes de estudiar) ni instalado."""
+    antes = set(antes or ())
+    return [e for e in _leer(dir_) if e.get("espera") and e.get("id") not in antes
+            and not instalado(accesos, e.get("nombre"), e.get("fuente"))]
+
+
+def pendientes_aprobar(dir_, accesos=()):
+    return [e for e in web(dir_) if e.get("espera") and not instalado(accesos, e.get("nombre"), e.get("fuente"))]
+
+
+def texto_aviso(lista, en_kiraos=True):
+    """El aviso al acabar de estudiar. PURO."""
+    if not lista:
+        return ""
+    def uno(e):
+        if e.get("tipo") == "sistema":
+            return f"{e['nombre']} (paquete del sistema; lo pide «{e.get('pedido_por') or 'lo que estudié'}»)"
+        if e.get("tipo") == "flatpak":
+            return f"{e['nombre']} (Flatpak; lo pide «{e.get('pedido_por') or 'lo que estudié'}»)"
+        return f"{e['nombre']} ({'GitHub' if 'github.com' in str(e.get('fuente')) else 'web'})"
+    nombres = "; ".join(uno(e) for e in lista[:8]) + (f" y {len(lista) - 8} más" if len(lista) > 8 else "")
+    base = (f"\n\nMientras estudiaba he visto {len(lista)} programa(s) para instalar: {nombres}. "
+            "No he instalado nada: ")
+    if en_kiraos:
+        return base + ("te esperan para tu aprobación en Programando ▸ Mis programas (arriba del todo, «Esperan tu "
+                       "aprobación»): pulsa «Instalar» en los que quieras o «No, gracias».")
+    return base + ("los he apuntado esperando tu aprobación. «Mis programas» está en KiraOS (el portátil): desde "
+                   "allí, o diciéndome «instala <nombre>» en casa.")
 
 
 # ---------- v3.89: lo que ESTUDIA de un programa sirve luego para instalarlo y arrancarlo ----------
@@ -236,15 +344,27 @@ def filas(vistos, mios, accesos):
     for e in vistos:
         if instalado(accesos, e.get("nombre"), e.get("fuente")):
             continue
+        if e.get("tipo") in ("sistema", "flatpak"):       # v3.90: lo que pide instalar lo que estudié
+            if not e.get("espera"):
+                continue                                  # ya me dijiste que sí (instalado por el camino de siempre)
+            f_web.append({"seccion": "espera", "texto": e.get("nombre") or "programa",
+                          "detalle": (e.get("desc") or "") + (" · " + e["pagina"] if e.get("pagina") else ""),
+                          "etiqueta": "Sistema" if e["tipo"] == "sistema" else "Flatpak",
+                          "botones": [{"texto": "Instalar", "accion": "decir:instala " + e["fuente"]},
+                                      {"texto": "No, gracias", "accion": "hacer:prog:olvidar:" + e["id"]}]})
+            continue
         det = urllib.parse.urlsplit(e.get("fuente") or "").netloc
         if e.get("archivos"):
             det += " · " + ", ".join(x for x in e["archivos"] if x)
         if e.get("desc"):
             det += " · " + e["desc"][:120]
-        f_web.append({"seccion": "web", "texto": e.get("nombre") or "programa", "detalle": det,
+        espera = bool(e.get("espera"))
+        f_web.append({"seccion": "espera" if espera else "web", "texto": e.get("nombre") or "programa", "detalle": det,
                       "etiqueta": "GitHub" if "github.com" in (e.get("fuente") or "") else "Web",
                       "botones": [{"texto": "Instalar", "accion": "decir:instala " + e["fuente"]},
-                                  {"texto": "Quitar de la lista", "accion": "hacer:prog:olvidar:" + e["id"]}]})
+                                  {"texto": "No, gracias" if espera else "Quitar de la lista",
+                                   "accion": "hacer:prog:olvidar:" + e["id"]}]})
+    f_web.sort(key=lambda f: f["seccion"] != "espera")   # lo que espera tu aprobación, arriba
     f_mios = []
     for s in mios:
         if instalado(accesos, s["tema"]):
@@ -275,9 +395,13 @@ def filas(vistos, mios, accesos):
 def pestanas(vistos, mios, accesos):
     """Para la pantalla (pestañas con filas). PURO."""
     f = filas(vistos, mios, accesos)
+    n_esp = sum(1 for x in f["web"] if x["seccion"] == "espera")
     return [
-        {"id": "web", "titulo": f"Aprendidos en la web ({len(f['web'])})", "filas": f["web"],
-         "secciones": [["web", "Programas y herramientas que he visto estudiando"]],
+        {"id": "web", "titulo": f"Aprendidos en la web ({len(f['web'])})" +
+         (f" · {n_esp} esperan tu sí" if n_esp else ""),
+         "filas": f["web"],
+         "secciones": [["espera", "Esperan tu aprobación (los vi estudiando; no instalo nada sin tu «sí»)"],
+                       ["web", "Programas y herramientas que he visto estudiando"]],
          "texto": "Aún no he visto ningún programa estudiando. Cuando estudie una página que sea un programa "
                   "(un GitHub o una web con descargas para Linux) lo apunto aquí."},
         {"id": "propios", "titulo": f"Aprendidos por mi cuenta ({len(f['propios'])})", "filas": f["propios"],

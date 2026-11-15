@@ -1883,6 +1883,7 @@ class KiraGodCore:
         try:                                              # v3.84: si la página es un PROGRAMA, va a «Mis programas»
             import catalogo_programas_kira as cpk
             cpk.anotar_web(self.dir, pag, tema)
+            cpk.anotar_pedidos(self.dir, pag, tema)      # v3.90: lo que dice que hay que instalar → espera tu sí
             cpk.guardar_guia(self.dir, pag, tema)        # v3.89: cómo se instala/arranca, tal cual (sin resumir)
         except Exception:
             pass
@@ -1949,7 +1950,62 @@ class KiraGodCore:
         except Exception:
             return []
 
+    # ---------- v3.90: al ACABAR de estudiar, te pregunto por los programas que vi (esperan tu aprobación) ----------
+    def _estudio_con_aviso(self, fn, *a, **k):
+        nivel = getattr(self, "_estudio_nivel", 0)
+        if nivel == 0:
+            try:
+                import catalogo_programas_kira as cpk
+                self._estudio_t0 = {e.get("id") for e in cpk.web(self.dir)}   # lo que ya estaba apuntado
+            except Exception:
+                self._estudio_t0 = set()
+        self._estudio_nivel = nivel + 1
+        try:
+            r = fn(*a, **k)
+        finally:
+            self._estudio_nivel = nivel
+        if nivel == 0 and isinstance(r, str):
+            r += self._avisar_programas_vistos(self._estudio_t0)
+        return r
+
+    def _avisar_programas_vistos(self, antes):
+        """Lo que he apuntado mientras estudiaba y espera tu aprobación → el texto para preguntarte (y en KiraOS un
+        aviso prioritario). NUNCA instala nada."""
+        try:
+            import catalogo_programas_kira as cpk
+            try:
+                import accesos_kira as ak
+                accesos = ak.listar(self.dir)
+            except Exception:
+                accesos = []
+            lista = cpk.nuevos_desde(self.dir, antes, accesos)
+            if not lista:
+                return ""
+            kiraos = bool(getattr(self, "es_kiraos", False))
+            texto = cpk.texto_aviso(lista, en_kiraos=kiraos)
+            if kiraos:
+                try:
+                    import avisos_kira
+                    avisos_kira.prioritario(texto.strip(), titulo="Programas esperando tu aprobación")
+                except Exception:
+                    pass
+            return texto
+        except Exception:
+            return ""
+
     def estudiar_a_fondo(self, tema, al_paso=None):
+        return self._estudio_con_aviso(self._estudiar_a_fondo_, tema, al_paso=al_paso)
+
+    def estudiar_en_internet(self, consulta, paginas=3, al_paso=None, enlaces=4):
+        return self._estudio_con_aviso(self._estudiar_en_internet_, consulta, paginas=paginas, al_paso=al_paso,
+                                       enlaces=enlaces)
+
+    def estudiar_pagina(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False,
+                        orden=None):
+        return self._estudio_con_aviso(self._estudiar_pagina_, url=url, al_paso=al_paso, maximo=maximo,
+                                       profundidad=profundidad, al_avance=al_avance, seguir=seguir, orden=orden)
+
+    def _estudiar_a_fondo_(self, tema, al_paso=None):
         """«estudia X»: estudia DE VERDAD —webs oficiales / tutoriales / cursos gratis en la web y CURSOS COMPLETOS de
         YouTube—, lo guarda en el baúl y lo deja para pensarlo. Con `al_paso(fraccion, texto)` mueve la barra. Al acabar,
         sigue pensando sola cuando NO esté estudiando. Necesita internet."""
@@ -2064,7 +2120,7 @@ class KiraGodCore:
                 cola.append((hija, nivel + 1))             # solo profundizo en los que SÍ siguen el tema
         return leidas, guardadas
 
-    def estudiar_en_internet(self, consulta, paginas=3, al_paso=None, enlaces=4):
+    def _estudiar_en_internet_(self, consulta, paginas=3, al_paso=None, enlaces=4):
         """Busca, lee las mejores páginas, las resume y guarda lo aprendido en el baúl (y Claude lo repasa si está).
         v3.01: además SIGUE los enlaces de esas páginas que tratan del tema (como mucho `enlaces` en total)."""
         import internet_kira as ik_
@@ -2121,7 +2177,7 @@ class KiraGodCore:
         except (OSError, ValueError):
             return {}
 
-    def estudiar_pagina(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False, orden=None):
+    def _estudiar_pagina_(self, url=None, al_paso=None, maximo=300, profundidad=2, al_avance=None, seguir=False, orden=None):
         """v3.03 ESTUDIO de una web: «estudia esta página y sus enlaces: URL» (o «estudia sus enlaces» tras leer una).
         Primero se CENTRA en la página principal y la estudia con el contenido pedido; luego mira sus enlaces y, al abrir
         cada uno, solo SIGUE estudiándolo si de verdad trata del tema o continúa el curso; si no, vuelve y pasa al

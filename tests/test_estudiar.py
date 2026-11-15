@@ -52,7 +52,7 @@ arb = ast.parse(src_g)
 met = {nd.name for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef)}
 for m in ("estudiar_a_fondo", "_buscar_cursos_youtube", "es_estudia_general"):
     ok(m in met, f"kira_god define {m}")
-eaf = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "estudiar_a_fondo")
+eaf = next(nd for nd in ast.walk(arb) if isinstance(nd, ast.FunctionDef) and nd.name == "_estudiar_a_fondo_")
 cuerpo = ast.get_source_segment(src_g, eaf) or ""
 ok("estudiar_en_internet" in cuerpo, "estudia de webs (oficiales/tutoriales/cursos)")
 ok("_buscar_cursos_youtube" in cuerpo and "aprender_de_video" in cuerpo, "estudia de CURSOS de YouTube")
