@@ -226,6 +226,8 @@ def pensar_una(estado, preguntar, estudiar=None, experimentar=None, comparar=Non
     try:
         respuesta = str(preguntar(base) or "")
     except Exception as e:                               # el cerebro no está listo, sin red, etc.: QUE SE VEA
+        if type(e).__name__ == "Cancelada":              # me cortaron para atender al dueño: no es una nota
+            raise
         nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta,
                 "respuesta": f"(no pude pensar ahora: {e})", "seguridad": "baja", "duda": True,
                 "fuente": "sin cerebro", "tipo": "idea"}
@@ -298,6 +300,8 @@ def ciclo(estado, semilla, preguntar, estudiar=None, experimentar=None, comparar
                              + (f"Esto he averiguado: {info}\n" if info else "")
                              + "Explica BREVE cómo hacerlo y cómo probar que funciona.") or "")
     except Exception as e:
+        if type(e).__name__ == "Cancelada":
+            raise
         nota = {"cuando": ahora, "semilla": semilla, "pregunta": pregunta,
                 "respuesta": f"(no pude pensar ahora: {e})", "seguridad": "baja", "duda": True,
                 "fuente": "sin cerebro", "tipo": "idea"}

@@ -20,6 +20,8 @@ import logging
 import types
 import threading
 import urllib.request
+
+_HILO = threading.local()      # v3.72: marca el hilo de PENSAR sola (lo de fondo, que cede el paso al dueño)
 import urllib.error
 
 # Control seguro de psutil para evitar fallos si no está instalado
@@ -669,6 +671,8 @@ class KiraGodCore:
     CANCELAR_DURA = 25.0          # un «cancela» corta lo que está en marcha; pasado este rato ya no cuenta
 
     def cancelado(self):
+        if getattr(_HILO, "fondo", False) and self.__dict__.get("_dueno_espera", 0) > 0:
+            return True                                      # v3.72: piensa sola, pero TÚ esperas: suelta el cerebro
         extra = self.__dict__.get("parar_extra")              # v3.18: en KiraOS, el «Parar» de la tarea (no caduca)
         if callable(extra):
             try:
@@ -680,6 +684,21 @@ class KiraGodCore:
         if ev.is_set() and time.monotonic() - self.__dict__.get("_cancelar_t", 0.0) > self.CANCELAR_DURA:
             ev.clear()
         return ev.is_set()
+
+    def dueno_atendido(self):
+        """v3.72: mientras dura (una orden tuya en marcha), lo que Kira piensa SOLA suelta el cerebro en cuanto puede
+        (se corta su pregunta al cerebro) para que te conteste a ti antes. Luego sigue pensando como siempre."""
+        import contextlib
+        core = self
+
+        @contextlib.contextmanager
+        def _cm():
+            core.__dict__["_dueno_espera"] = core.__dict__.get("_dueno_espera", 0) + 1
+            try:
+                yield
+            finally:
+                core.__dict__["_dueno_espera"] = max(0, core.__dict__.get("_dueno_espera", 1) - 1)
+        return _cm()
 
     def nueva_tarea(self):
         """Lo llama la interfaz al empezar algo nuevo: un «cancela» anterior ya no cuenta."""
@@ -3440,6 +3459,7 @@ class KiraGodCore:
         if encender and not getattr(self, "_pensar_hilo", None):
             def bucle():
                 import pensador_kira as pn
+                _HILO.fondo = True                  # v3.72: este hilo cede el cerebro cuando el dueño espera
                 fallos = 0
                 while getattr(self, "_pensar_on", False):
                     # ¿el dueño está pendiente? si te atendió hace poco, NO pienso (te dejo sitio y te atiendo a ti)
@@ -3491,6 +3511,9 @@ class KiraGodCore:
                             pn.guardar(est, self._ruta_pensar())
                             fallo = False                # sí pensó (y encima avisó): no cuenta como fallo, no paro
                     except Exception as e:
+                        if type(e).__name__ == "Cancelada":     # v3.72: lo corté para atenderte: no es un fallo
+                            time.sleep(2)
+                            continue
                         fallo = True
                         try:                                 # que un fallo del bucle NO se quede mudo: queda escrito
                             est = pn.cargar(self._ruta_pensar())

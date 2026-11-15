@@ -1034,7 +1034,12 @@ class Nucleo:
             self.core.nueva_tarea()                  # un «cancela» de antes no corta esta
         except Exception:
             pass
-        r = ejecutar(self.core, orden, paso)
+        dueno = getattr(self.core, "dueno_atendido", None)     # v3.72: lo que piensa sola te cede el cerebro
+        if callable(dueno):
+            with dueno():
+                r = ejecutar(self.core, orden, paso)
+        else:
+            r = ejecutar(self.core, orden, paso)
         if getattr(self.core, "pedir_reinicio", False):     # v3.11: tras ponerse las mejoras, se reinicia solo
             self.core.pedir_reinicio = False
             if reiniciar_proceso_luego():
