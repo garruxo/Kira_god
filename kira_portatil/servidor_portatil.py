@@ -24,12 +24,14 @@ Rutas (cabecera X-Kira-Token):
 Solo librería estándar. Se instala con instalar_portatil.sh (lo deja arrancando solo al encender el portátil).
 """
 import argparse
+import contextlib
 import hashlib
 import hmac
 import http.client
 import json
 import os
 import random
+import signal
 import socket
 import subprocess
 import sys
@@ -210,6 +212,137 @@ class Cerebro:
             raise RuntimeError(f"El cerebro «{c['nombre']}» tarda demasiado en cargar.")
 
 
+class _UsoDoble:
+    """Coge el turno de los DOS cerebros (para apartarlos a la vez, p. ej. el pintor)."""
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+
+    def acquire(self):
+        self.a.acquire()
+        self.b.acquire()
+
+    def release(self):
+        self.b.release()
+        self.a.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+
+class CerebroDoble:
+    """v3.70: los DOS cerebros cargados a la vez, cada uno en su llama-server (puertos 8081 y 8082).
+    El pequeño (rápido) siempre listo para charlar; el grande se carga la PRIMERA vez que hace falta y se QUEDA
+    cargado: ya no se quita uno para poner el otro (eso eran minutos en el Packard Bell). Cada uno contesta
+    una cosa cada vez, pero los dos pueden trabajar a la vez (comparten el procesador: van algo más lentos)."""
+    def __init__(self, binario, modelos, cerebros, puerto=PUERTO_CEREBRO, lanzar=subprocess.Popen, espera=600,
+                 avisar=print):
+        self.cerebros, self.modelos = cerebros, modelos
+        self.subs = {k: Cerebro(binario, modelos, {k: cerebros[k]}, puerto + i, lanzar, espera, avisar)
+                     for i, k in enumerate(("rapido", "grande"))}
+        self.puerto = puerto
+        self.uso = _UsoDoble(self.subs["rapido"].uso, self.subs["grande"].uso)
+        self._hablando, self._lock_pausa, self.pausado = 0, threading.Lock(), False
+        self._senal = os.kill
+
+    # v3.70: mientras me HABLAS, el grande se PAUSA (si estaba trabajando) para que el pequeño tenga el procesador
+    # entero; al acabar la respuesta, sigue justo donde estaba. Pausa de verdad del proceso (SIGSTOP/SIGCONT).
+    def _grande_ocupado(self):
+        g = self.subs["grande"]
+        return g.vivo() and getattr(g.uso, "_value", 1) == 0
+
+    def _pausar_grande(self, si):
+        g = self.subs["grande"]
+        if si and not self._grande_ocupado():
+            return                                  # libre: no hay nada que pausar (y así no se cuelga al cargar)
+        if not si and not self.pausado:
+            return
+        try:
+            self._senal(g.proceso.pid, signal.SIGSTOP if si else signal.SIGCONT)
+            self.pausado = si
+        except (OSError, AttributeError):
+            self.pausado = False
+
+    @contextlib.contextmanager
+    def prioridad(self, nombre):
+        if nombre != "rapido":
+            yield
+            return
+        with self._lock_pausa:
+            self._hablando += 1
+            if self._hablando == 1:
+                self._pausar_grande(True)
+        try:
+            yield
+        finally:
+            with self._lock_pausa:
+                self._hablando -= 1
+                if self._hablando == 0:
+                    self._pausar_grande(False)
+
+    def ruta(self, archivo):
+        return os.path.join(self.modelos, archivo)
+
+    def disponibles(self):
+        return [k for k, c in self.subs.items() if c.disponibles()]
+
+    def para(self, nombre):
+        """(cerebro, nombre) que tiene que contestar. Si el grande no está bajado, contesta el pequeño."""
+        nombre = nombre if nombre in self.subs else "rapido"
+        if nombre == "grande" and not self.subs["grande"].disponibles():
+            nombre = "rapido"
+        return self.subs[nombre], nombre
+
+    def usar(self, nombre):
+        sub, nombre = self.para(nombre)
+        return sub.usar(nombre)
+
+    def vivo(self):
+        return any(c.vivo() for c in self.subs.values())
+
+    @property
+    def actual(self):
+        vivos = [k for k, c in self.subs.items() if c.actual and c.vivo()]
+        return "+".join(vivos) or None
+
+    @property
+    def estado(self):
+        return "; ".join(f"{k}: {c.estado}" for k, c in self.subs.items())
+
+    def parar(self):
+        with self._lock_pausa:
+            self._pausar_grande(False)              # nunca dejarlo congelado
+        for c in self.subs.values():
+            c.parar()
+
+
+def prioridad_de(cerebro, nombre):
+    return cerebro.prioridad(nombre) if hasattr(cerebro, "prioridad") else contextlib.nullcontext()
+
+
+RAM_PARA_DOBLE_MB = 7000          # Linux ~1,5 GB + 2B ~1,5 GB + 4B ~3,5 GB
+
+
+def cerebro_para_equipo(binario, modelos, cerebros, ram=None, doble=True, **kw):
+    """v3.70: los dos a la vez si son distintos y hay memoria; si no, uno cada vez (como siempre).
+    Solo en modo ligero (todo en la RAM): con gráfica, los dos grandes no caben juntos en sus 8 GB."""
+    ram = ram_mb() if ram is None else ram
+    r, g = cerebros.get("rapido", {}), cerebros.get("grande", {})
+    if doble and r and g and r.get("archivo") != g.get("archivo") and ram >= RAM_PARA_DOBLE_MB:
+        return CerebroDoble(binario, modelos, cerebros, **kw)
+    return Cerebro(binario, modelos, cerebros, **kw)
+
+
+def turno_de(cerebro, nombre):
+    """(cerebro que contesta, nombre): con CerebroDoble, el suyo; con uno solo, ese mismo."""
+    if hasattr(cerebro, "para"):
+        return cerebro.para(nombre)
+    return cerebro, nombre
+
+
 # =====================================================================================
 #  EL PINTOR (sd-cli: una imagen cada vez)
 # =====================================================================================
@@ -365,9 +498,10 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
             except (ValueError, UnicodeDecodeError):
                 return self._json(400, {"ok": False, "error": "petición mal formada"})
             if ruta == "/cerebro":
-                with cerebro.uso:                          # no se cambia en mitad de una respuesta
+                sub, nom = turno_de(cerebro, str(d.get("usar", "rapido")))
+                with sub.uso:                              # no se cambia en mitad de una respuesta
                     try:
-                        return self._json(200, {"ok": True, "cargado": cerebro.usar(str(d.get("usar", "rapido")))})
+                        return self._json(200, {"ok": True, "cargado": sub.usar(nom)})
                     except RuntimeError as e:
                         return self._json(503, {"ok": False, "error": str(e)})
             if ruta == "/pintar":
@@ -454,16 +588,16 @@ def crear_servidor(host, puerto, token, cerebro, pintor, nombre=None):
                 return self._json(400, {"ok": False, "error": str(e)})
 
         def _charla(self, d):
-            quiero = str(d.pop("kira_cerebro", "rapido"))
-            with cerebro.uso:
+            sub, quiero = turno_de(cerebro, str(d.pop("kira_cerebro", "rapido")))
+            with prioridad_de(cerebro, quiero), sub.uso:
                 try:
-                    cerebro.usar(quiero)
+                    sub.usar(quiero)
                 except RuntimeError as e:
                     return self._json(503, {"ok": False, "error": str(e)})
                 datos = json.dumps(d).encode("utf-8")
                 fin = threading.Event()
                 try:
-                    c = http.client.HTTPConnection("127.0.0.1", cerebro.puerto, timeout=900)
+                    c = http.client.HTTPConnection("127.0.0.1", sub.puerto, timeout=900)
                     c.request("POST", "/v1/chat/completions", body=datos,
                               headers={"Content-Type": "application/json", "Content-Length": str(len(datos))})
                     # v3.18: si quien preguntó se va («Parar»), se corta también al cerebro, aunque aún esté LEYENDO
@@ -579,7 +713,10 @@ def main(argv=None):
     cerebros, pintor_cfg = config(a.prueba, a.ligero)
     modelos = os.path.join(a.datos, "modelos")
     binarios = os.path.join(a.datos, "bin")
-    cerebro = Cerebro(os.path.join(binarios, "llama-server"), modelos, cerebros, avisar=lambda t: print(t, flush=True))
+    cerebro = cerebro_para_equipo(os.path.join(binarios, "llama-server"), modelos, cerebros, doble=a.ligero,
+                                  avisar=lambda t: print(t, flush=True))
+    if isinstance(cerebro, CerebroDoble):
+        print("[portátil] Dos cerebros a la vez: el pequeño para charlar y el grande para las tareas.", flush=True)
     pintor = Pintor(os.path.join(binarios, "sd-cli"), modelos, pintor_cfg, cerebro)
     servidor = crear_servidor(a.host, a.puerto, token, cerebro, pintor)
     nombre = nombre_equipo()
