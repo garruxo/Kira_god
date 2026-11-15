@@ -50,5 +50,22 @@ with tempfile.TemporaryDirectory() as d:
     ejecutable(os.path.join(d, "miprog"))
     mira(a.como_arrancar(d) == [os.path.join(d, "miprog")], "como_arrancar el de verdad")
 
+# un .tar.gz que no es de GitHub, con un código en el nombre: el nombre sale de la carpeta de dentro
+import tarfile, io
+with tempfile.TemporaryDirectory() as d:
+    src = os.path.join(d, "src", "superprograma-274c0e1e2d47")
+    ejecutable(os.path.join(src, "superprograma"))
+    tgz = os.path.join(d, "x.tar.gz")
+    with tarfile.open(tgz, "w:gz") as t:
+        t.add(src, arcname="superprograma-274c0e1e2d47")
+    def bajar(url, destino, **kw):
+        import shutil; shutil.copy(tgz, destino); return True
+    r = a.instalar("https://descargas.ejemplo.org/files/274c0e1e2d4785a76ef7.tar.gz", base=os.path.join(d, "apps"),
+                   bajar=bajar, correr=lambda *x, **k: (1, ""))
+    mira(r.get("nombre") == "superprograma", f"nombre de dentro del tar.gz: {r.get('nombre')!r} {r.get('mensaje','')[:120]}")
+    mira(r.get("lanzar") and r["lanzar"][-1].endswith("superprograma"), f"lanzador: {r.get('lanzar')}")
+mira(a._nombre_de("https://github.com/o/r/archive/274c0e1e2d4785a76ef7.tar.gz") == "r", "github tar.gz")
+mira(a.metodo("https://github.com/o/r/archive/274c0e1e2d4785a76ef7.tar.gz") == "github", "archive github se clona")
+
 print(f"test_v386: {ok} bien, {mal} mal")
 sys.exit(1 if mal else 0)

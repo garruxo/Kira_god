@@ -264,10 +264,24 @@ def _nombre_de(fuente):
         base = re.sub(r"\.(?:git|appimage|deb|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2|tar|zip|run|sh|bin|x86_64)$", "",
                       t, flags=re.I)
         base = re.sub(r"[_-]?v?\d+(?:\.\d+)+.*$", "", base) or base          # «programa-1.2.3-linux» → «programa»
+        base = re.sub(r"(?i)[_-][0-9a-f]{7,40}$", "", base) or base             # «repo-274c0e1e2d47» → «repo»
         if not _parece_codigo(base):
             return base.replace("_", " ").replace("-", " ").strip()[:60] or "app"
     dom = re.sub(r"^\w+://", "", f).split("/")[0]
     return (dom.split(".")[-2] if dom.count(".") >= 1 else dom)[:60] or "app"
+
+
+def _nombre_de_dentro(raiz):
+    """Un .tar.gz suele traer UNA carpeta («programa-1.2.3/» o «repo-274c0e1/»): su nombre es mejor que el del enlace."""
+    try:
+        dentro = [d for d in os.listdir(raiz) if not d.startswith(".")]
+    except OSError:
+        return ""
+    if len(dentro) == 1 and os.path.isdir(os.path.join(raiz, dentro[0])):
+        n = _nombre_de(dentro[0])
+        if n and n != "app" and not _parece_codigo(n.replace(" ", "")):
+            return n
+    return ""
 
 
 def _carpeta_id(nombre):
@@ -719,6 +733,7 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
     except ImportError:
         pass
     met = metodo(fuente)
+    nombre_dado = bool(str(nombre or "").strip())
     nombre = str(nombre or "").strip()[:60] or _nombre_de(fuente)   # v3.35: el nombre de la app (sin la versión)
     carpeta = os.path.join(base, _carpeta_id(nombre))
 
@@ -867,6 +882,8 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
                 shutil.rmtree(carpeta, ignore_errors=True)
                 return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
                         "mensaje": f"No pude descomprimir {nombre} (¿archivo dañado o formato raro?)."}
+        if not nombre_dado and tipo == "comprimido":     # v3.86: el nombre de la carpeta de DENTRO del .tar.gz
+            nombre = _nombre_de_dentro(raiz) or nombre
         bloqueo = _revisar(raiz, nombre, fuente, forzar, tipo)
         if bloqueo:
             import shutil
