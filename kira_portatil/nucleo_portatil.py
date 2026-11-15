@@ -23,6 +23,7 @@ import argparse
 import hmac
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -766,12 +767,53 @@ SISTEMA_CHARLA = ("Eres Kira, la asistente del portátil de tu persona (KiraOS).
                   "No afirmes haber hecho algo que no has hecho.")
 
 
+# v3.73 (lo decidió el dueño): con el Packard Bell, la CHARLA va en el MÓVIL (su cerebro pequeño habla fluido) y el
+# portátil guarda su cerebro para TRABAJAR (programar, estudiar, pensar…). Se puede volver a encender aquí.
+_CHARLA_ON = re.compile(r"^(?:por favor\s+)?(?:activa|enciende|pon|vuelve a poner)\s+(?:la\s+)?(?:charla|conversaci[oó]n)"
+                        r"(?:\s+(?:aqu[ií]|en\s+(?:el\s+)?port[aá]til|en\s+kira ?os))?$|"
+                        r"^(?:charla|habla(?:\s+conmigo)?|conversa)\s+(?:aqu[ií]|en\s+(?:el\s+)?port[aá]til)(?:\s+tambi[eé]n)?$")
+_CHARLA_OFF = re.compile(r"^(?:por favor\s+)?(?:desactiva|apaga|quita)\s+(?:la\s+)?(?:charla|conversaci[oó]n)"
+                         r"(?:\s+(?:aqu[ií]|en\s+(?:el\s+)?port[aá]til|en\s+kira ?os))?$|"
+                         r"^(?:charla|habla|conversa)(?:\s+conmigo)?\s+solo\s+en\s+el\s+m[oó]vil$")
+AVISO_CHARLA = ("Para charlar, háblame en el móvil: allí te contesto rápido. Aquí, en el portátil, guardo mi cerebro "
+                "para trabajar (programar, estudiar, pensar, el kernel…): pídeme órdenes. Si aun así quieres charlar "
+                "aquí, dime «activa la charla aquí» (con este procesador tardaré en contestar).")
+
+
+def charla_aqui(core):
+    try:
+        with open(os.path.join(core.dir, "charla_portatil.json"), encoding="utf-8") as f:
+            return bool(json.load(f).get("on"))
+    except (OSError, ValueError, AttributeError):
+        return False                              # por defecto: la charla, en el móvil
+
+
+def poner_charla_aqui(core, si):
+    try:
+        ruta = os.path.join(core.dir, "charla_portatil.json")
+        with open(ruta, "w", encoding="utf-8") as f:
+            json.dump({"on": bool(si)}, f)
+        return True
+    except (OSError, AttributeError):
+        return False
+
+
 def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
     """v3.68: si lo que dijiste no es una orden («hola», «¿qué es un compilador?»), te CONTESTA con su cerebro, como
     en el móvil (antes salía «No reconozco la orden»). Recuerda los últimos turnos de la charla (solo en RAM)."""
     no = getattr(core, "NO_RECONOCIDA", "[i] No reconozco la orden")
     if not (isinstance(r, str) and r.startswith(no)):
         return {"texto": r}
+    t = re.sub(r"\s+", " ", str(o or "")).strip(" .!¡?¿").lower()
+    if _CHARLA_ON.match(t):
+        poner_charla_aqui(core, True)
+        return {"texto": "Hecho: también charlo aquí en el portátil (con este procesador tardo en contestar; para algo "
+                         "rápido, el móvil). Para volver a dejarlo solo en el móvil: «charla solo en el móvil»."}
+    if _CHARLA_OFF.match(t):
+        poner_charla_aqui(core, False)
+        return {"texto": "Hecho: la charla, en el móvil. Aquí guardo el cerebro para trabajar."}
+    if not charla_aqui(core):
+        return {"texto": AVISO_CHARLA}
     hist = getattr(core, "_charla_kiraos", None)
     if hist is None:
         hist = []

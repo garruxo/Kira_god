@@ -139,7 +139,7 @@ def memoria_libre_mb():
 _PIDE = re.compile(
     r"^(?:por\s+favor\s+)?(?:p[ií]ntame|pinta|dib[uú]jame|dibuja|hazme|haz|cr[eé]ame|crea|gen[eé]rame|genera|"
     r"quiero)\s+(?:(?:(?:una?|otra?)\s+)?(?P<que>imagen(?:es)?|foto(?:graf[ií]a)?|retrato|ilustraci[oó]n|dibujo|"
-    r"cuadro|acuarela|p[oó]ster|cartel|fondo\s+de\s+pantalla|wallpaper|boceto)\s*(?:de|del|con|sobre)?\s+)?"
+    r"cuadro|acuarela|p[oó]ster|cartel|fondo\s+de\s+pantalla|wallpaper|boceto|iconos?|logo(?:tipo)?|emblema)\s*(?:de|del|con|sobre)?\s+)?"
     r"(?P<resto>.+)$", re.I | re.S)
 
 
@@ -160,7 +160,8 @@ def pedido_imagen(texto, siempre_dibuja=True):
         return None
     if verbo.startswith("dibuja") and not que and not siempre_dibuja:
         return None
-    return ((que + " de " if que and _plano(que).startswith(("acuarela", "retrato", "boceto", "foto", "cuadro"))
+    return ((que + " de " if que and _plano(que).startswith(("acuarela", "retrato", "boceto", "foto", "cuadro",
+                                                                "icono", "logo", "emblema", "fondo", "wallpaper"))
              else "") + resto)[:300]
 
 
@@ -174,6 +175,9 @@ def estilo_de(texto):
 
 def formato_de(texto):
     t = _plano(texto)
+    if re.search(r"\b(kira ?os|portatil|ordenador|pc|escritorio|pantalla ancha)\b", t) and \
+            re.search(r"\b(fondo|wallpaper)\b", t):
+        return "horizontal"                              # v3.73: un fondo para KiraOS es apaisado (la del portátil)
     if re.search(r"\b(vertical|de pie|fondo de pantalla|wallpaper|movil)\b", t):
         return "vertical"
     if re.search(r"\b(horizontal|apaisad[ao]|panoramic[ao]|paisaje ancho)\b", t):

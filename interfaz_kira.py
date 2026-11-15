@@ -840,6 +840,36 @@ def construir_interfaz(core, consola=None, modo=None):
             decir(r if isinstance(r, str) else "He terminado de estudiar.")
         en_hilo(trabajo, hecho)
 
+    def pintar_por_voz(descripcion, orden):
+        """v3.73 (lo pidió el dueño): el MÓVIL es el diseñador. Pinta aquí (iconos, logos, fondos, imágenes) con su
+        pintor y la imagen viaja sola a KiraOS en la próxima sincronía (allí: «pon de fondo la última del móvil» o
+        «pon la última del móvil como icono del mapa»)."""
+        import pintor_kira as pin_
+        tarea_empieza("pintor", f"pintar {descripcion[:40]}", lambda d_=descripcion, o_=orden: pintar_por_voz(d_, o_),
+                      {"descripcion": descripcion})
+        oid = apuntar(orden, "movil")
+        decir("Me pongo a pintarlo con mi pintor del móvil. Verás la barra; al acabar te digo dónde está y se lo "
+              "paso a KiraOS en la próxima sincronía.", hablar=False)
+
+        def trabajo():
+            return core.pintar_imagen(descripcion, formato=pin_.formato_de(orden),
+                                      al_progreso=lambda fr, txt="": avance(txt or "Pintando…", fr))
+
+        def hecho(r):
+            t = tarea_fin(not isinstance(r, Exception))
+            apuntar_fin(oid, r if not isinstance(r, Exception) else str(r), not isinstance(r, Exception))
+            if t is not None and t.interrumpida:
+                return
+            if isinstance(r, Exception):
+                decir(f"No he podido pintarlo: {r}", hablar=False)
+                return
+            seg = r.get("segundos") if isinstance(r, dict) else None
+            decir("¡Listo! " + (f"Lo he pintado en {seg} s. " if seg else "")
+                  + "Está en mis imágenes y viaja solo a KiraOS cuando nos sincronicemos (o dime «sincronízate»). "
+                  "Allí dile «pon de fondo la última del móvil» o «pon la última del móvil como icono del mapa».",
+                  hablar=False)
+        en_hilo(trabajo, hecho)
+
     def estudiar_web_por_voz(o):
         """v3.03: ESTUDIO COMPLETO de una web (la página y TODOS sus enlaces), con barra. «para» lo deja apuntado y
         «sigue estudiando la página» continúa donde lo dejó."""
@@ -1068,6 +1098,14 @@ def construir_interfaz(core, consola=None, modo=None):
         if ik2_.pedido_con_codigo(orden):
             decir("En el móvil ya no tengo editor: el código lo escribe y lo prueba KiraOS. Pídeme «mejora para el "
                   "móvil: …» y KiraOS me la prepara; luego la instalas tú desde el panel con dos toques.", hablar=False)
+            return
+        try:                                            # v3.73: el móvil es el DISEÑADOR: iconos, logos, fondos,
+            import pintor_kira as pin0_                 # imágenes se pintan AQUÍ (KiraOS no tiene pintor)
+            d_img = pin0_.pedido_imagen(orden)
+        except Exception:
+            d_img = None
+        if d_img:
+            pintar_por_voz(d_img, orden)
             return
         if mdk_.mejora_es_de_kiraos(orden):            # v3.07: una mejora para KiraOS (se instala allí, dos toques)
             trabajo_a_kiraos(orden)

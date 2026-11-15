@@ -87,6 +87,17 @@ ok(esperar(lambda: any("Te lo apunto" in x for x in textos())), "y lo dice")
 decir_a_kira("mejora tu forma de contar chistes")
 ok(okr.pendientes_kiraos(T)[-1]["texto"].startswith("prepara una mejora para el móvil:"),
    "una mejora para mí se la pide a KiraOS")
+# --- v3.73: PINTAR (iconos, logos, fondos) lo hace el MÓVIL, no se manda a KiraOS ---
+pintados = []
+core.pintar_imagen = lambda d, formato=None, al_progreso=None, **k: (pintados.append((d, formato)),
+                                                                      {"ruta": "x.png", "segundos": 3})[1]
+antes = len(okr.pendientes_kiraos(T))
+decir_a_kira("hazme un icono de una brújula para KiraOS")
+ok(esperar(lambda: pintados and pintados[-1][0].startswith("icono de")), "un icono lo pinta el móvil")
+decir_a_kira("crea un fondo de pantalla de galaxias para kiraos")
+ok(esperar(lambda: len(pintados) == 2 and pintados[-1][1] == "horizontal"), "un fondo para KiraOS sale apaisado")
+ok(len(okr.pendientes_kiraos(T)) == antes, "y NO se apunta como trabajo para KiraOS")
+ok(esperar(lambda: any("viaja solo a KiraOS" in x for x in textos())), "y dice que viajará a KiraOS")
 # --- estudiar y charlar: aquí ---
 decir_a_kira("estudia python")
 ok(esperar(lambda: estudios == ["python"]), "estudiar lo hace el móvil")
