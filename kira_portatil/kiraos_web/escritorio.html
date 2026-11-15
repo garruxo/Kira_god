@@ -162,6 +162,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .ftxt{flex:1;min-width:0}.ftit{font-size:14.5px;color:#e9f1fb;overflow-wrap:anywhere}
 .fdet{font-size:12.5px;color:var(--tenue);margin-top:3px;overflow-wrap:anywhere}
 .fbot{display:flex;gap:6px;flex:0 0 auto}
+.termprog{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:0 0 8px;padding:8px 10px;border-radius:10px;background:rgba(46,230,255,.08);font-size:13px;color:#bff5ff}
 .pedir{margin:-2px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(46,230,255,.08);box-shadow:inset 0 0 0 1px rgba(46,230,255,.35)}
 .pedir .ptit{font-size:13px;color:#bff5ff;margin:0 0 7px}
 .pedir .plin{display:flex;gap:8px}
@@ -615,6 +616,7 @@ function pintaAcceso(iid){                          // v3.26: abre el programa (
   var solo=ACC_SOLO_ORDENES; ACC_SOLO_ORDENES=false;
   llama("abrir_acceso", iid, !solo).then(function(d){
     d=d||{};
+    if(d.externa && d.terminal_kira){ abrirEnTerminalKira(d.terminal_kira); return; }   // v3.85: en MI terminal
     if(d.externa){                                 // v3.28: app externa (se lanza en el portátil, no hay nada que mostrar)
       c.className="vcuerpo";
       var ords=d.ordenes||[];                      // v3.78: la ventanita con TODAS las órdenes de este programa
@@ -849,7 +851,16 @@ function pintaOrbe(d){                          // v3.09: el orbe dice qué hace
   $("orbeEta").textContent = d.eta || "";
   o.classList.toggle("ocupada", !!d.ocupada);
 }
-function refrescaTrabajo(){ llama("trabajo").then(function(d){ ultTrab=d||{}; pintaTrabajo(d); }).catch(function(){}); }
+function refrescaTrabajo(){ llama("trabajo").then(function(d){ ultTrab=d||{}; pintaTrabajo(d); }).catch(function(){});
+  llama("terminal_pendiente").then(function(t){ if(t&&t.orden) abrirEnTerminalKira(t); }).catch(function(){}); }   // v3.85
+// v3.85: un programa de terminal se abre en MI terminal (aquí delante), escribo sus pasos y lo arranco
+function abrirEnTerminalKira(t){
+  cierraMenus(); if(relojApp){ clearTimeout(relojApp); relojApp=null; } paraTerm();
+  actual="terminal"; $("vtitulo").textContent="Terminal · "+(t.titulo||"programa"); pintaExtras("terminal");
+  $("ventana").classList.add("on");
+  $("abiertas").innerHTML='<div class="chip">'+svg("terminal")+esc(t.titulo||"Terminal")+'</div>';
+  pintaTerminalIntegrada(t);
+}
 // v3.14: pulsar el ORBE lleva a lo que está haciendo (programando → Programando; en su máquina → Máquina; …)
 var ultTrab={};
 function irOrbe(){
@@ -1042,9 +1053,10 @@ function pintaTerminal(){                            // v3.24: abre la terminal 
     c.querySelector('[data-x="dentro"]').onclick=function(){ pintaTerminalIntegrada(); };
   }).catch(function(){ pintaTerminalIntegrada(); });
 }
-function pintaTerminalIntegrada(){                   // la terminal embebida (v3.17), de reserva o a elección
-  var c=$("vcuerpo");
-  c.innerHTML='<div class="term"><pre id="termSal"></pre>'+
+function pintaTerminalIntegrada(prog){               // la terminal embebida (v3.17), de reserva o a elección
+  var c=$("vcuerpo"); c.className="vcuerpo";
+  c.innerHTML='<div class="term">'+(prog&&prog.orden?'<div class="termprog"><span></span>'+
+      '<button class="acc" data-x="xubuntu">Abrir en la terminal de Xubuntu</button></div>':'')+'<pre id="termSal"></pre>'+
     '<div class="linea"><span id="termPrompt">$</span><input id="termIn" autocomplete="off" spellcheck="false" placeholder="escribe una orden de Linux y pulsa Intro"></div>'+
     '<div class="teclas">'+TECLAS.map(function(k){ return '<button data-k="'+esc(k)+'">'+esc(k)+'</button>'; }).join("")+
     '<button class="acc" data-t="ctrl_c">Ctrl+C</button><button class="acc" data-t="tab">Tab</button><button class="acc" data-x="limpiar">Limpiar</button><button class="acc" data-x="nueva">Nueva</button></div>'+
@@ -1070,6 +1082,17 @@ function pintaTerminalIntegrada(){                   // la terminal embebida (v3
       llama("terminal_tecla","ctrl_c").then(leeTerm); return; }
     if(e.ctrlKey && (e.key==="l"||e.key==="L")){ e.preventDefault(); llama("terminal_limpiar").then(function(){ sal.textContent=""; }); }
   });
+  if(prog&&prog.orden){                              // v3.85: Kira escribe aquí los pasos del programa y lo arranca
+    var tp=c.querySelector(".termprog span");
+    tp.textContent="Kira escribe aquí los pasos de «"+(prog.titulo||"el programa")+"» y lo arranca. Cuando te pregunte algo, contéstale en la línea de abajo.";
+    c.querySelector('[data-x="xubuntu"]').onclick=function(){ llama("abrir_guion_xubuntu", prog.guion).then(function(r){
+      tp.textContent=(r&&r.texto)||"Hecho."; }); };
+    llama("terminal_nueva").then(function(d){ term.pos=0; sal.textContent=""; pintaTerm(d);
+      return llama("terminal_escribir", prog.orden, false); })
+      .then(function(){ inp.focus(); setTimeout(leeTerm, 300); })
+      .catch(function(){ sal.textContent="No he podido abrir la terminal."; });
+    return;
+  }
   llama("terminal_abrir").then(function(d){ pintaTerm(d); inp.focus(); term.reloj=setTimeout(leeTerm, 400); })
     .catch(function(){ sal.textContent="No he podido abrir la terminal."; });
 }

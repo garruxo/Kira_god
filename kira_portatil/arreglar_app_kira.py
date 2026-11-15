@@ -925,7 +925,7 @@ def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None,
         return {"ok": False, "texto": f"No sé cómo arrancar {titulo}."}
     en_terminal = en_terminal if en_terminal is not None else visible
     if en_terminal or (en_terminal is None and es_de_terminal(acceso)):    # v3.83: se maneja en la terminal
-        r = abrir_en_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
+        r = abrir_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
         if r.get("ok") and al_pid and r.get("pid"):
             al_pid(r["pid"])
         return r
@@ -949,7 +949,7 @@ def abrir_vigilando(acceso, dir_accesos, *, popen=None, correr=None, traer=None,
         else:
             salida = error_inicial
         if necesita_terminal(salida):                 # v3.83: quería una terminal (te pregunta algo…): la abro visible
-            rt = abrir_en_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
+            rt = abrir_terminal(acceso, popen=popen, which=which, admin=admin, correr=correr)
             if rt.get("ok"):
                 try:
                     ak.actualizar_externa(dir_accesos, acceso.get("id"), terminal=True)
@@ -984,7 +984,7 @@ def _o_terminal(acceso, lanzador, **kw):
     def f(lan, carpeta, entorno):
         a = dict(acceso, lanzar=lan, carpeta=carpeta, entorno=entorno or {})
         if es_de_terminal(a):
-            r = abrir_en_terminal(a, **kw)
+            r = abrir_terminal(a, **kw)
             return bool(r.get("ok")), r.get("texto", ""), None
         return lanzador(lan, carpeta, entorno)
     return f
@@ -1204,9 +1204,8 @@ def orden_terminal(guion, titulo, which=shutil.which):
     return None
 
 
-def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, correr=None, subir=True):
-    """Abre el programa en una terminal VISIBLE: Kira escribe ahí sus pasos (descargas…) y lo arranca. {ok, texto, pid}."""
-    titulo = acceso.get("titulo") or "el programa"
+def guion_para(acceso, admin=None, correr=None):
+    """Escribe el guion de la terminal (0700) y devuelve (ruta, pasos)."""
     if admin is None:
         try:
             import apps_externas_kira as aex
@@ -1214,11 +1213,27 @@ def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, cor
         except Exception:                             # noqa: BLE001
             admin = False
     pasos = pasos_terminal(acceso, admin)
+    titulo = acceso.get("titulo") or "el programa"
     guion = os.path.join(REGISTROS, re.sub(r"[^\w.-]", "_", str(acceso.get("id") or titulo))[:60] + "_terminal.sh")
     os.makedirs(REGISTROS, mode=0o700, exist_ok=True)
     with open(guion, "w", encoding="utf-8") as f:
         f.write(guion_terminal(acceso, pasos))
     os.chmod(guion, 0o700)
+    return guion, pasos
+
+
+def _texto_pasos(titulo, pasos, donde):
+    if pasos:
+        cuantos = "el paso" if len(pasos) == 1 else f"los {len(pasos)} pasos"
+        return (f"Abro {titulo} en {donde}: primero escribo {cuantos} de su README (descargas y lo que "
+                "necesite) y luego lo arranco ahí para que lo manejes.")
+    return f"Abro {titulo} en {donde} para que lo manejes ahí."
+
+
+def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, correr=None, subir=True):
+    """Abre el programa en una terminal VISIBLE de Xubuntu (ventana aparte). {ok, texto, pid}."""
+    titulo = acceso.get("titulo") or "el programa"
+    guion, pasos = guion_para(acceso, admin, correr)
     t_ventana = f"Kira · {titulo}"[:60]
     orden = orden_terminal(guion, t_ventana, which)
     if not orden:
@@ -1233,13 +1248,89 @@ def abrir_en_terminal(acceso, *, popen=None, which=shutil.which, admin=None, cor
         return {"ok": False, "texto": f"No he podido abrir la terminal: {e}"}
     if subir:                                         # que salga ENCIMA de la pantalla completa de Kira
         threading.Thread(target=_subir_ventana, args=(t_ventana, env), daemon=True).start()
-    if pasos:
-        texto = (f"Abro {titulo} en una terminal: primero escribo los {len(pasos)} pasos de su README (descargas y "
-                 "lo que necesite) y luego lo arranco ahí para que lo manejes.")
-    else:
-        texto = f"Abro {titulo} en una terminal para que lo manejes ahí."
-    return {"ok": True, "texto": texto + " Si no ves la ventana, pulsa Alt+Tab.", "pid": getattr(p, "pid", None),
+    return {"ok": True, "texto": _texto_pasos(titulo, pasos, "una terminal de Xubuntu") +
+            " Si no ves la ventana, pulsa Alt+Tab.", "pid": getattr(p, "pid", None),
             "terminal": True, "pasos": [t for t, _b in pasos]}
+
+
+# ---------- v3.85: en la TERMINAL DE DENTRO DE KIRA (siempre delante: la de Xubuntu se quedaba detrás) ----------
+def _ruta_pendiente():
+    return os.path.join(REGISTROS, "terminal_pendiente.json")
+
+
+def _ruta_viva():
+    return os.path.join(REGISTROS, "pantalla_viva")
+
+
+def marcar_pantalla_viva():
+    """La pantalla de KiraOS lo llama cada pocos segundos: así se sabe que hay alguien para abrir la terminal."""
+    try:
+        os.makedirs(REGISTROS, mode=0o700, exist_ok=True)
+        with open(_ruta_viva(), "w") as f:
+            f.write(str(int(time.time())))
+    except OSError:
+        pass
+
+
+def pantalla_viva(edad=20):
+    try:
+        return time.time() - os.path.getmtime(_ruta_viva()) < edad
+    except OSError:
+        return False
+
+
+def pedir_terminal_kira(acceso, *, admin=None, correr=None):
+    """Deja el programa apuntado para que la pantalla de KiraOS lo abra en SU terminal (delante) y escriba ahí sus
+    pasos. Sirve también desde el núcleo (otro proceso). {ok, texto, terminal: 'kira', orden, guion, titulo}."""
+    import json
+    titulo = acceso.get("titulo") or "el programa"
+    guion, pasos = guion_para(acceso, admin, correr)
+    d = {"guion": guion, "titulo": str(titulo)[:60], "orden": "bash " + shlex.quote(guion),
+         "pasos": [t for t, _b in pasos], "cuando": int(time.time())}
+    tmp = _ruta_pendiente() + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, _ruta_pendiente())
+    return dict(d, ok=True, terminal="kira",
+                texto=_texto_pasos(titulo, pasos, "mi Terminal (aquí delante)") +
+                " Si un programa se ve raro ahí, tienes un botón para abrirlo en la terminal de Xubuntu.")
+
+
+def tomar_pendiente(maximo=120):
+    """La pantalla recoge (y borra) lo que hay que abrir en su terminal. None si no hay o es viejo."""
+    import json
+    try:
+        with open(_ruta_pendiente(), encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    try:
+        os.remove(_ruta_pendiente())
+    except OSError:
+        pass
+    if not isinstance(d, dict) or time.time() - float(d.get("cuando") or 0) > maximo:
+        return None
+    if not guion_valido(d.get("guion")):
+        return None
+    return {k: d.get(k) for k in ("guion", "titulo", "orden", "pasos")}
+
+
+def guion_valido(ruta):
+    """Solo guiones que escribió Kira (en su carpeta de registros y con el nombre que pone ella). PURO salvo mirar."""
+    try:
+        real = os.path.realpath(str(ruta or ""))
+        base = os.path.realpath(REGISTROS)
+    except (OSError, ValueError):
+        return False
+    return real.startswith(base + os.sep) and real.endswith("_terminal.sh") and os.path.isfile(real)
+
+
+def abrir_terminal(acceso, **kw):
+    """Si la pantalla de KiraOS está abierta, en SU terminal (delante); si no, en la de Xubuntu."""
+    if pantalla_viva():
+        return pedir_terminal_kira(acceso, admin=kw.get("admin"), correr=kw.get("correr"))
+    return abrir_en_terminal(acceso, **kw)
 
 
 def _subir_ventana(titulo, env):

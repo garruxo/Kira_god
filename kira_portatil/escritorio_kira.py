@@ -252,9 +252,13 @@ class EscritorioMixin:
                     m_ = ma.Manejo(accesos=ak.listar(DATOS_NUCLEO))
                     app_ = {"titulo": a.get("titulo", "App"), "lanzar": a.get("lanzar") or [],
                             "carpeta": a.get("carpeta") or ""}
+                    arr.marcar_pantalla_viva()        # v3.85: estoy aquí: lo de terminal, en MI terminal
                     r0 = arr.abrir_vigilando(a, DATOS_NUCLEO, al_pid=lambda pid: m_.apuntar_pid(app_, pid),
                                              preguntar=getattr(self, "_preguntar_cli", None))
                     r = {"ok": r0.get("ok"), "mensaje": r0.get("texto", "")}
+                    if r0.get("terminal") == "kira":
+                        r["terminal_kira"] = arr.tomar_pendiente() or {k: r0.get(k) for k in
+                                                                       ("guion", "titulo", "orden", "pasos")}
                 except Exception as e:                    # noqa: BLE001
                     r = {"ok": False, "mensaje": str(e)}
             if a.get("tipo") == "externa":
@@ -266,7 +270,8 @@ class EscritorioMixin:
                 except Exception:                         # noqa: BLE001
                     ordenes = []
                 return {"titulo": a.get("titulo", "App"), "externa": True, "ordenes": ordenes,
-                        "lanzada": bool(r.get("ok")), "mensaje": r.get("mensaje", "")}
+                        "lanzada": bool(r.get("ok")), "mensaje": r.get("mensaje", ""),
+                        "terminal_kira": r.get("terminal_kira")}
             return {"titulo": a.get("titulo", "Programa"), "html": ak.html_de(DATOS_NUCLEO, iid)}
         except Exception as e:
             return {"titulo": "Programa", "html": "", "error": str(e)}
@@ -595,6 +600,33 @@ class EscritorioMixin:
 
     def terminal_limpiar(self):
         return self._term().limpiar_pantalla()
+
+    # ---------- v3.85: programas DE TERMINAL en la terminal de dentro de Kira (siempre delante) ----------
+    def terminal_pendiente(self):
+        """La pantalla lo pide cada 3 s: marca que está abierta y recoge el programa que hay que abrir en su terminal."""
+        try:
+            import arreglar_app_kira as arr
+            arr.marcar_pantalla_viva()
+            return arr.tomar_pendiente()
+        except Exception:                             # noqa: BLE001
+            return None
+
+    def abrir_guion_xubuntu(self, guion):
+        """Botón «Abrir en la terminal de Xubuntu»: el MISMO guion, en una ventana aparte (solo guiones de Kira)."""
+        import arreglar_app_kira as arr
+        if not arr.guion_valido(guion):
+            return {"ok": False, "texto": "Ese guion no es uno de los míos."}
+        orden = arr.orden_terminal(guion, "Kira · programa")
+        if not orden:
+            return {"ok": False, "texto": "No encuentro la terminal de Xubuntu (xfce4-terminal)."}
+        env = dict(os.environ)
+        env.setdefault("DISPLAY", ":0")
+        try:
+            subprocess.Popen(orden, env=env, start_new_session=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "texto": f"No he podido abrirla: {e}"}
+        return {"ok": True, "texto": "Abierta en la terminal de Xubuntu (ventana aparte; si no la ves, Alt+Tab)."}
 
     def terminal_nueva(self):
         t = getattr(self, "_terminal", None)
