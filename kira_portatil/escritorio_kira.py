@@ -935,10 +935,51 @@ class EscritorioMixin:
         enlaces = ([{"url": e["url"], "texto": e.get("texto") or ik.dominio(e["url"]), "tema": True} for e in del_tema] +
                    [{"url": e["url"], "texto": e.get("texto") or ik.dominio(e["url"]), "tema": False}
                     for e in todos if e["url"] not in vistos and e.get("texto")][:max(0, 40 - len(del_tema))])
+        descargas = []                                 # v3.79: sus enlaces de descarga, para que elijas tú
+        try:
+            import buscar_linux_kira as bl
+            for d in pag.get("descargas") or []:
+                descargas.append({"url": d["url"], "archivo": d.get("archivo") or d.get("texto", ""),
+                                  "texto": d.get("texto", ""),
+                                  "sistema": bl.PLATAFORMAS.get(bl.plataforma(d["url"]) or "", "")})
+        except Exception:                             # noqa: BLE001
+            pass
+        try:
+            import versiones_kira as vk
+            github = bool(vk.repo_github(pag.get("url", url)))
+        except Exception:                             # noqa: BLE001
+            github = False
         return {"ok": True, "titulo": pag.get("titulo", ""), "url": pag.get("url", url), "dominio": ik.dominio(url),
                 "texto": str(pag.get("texto", ""))[:30000], "codigos": len(pag.get("codigos") or []),
                 "tipo": pag.get("tipo", "web"), "via": self._via(), "enlaces": enlaces,
-                "total_enlaces": len(todos), "imagenes": len(pag.get("imagenes") or [])}      # v3.33
+                "total_enlaces": len(todos), "imagenes": len(pag.get("imagenes") or []),      # v3.33
+                "descargas": descargas, "github": github}                                     # v3.79
+
+    NAVEGADORES = ("xdg-open", "firefox", "chromium", "chromium-browser", "google-chrome", "epiphany-browser",
+                   "midori", "falkon")
+
+    def abrir_navegador(self, url, popen=None, which=None):
+        """v3.79: abre la página en el NAVEGADOR DE VERDAD de Xubuntu (en su propia ventana, encima de KiraOS), para
+        que el dueño la vea entera, con sus botones, y descargue él lo que quiera (va a su carpeta Descargas)."""
+        import shutil
+        import subprocess
+        url = str(url or "").strip()
+        if not re.match(r"^https?://[^\s]+$", url):
+            return {"ok": False, "texto": "Solo abro páginas web (http o https)."}
+        which = which or shutil.which
+        prog = next((p for p in self.NAVEGADORES if which(p)), None)
+        if not prog:
+            return {"ok": False, "texto": ("No encuentro ningún navegador en el portátil. Instala uno en la Terminal: "
+                                           "sudo apt install firefox")}
+        env = dict(os.environ)
+        env.setdefault("DISPLAY", ":0")
+        try:
+            (popen or subprocess.Popen)([which(prog), url], env=env, start_new_session=True, stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:                        # noqa: BLE001
+            return {"ok": False, "texto": f"No pude abrir el navegador: {e}"}
+        return {"ok": True, "texto": ("Te la abro en el navegador (sale en su propia ventana). Lo que descargues va a "
+                                      "tu carpeta Descargas; luego dime «instala lo que he descargado» y lo instalo.")}
 
     # ---------- las demás ventanas (texto + botones) ----------
     def app(self, nombre):

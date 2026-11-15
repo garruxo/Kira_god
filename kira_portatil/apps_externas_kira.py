@@ -111,6 +111,8 @@ def es_orden_usar(texto):
 def metodo(fuente):
     f = str(fuente or "").strip()
     low = f.lower()
+    if low.startswith("file://") or (os.path.isabs(f) and os.path.isfile(f)):   # v3.79: un archivo que bajaste tú
+        return "appimage" if low.endswith(".appimage") else "descarga"
     if ".appimage" in low:
         return "appimage"
     if "github.com" in low or re.match(r"^[\w.-]+/[\w.-]+$", f):
@@ -590,6 +592,11 @@ def _correr_defecto(args, cwd=None, timeout=600):
 
 
 def _bajar_defecto(url, destino):
+    local = url[7:] if str(url).startswith("file://") else url
+    if os.path.isabs(str(local)) and os.path.isfile(local):   # v3.79: un archivo que ya está en tu portátil
+        import shutil
+        shutil.copyfile(local, destino)
+        return os.path.getsize(destino)
     req = urllib.request.Request(url, headers={"User-Agent": "KiraOS"})
     with urllib.request.urlopen(req, timeout=120) as r, open(destino, "wb") as f:
         while True:

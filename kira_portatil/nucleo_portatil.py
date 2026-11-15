@@ -567,6 +567,51 @@ def _instalar_app(core, fuente, paso, forzar=False, sin_versiones=False, nombre=
             ma.texto_preparadas(n, r["nombre"]) + dep_aviso}
 
 
+def _buscar_github(nombre, paso, traer_json=None):
+    """v3.79: busca el nombre en GitHub y PREGUNTA cuál (nunca instala el primero que sale)."""
+    import github_buscar_kira as gb
+    paso(0.1, f"Busco «{nombre}» en GitHub…")
+    try:
+        ops = gb.buscar(nombre, traer_json=traer_json)
+    except Exception as e:                            # noqa: BLE001 - sin internet o GitHub pone límite
+        return {"texto": gb.texto_no_encontrado(nombre, f"GitHub no me ha contestado: {e}"), "ok": True}
+    if not ops:
+        return {"texto": gb.texto_no_encontrado(nombre), "ok": True}
+    gb.guardar_pendiente(nombre, ops)
+    try:                                              # que «el 2» no lo coja una pregunta de versiones vieja
+        import versiones_kira as vk
+        vk.borrar_pendiente()
+    except Exception:                                 # noqa: BLE001
+        pass
+    return {"texto": gb.texto_opciones(nombre, ops)}
+
+
+def _elegir_github(core, texto, pend, paso):
+    """v3.79: el dueño elige uno de los proyectos de GitHub → se instala por el camino de siempre (versiones…)."""
+    import github_buscar_kira as gb
+    e = gb.eleccion(texto, pend["opciones"])
+    gb.borrar_pendiente()
+    if e == "cancelar":
+        return {"texto": f"Vale, no instalo nada de «{pend.get('nombre', 'eso')}»."}
+    o = pend["opciones"][e]
+    r = _instalar_app(core, o["url"], paso, nombre=o["repo"].split("/")[-1])
+    r["texto"] = f"Has elegido {o['repo']}. " + r.get("texto", "")
+    return r
+
+
+def _instalar_descargado(core, paso):
+    """v3.79: instala el último programa que el dueño descargó él mismo (carpeta Descargas)."""
+    import github_buscar_kira as gb
+    ruta = gb.ultimo_descargado()
+    if not ruta:
+        return {"texto": ("No veo ningún programa en tu carpeta Descargas (AppImage, .deb, .tar.gz, .zip…). Si aún "
+                          "se está descargando, espera a que acabe y vuelve a decírmelo."), "ok": True}
+    paso(0.0, f"Instalo {os.path.basename(ruta)} (lo descargaste tú)…")
+    r = _instalar_app(core, ruta, paso, sin_versiones=True)
+    r["texto"] = f"El último que descargaste es «{os.path.basename(ruta)}». " + r.get("texto", "")
+    return r
+
+
 def _dependencias_app(core, nombre, paso):
     """v3.32: «descarga las dependencias de X» → busca y descarga lo que la app necesita (pip --user / npm, SIN
     administrador). Lo pide el dueño (no se hace sola). Lo del sistema (apt) necesita su contraseña, aparte."""
@@ -701,6 +746,15 @@ def ejecutar(core, orden, paso):
     nd = aex.es_orden_dependencias(o)             # v3.32: «descarga las dependencias de X» (tú lo confirmas así)
     if nd:
         return _dependencias_app(core, nd, paso)
+    import github_buscar_kira as gb_              # v3.79: «instala X de github» solo con el nombre
+    pend_g = gb_.pendiente()
+    if pend_g and gb_.es_respuesta(o, pend_g["opciones"]):
+        return _elegir_github(core, o, pend_g, paso)
+    n_gh = gb_.es_orden(o)
+    if n_gh:
+        return _buscar_github(n_gh, paso)
+    if gb_.es_orden_descargado(o):                # v3.79: lo que bajaste TÚ con el navegador
+        return _instalar_descargado(core, paso)
     import versiones_kira as vk_                   # v3.35: ¿contesta a «qué versión quieres?»?
     pend_v = vk_.pendiente()
     if pend_v and vk_.es_respuesta(o, pend_v["opciones"]):

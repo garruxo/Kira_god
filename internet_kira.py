@@ -394,6 +394,35 @@ _IMG_NO = re.compile(r"(?:^|[/._-])(?:logo|icono?|favicon|sprite|avatar|emoji|ba
                      r"transparent|share|social|rss|feed)(?:[/._-]|$)", re.I)
 
 
+_EXT_DESCARGA = (".appimage", ".deb", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".zip", ".run", ".sh",
+                 ".exe", ".msi", ".dmg", ".pkg", ".rpm", ".apk", ".flatpakref", ".snap", ".7z")
+
+
+def descargas_de(crudos, base, maximo=40):
+    """v3.79: los enlaces de DESCARGA de la página (programas: .AppImage, .deb, .zip, .exe…), absolutos y sin
+    repetir, para enseñárselos al dueño en el Buscador y que elija él. Puro."""
+    salida, vistos = [], set()
+    for href, texto in crudos:
+        href = str(href or "").strip()
+        if not href or href.startswith(("#", "mailto:", "javascript:", "data:")):
+            continue
+        try:
+            url = urllib.parse.urldefrag(urllib.parse.urljoin(base, href))[0]
+        except ValueError:
+            continue
+        if not url.lower().startswith(("http://", "https://")) or url in vistos:
+            continue
+        nombre = urllib.parse.urlsplit(url).path.rstrip("/").split("/")[-1].lower()
+        if not nombre.endswith(_EXT_DESCARGA):
+            continue
+        vistos.add(url)
+        salida.append({"url": url, "texto": " ".join(str(texto or "").split())[:120] or nombre,
+                       "archivo": urllib.parse.unquote(urllib.parse.urlsplit(url).path.rstrip("/").split("/")[-1])})
+        if len(salida) >= maximo:
+            break
+    return salida
+
+
 def imagenes_de(crudos, base):
     """Las imágenes de CONTENIDO de una página: [{'url','alt'}], absolutas y sin repetir, saltando iconos, logos,
     anuncios y píxeles de seguimiento (queremos fotos, capturas y figuras, no adornos). Sin .svg (suelen ser iconos)."""
@@ -857,6 +886,7 @@ class Internet:
                 raise InternetError("Esa página no tiene texto que pueda leer (puede que necesite el navegador).")
             pag = {"url": url, "titulo": titulo or dominio(url), "texto": texto, "codigos": codigos, "tipo": "web",
                    "enlaces": enlaces_de(partes.enlaces, final or url),
+                   "descargas": descargas_de(partes.enlaces, final or url),             # v3.79
                    "imagenes": imagenes_de(partes.imagenes, final or url)}        # v3.33: fotos/capturas del artículo
         elif tipo.startswith(("text/", "application/json", "application/javascript")) or gh or \
                 ext in (".py", ".js", ".md", ".txt", ".json", ".c", ".java", ".kt", ".sh", ".css"):
