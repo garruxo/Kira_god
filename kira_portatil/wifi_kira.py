@@ -478,6 +478,12 @@ def orden_wifi(texto):
     t = _norm(texto)
     if not t or not _HAY_WIFI.search(t):
         return None
+    try:                                              # v3.71: «crea un botón en la ventana de la WiFi…» es una
+        import ventanas_kira                          # VENTANA nueva (mejora), no una orden de la WiFi
+        if ventanas_kira.orden(texto):
+            return None
+    except ImportError:
+        pass
     if re.match(r"^(?:que es|que son|como funciona|para que sirve|explica|explicame|cuentame|historia)\b", t):
         return None                                   # preguntar POR la wifi es charla, no una orden
     if re.match(r"^(?:olvida|borra|elimina|quita)\b", t):

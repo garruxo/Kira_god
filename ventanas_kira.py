@@ -167,7 +167,7 @@ def ejemplo_para_cerebro(pedido):
 
 
 # ---------- las órdenes del dueño ----------
-_CREAR = re.compile(r"^(?:por\s+favor\s+)?(?:kira[\s,]+)?(?:cr[eé]a(?:me)?|a[ñn]ade(?:me)?|pon(?:me)?|haz(?:me)?|"
+_CREAR = re.compile(r"^(?:por\s+favor\s+)?(?:kira[\s,]+)?(?:en\s+(?:\S+[\s,]+){1,5}?)?(?:cr[eé]a(?:me)?|a[ñn]ade(?:me)?|pon(?:me)?|haz(?:me)?|"
                     r"hazte|ponte|a[ñn][aá]dete|construye(?:me)?)\s+"
                     r"(?:(?!(?:programa|juego|app|aplicaci[oó]n|apk|web|p[aá]gina)\b)\S+\s+){0,6}?"
                     r"(?:ventana|bot[oó]n(?:es)?|secci[oó]n|apartado|men[uú]|pesta[ñn]a|icono)\b(?P<p>.*)$",

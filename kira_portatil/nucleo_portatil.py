@@ -100,6 +100,30 @@ def enganchar_maquina(core):
     return red
 
 
+MAQUINA_INACTIVA_MIN = 10
+
+
+def vigilar_maquina(cada=60, minutos=MAQUINA_INACTIVA_MIN, parar=None):
+    """v3.72: cada minuto mira si su máquina (encendida por Kira para investigar) lleva `minutos` sin usarse y la
+    apaga: así no le quita procesador ni memoria al cerebro cuando no hace falta."""
+    import threading as _th
+    parar = parar or _th.Event()
+    while not parar.wait(cada):
+        try:
+            red = _MAQUINA.get("red")
+            if red is not None and red.apagar_si_inactiva(minutos):
+                print(f"[núcleo] apagué mi máquina: llevaba {minutos} min sin usarse.", flush=True)
+        except Exception as e:                   # noqa: BLE001
+            print(f"[núcleo] vigilar la máquina: {e}", flush=True)
+
+
+def pausa_maquina():
+    """Mientras te contesto, la máquina se congela (si está encendida y quieta). Sin máquina enganchada, nada."""
+    import contextlib
+    red = _MAQUINA.get("red")
+    return red.pausa_charla() if red is not None and hasattr(red, "pausa_charla") else contextlib.nullcontext()
+
+
 def encender_maquina_al_arrancar(m=None):
     """Al encender KiraOS se enciende también su máquina (con la puerta), si está preparada y hay KVM."""
     m = m or maquina()
@@ -757,10 +781,11 @@ def charla_si_no_es_orden(core, o, r, paso=lambda *a: None):
             pass
     try:
         paso(None, "Te contesto…")
-        try:                                     # v3.69: instrucciones CORTAS (el cerebro del portátil lee menos)
-            resp = core.conversar(o, historial=list(hist), sistema=SISTEMA_CHARLA)
-        except TypeError:
-            resp = core.conversar(o, historial=list(hist))
+        with pausa_maquina():                    # v3.72: la máquina, congelada mientras te contesto
+            try:                                 # v3.69: instrucciones CORTAS (el cerebro del portátil lee menos)
+                resp = core.conversar(o, historial=list(hist), sistema=SISTEMA_CHARLA)
+            except TypeError:
+                resp = core.conversar(o, historial=list(hist))
     except Exception as e:                       # noqa: BLE001
         return {"texto": f"No he podido contestarte con mi cerebro ({str(e)[:160]}). Si era una orden, dime «ayuda» "
                          "para ver cómo pedírmela."}
@@ -1574,6 +1599,8 @@ def main(argv=None):
     ap.add_argument("--token", default=os.path.join(RAIZ, "kira_laboratorio", "token_lab.txt"))
     ap.add_argument("--sin-wifi", action="store_true", help="no vigilar la WiFi")
     ap.add_argument("--sin-maquina", action="store_true", help="investigar desde el portátil, no desde su máquina")
+    ap.add_argument("--maquina-al-arrancar", action="store_true",
+                    help="encender su máquina al arrancar (por defecto solo cuando hace falta)")
     a = ap.parse_args(argv)
     sys.path.insert(0, AQUI)
     import servidor_portatil as sp
@@ -1583,8 +1610,10 @@ def main(argv=None):
     preparar_datos(a.datos, token)
     os.environ.setdefault("KIRA_BAUL_PORTATIL", os.path.join(a.datos, "recuerdos"))
     nucleo = Nucleo(a.datos, con_maquina=not a.sin_maquina)
-    if not a.sin_maquina:                       # v2.91: su máquina se enciende con ella (investiga desde ahí)
-        threading.Thread(target=encender_maquina_al_arrancar, daemon=True).start()
+    if not a.sin_maquina:                       # v3.72: ya NO se enciende al arrancar: solo cuando hace falta
+        if a.maquina_al_arrancar:               # (buscar, investigar, probar código) y se apaga sola a los 10 min
+            threading.Thread(target=encender_maquina_al_arrancar, daemon=True).start()
+        threading.Thread(target=vigilar_maquina, daemon=True).start()
     try:
         nucleo.core.reanudar_pensar()
     except Exception:

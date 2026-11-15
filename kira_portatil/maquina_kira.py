@@ -36,6 +36,7 @@ Candados (por qué no toca lo tuyo):
   «estado de tu máquina», «deja tu máquina como nueva».
 """
 import base64
+import contextlib
 import email.message
 import io
 import json
@@ -44,7 +45,9 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import socket
+import threading
 import subprocess
 import sys
 import time
@@ -962,6 +965,72 @@ class RedMaquina:
         self._no_hasta = 0.0
         self._fallos = 0
         self.via, self.motivo = "", ""
+        # v3.72: la enciendo SOLO cuando hace falta, la apago si lleva un rato sin usarse (si la encendí yo) y la
+        # PAUSO mientras te contesto (en el i5 de 2010 un ordenador dentro del otro le quita el procesador al cerebro)
+        self.ultimo_uso = 0.0
+        self.encendida_por_mi = False
+        self._en_uso = 0
+        self._lock_uso = threading.Lock()
+        self.pausada = False
+        self._senal = os.kill
+
+    @contextlib.contextmanager
+    def usando(self):
+        """Mientras dura, la máquina está trabajando (no se pausa ni se apaga por inactiva)."""
+        with self._lock_uso:
+            self._en_uso += 1
+        try:
+            yield
+        finally:
+            with self._lock_uso:
+                self._en_uso -= 1
+                self.ultimo_uso = self._reloj()
+
+    def apagar_si_inactiva(self, minutos=10):
+        """La apaga si la encendí yo, no está trabajando y lleva `minutos` sin usarse. True si la apagó."""
+        m = self.m
+        with self._lock_uso:
+            if not self.encendida_por_mi or self._en_uso or self.pausada:
+                return False
+            if self._reloj() - self.ultimo_uso < minutos * 60:
+                return False
+        try:
+            if m.encendida():
+                m.apagar()
+        except MaquinaError:
+            return False
+        self.encendida_por_mi = False
+        return True
+
+    def _pausar(self, si):
+        try:
+            pid = self.m.pid()
+            if pid:
+                self._senal(pid, signal.SIGSTOP if si else signal.SIGCONT)
+                self.pausada = si
+        except (OSError, AttributeError):
+            self.pausada = False
+
+    @contextlib.contextmanager
+    def pausa_charla(self):
+        """Mientras el cerebro te contesta, la máquina se congela (si estaba encendida y sin trabajar) y luego sigue
+        justo donde estaba. Si está haciendo algo (una visita, un experimento), no se toca."""
+        congelada = False
+        with self._lock_uso:
+            if not self._en_uso and not self.pausada:
+                try:
+                    if self.m.encendida():
+                        self._pausar(True)
+                        congelada = self.pausada
+                except Exception:                       # noqa: BLE001
+                    congelada = False
+        try:
+            yield congelada
+        finally:
+            if congelada:
+                with self._lock_uso:
+                    self._pausar(False)
+                    self.ultimo_uso = self._reloj()
 
     def directo(self, req, timeout=30):
         if self._directo is not None:
@@ -982,14 +1051,18 @@ class RedMaquina:
             return False, "mi máquina aún no está preparada (kira-maquina --preparar)"
         if not m.kvm():
             return False, "sin KVM mi máquina va demasiado lenta para navegar"
+        if self.pausada:                              # congelada mientras te contesto: lo hace el portátil
+            return False, "mi máquina está en pausa mientras te contesto"
         if not m.encendida():
             try:
                 m.encender(red=True)
+                self.encendida_por_mi = True
             except MaquinaError as e:
                 self._pausa(f"no pude encender mi máquina ({e})")
                 return False, self.motivo
         if m.modo_red() != "puerta":
             return False, "mi máquina está encendida sin internet («arranca tu máquina» con la puerta)"
+        self.ultimo_uso = self._reloj()
         return True, ""
 
     def abrir(self, req, timeout=30):
@@ -1004,7 +1077,8 @@ class RedMaquina:
         datos = req.data if isinstance(req, urllib.request.Request) else None
         metodo = req.get_method() if isinstance(req, urllib.request.Request) else None
         try:
-            d = self.m.pedir_web(url, datos=datos, cabeceras=cab, metodo=metodo, timeout=timeout)
+            with self.usando():
+                d = self.m.pedir_web(url, datos=datos, cabeceras=cab, metodo=metodo, timeout=timeout)
         except MaquinaError as e:
             self._fallos += 1
             if self._fallos >= 2:                          # dos seguidas sin contestar: algo va raro dentro
@@ -1045,7 +1119,11 @@ def probar_en_maquina(maquina, codigo, red=None):
     elif not maquina.encendida():
         return None
     try:
-        c, salida = maquina.experimentar(codigo)
+        if red is not None:
+            with red.usando():
+                c, salida = maquina.experimentar(codigo)
+        else:
+            c, salida = maquina.experimentar(codigo)
     except MaquinaError:
         return None
     ok = c == 0
