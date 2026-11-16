@@ -3559,11 +3559,14 @@ class KiraGodCore:
         if not pide:
             return None
         if getattr(self, "es_kiraos", False):
-            return ("Entendido: seré administrador del portátil SOLO cuando tú me lo pidas. Mientras pienso o "
-                    "experimento sola NUNCA toco el sistema (así, si mi cerebro se equivoca, no puede estropear "
-                    "Xubuntu). Para algo que necesite administrador (instalar un programa, cambiar algo del sistema), "
-                    "ábreme la Terminal y escríbemelo: cuando haga falta, Xubuntu te pedirá TU contraseña y la escribes "
-                    "tú. Y meter cosas en mi código sigue como siempre: laboratorio + tus dos toques.")
+            return ("Seré administradora SOLO cuando tú me lo pidas: puedo hacer cualquier cosa de administrador en Xubuntu, pero SIEMPRE con tu contraseña: antes de "
+                    "cada una, Xubuntu te enseña en una ventana la orden exacta y la escribes tú (la recuerda unos "
+                    "minutos). Pídemelo en la barra de KiraOS, por ejemplo: «ejecuta como administrador apt update», "
+                    "«instala vlc como administrador» o «reinicia el servicio ssh como administrador». Mientras pienso "
+                    "o experimento sola NUNCA lo uso, nunca escribo discos ni toco contraseñas, y meter cosas en mi "
+                    "código sigue como siempre: laboratorio + tus dos toques. Para que la ventana diga qué quiero hacer "
+                    "y recuerde la contraseña, activa una vez el modo administrador (Ajustes, o kira-admin-activar en "
+                    "la Terminal). Lo que haya hecho: «qué has hecho como administrador».")
         return ("Eso es del portátil (KiraOS), no del móvil: aquí Android no me da permisos de administrador. En el "
                 "portátil seré administrador solo cuando tú me lo pidas, en la Terminal y con tu contraseña; sola nunca "
                 "toco el sistema.")

@@ -157,6 +157,7 @@ class EscritorioMixin:
         if getattr(self, "_esc_listo", False):
             return
         self._esc_listo = True
+        os.environ["KIRA_ADMIN_PANTALLA"] = "1"         # v3.93: aquí SÍ se puede enseñar la ventana de la contraseña
         self._charlas = {}
         self._lock_charla = threading.Lock()
         self.voz_activa = True
@@ -748,6 +749,16 @@ class EscritorioMixin:
                 else:
                     e_d = disenos_kira.pedir(DATOS_NUCLEO, o_d[1]["tipo"], o_d[1]["descripcion"], o_d[1]["destino"])
                     t["respuesta"] = disenos_kira.texto_pedido(e_d)
+            o_ad = None
+            try:                                                   # v3.93: «ejecuta como administrador …» (con TU
+                import admin_kira                                  # contraseña en la ventana de Xubuntu)
+                o_ad = None if o_d is not None else admin_kira.orden(texto)
+            except Exception:
+                o_ad = None
+            if o_ad is not None:
+                t["estado"] = "hablando"
+                t["respuesta"] = admin_kira.hacer(o_ad, al_paso=t["lineas"].append)
+                o_d = ("admin", None)                              # ya contestado: que no siga por las demás ramas
             o_s = None
             try:                                                   # v3.21: cambiar el sistema se hace AQUÍ, al
                 import sistema_kira                                # momento (no espera en la cola del núcleo)
@@ -775,7 +786,7 @@ class EscritorioMixin:
             except Exception:
                 o_acc = None
             if o_d is not None:
-                pass                                               # v3.74: ya contestado arriba
+                pass                                               # v3.74/v3.93: ya contestado arriba
             elif o_s is not None:
                 try:
                     ex = [(v["id"], v["titulo"]) for v in self.ventanas_extra() if v.get("en") == "escritorio"]
@@ -1153,6 +1164,16 @@ class EscritorioMixin:
             if accion in ("rapido", "grande") and self.cli is not None:
                 self.cli.grande = accion == "grande"
                 return {"texto": "Ahora pienso con el cerebro " + ("grande." if self.cli.grande else "rápido.")}
+            if accion == "admin_activar":                 # v3.93: activar el modo administrador (en MI terminal)
+                import arreglar_app_kira as arr
+                r = arr.pedir_permiso_terminal(
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "modo_admin.sh"),
+                    titulo="Modo administrador",
+                    aviso="Kira: voy a activar el modo administrador (siempre con tu contraseña en una ventana).")
+                return {"texto": r["texto"]}
+            if accion == "admin_estado":
+                import admin_kira
+                return {"texto": admin_kira.texto_estado() + "\n\n" + admin_kira.leer_registro(10)}
             if accion in ("voz_si", "voz_no"):
                 self.voz_activa_poner(accion == "voz_si")
                 return {"texto": "Voz " + ("puesta: te contesto hablando." if self.voz_activa else
@@ -1527,6 +1548,8 @@ class EscritorioMixin:
                             {"texto": "Fondo de pantalla", "accion": "app:fondos"},
                             {"texto": "Diseños del móvil", "accion": "app:disenos"},      # v3.74
                             {"texto": "Taller de programas", "accion": "app:taller"},     # v3.76
+                            {"texto": "Modo administrador", "accion": "hacer:admin_estado"},          # v3.93
+                            {"texto": "Activar el modo administrador", "accion": "hacer:admin_activar"},
                             {"texto": "Cerebro rápido", "accion": "hacer:rapido"},
                             {"texto": "Cerebro grande", "accion": "hacer:grande"},
                             {"texto": "Con voz", "accion": "hacer:voz_si"},

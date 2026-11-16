@@ -687,10 +687,20 @@ def _bajar_defecto(url, destino):
 
 
 # ---------------- permiso de administrador UNA sola vez (v3.33) ----------------
-_PERMISO_UNA_VEZ = ("O dame permiso UNA vez y ya no te pido más la contraseña: en la Terminal (icono Terminal) escribe "
+_PERMISO_UNA_VEZ = ("(O pídemelo en la barra de KiraOS con «instala X como administrador» y te pido la contraseña en una "
+                    "ventana.) O dame permiso UNA vez y ya no te pido más la contraseña: en la Terminal (icono Terminal) escribe "
                     " kira-permiso  y pulsa Intro. Si dice que no lo encuentra, escribe primero  cd kira_god/kira_portatil"
                     "  (Intro) y luego  bash permiso_apps  (Intro). Te pedirá la contraseña solo esa vez. (Los signos «/» "
                     "y «_» están en los botones de la Terminal, y con Tab se autocompletan los nombres.)")
+
+
+def _admin_ventana():
+    """v3.93: ¿puedo pedirte la contraseña en la ventana de Xubuntu? (solo en la pantalla del portátil)"""
+    try:
+        import admin_kira
+        return admin_kira.puede_preguntar()
+    except Exception:                                 # noqa: BLE001
+        return False
 
 
 def admin_sin_clave(correr=None):
@@ -751,6 +761,15 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
                                     "contraseña). Lo tienes en el escritorio.")}
             return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": "",
                     "mensaje": f"No pude instalar «{fuente}» (¿existe ese paquete?). apt dijo: {salida[-200:].strip()}"}
+        if _admin_ventana():                          # v3.93: en la pantalla, con TU contraseña en la ventana
+            import admin_kira
+            paso(f"Xubuntu te pedirá la contraseña para instalar {fuente}…")
+            r = admin_kira.ejecutar([["apt-get", "install", "-y", fuente]], correr=correr, al_paso=paso)
+            if r["ok"]:
+                return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [fuente], "carpeta": "",
+                        "mensaje": f"{fuente} instalado del sistema (con tu contraseña). Lo tienes en el escritorio."}
+            return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None,
+                    "carpeta": "", "mensaje": r["texto"]}
         return {"ok": False, "admin": True, "nombre": nombre, "lanzar": None, "carpeta": "",
                 "mensaje": (f"«{fuente}» parece un programa del sistema y para instalarlo hace falta administrador. "
                             "Por seguridad no lo hago sola: ábreme la Terminal y escribe  sudo apt install " +
@@ -866,6 +885,23 @@ def instalar(fuente, base=None, correr=None, bajar=None, al_paso=None, forzar=Fa
                         "carpeta": carpeta, "dependencias": {"tiene": False},
                         "mensaje": (f"{nombre} instalado del sistema (con el permiso que me diste, sin pedirte la "
                                     "contraseña). Lo tienes en el escritorio.")}
+            if _admin_ventana():                     # v3.93: instalarlo DE VERDAD con tu contraseña en la ventana
+                import admin_kira
+                r = admin_kira.ejecutar([["dpkg", "-i", destino], ["apt-get", "-f", "install", "-y"]],
+                                        correr=correr, al_paso=paso)
+                if r["ok"] or r["hechas"] >= 1:
+                    try:
+                        rcp, pkg = correr(["dpkg-deb", "-f", destino, "Package"], timeout=60)
+                        pkg = pkg.strip() if rcp == 0 else ""
+                    except Exception:                # noqa: BLE001
+                        pkg = ""
+                    if r["ok"]:
+                        return {"ok": True, "admin": False, "nombre": nombre, "lanzar": [pkg] if pkg else None,
+                                "carpeta": carpeta, "dependencias": {"tiene": False},
+                                "mensaje": f"{nombre} instalado del sistema (con tu contraseña). Lo tienes en el escritorio."}
+                if r.get("cancelada"):
+                    return {"ok": False, "admin": False, "nombre": nombre, "lanzar": None, "carpeta": carpeta,
+                            "mensaje": r["texto"]}
             try:
                 rc, _salida = correr(["dpkg-deb", "-x", destino, raiz], timeout=300)
             except Exception:                        # noqa: BLE001 - no está dpkg-deb

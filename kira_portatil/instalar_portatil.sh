@@ -359,6 +359,19 @@ KIRAPIENSA
 exec bash "$AQUI/permiso_apps.sh" "\$@"
 KIRAPERMISO
   $SUDO chmod +x /usr/local/bin/kira-permiso
+  # v3.93: MODO ADMINISTRADOR con TU contraseña (cada orden de administrador pasa por la ventana de Xubuntu).
+  $SUDO tee /usr/local/bin/kira-admin-activar >/dev/null <<KIRAADMIN
+#!/usr/bin/env bash
+# Activa el modo administrador de Kira: antes de cada cosa de administrador, Xubuntu enseña la orden y pide tu contraseña.
+# Para quitarlo:  kira-admin-activar --quitar
+exec bash "$AQUI/modo_admin.sh" "\$@"
+KIRAADMIN
+  $SUDO chmod +x /usr/local/bin/kira-admin-activar
+  if [ "$PRUEBA" != "1" ]; then
+    $SUDO install -m 0755 "$AQUI/kira_admin.sh" /usr/local/bin/kira-admin
+    $SUDO install -m 0644 "$AQUI/org.kira.admin.policy" /usr/share/polkit-1/actions/org.kira.admin.policy
+    $SUDO apt-get install -y policykit-1-gnome >/dev/null 2>&1 || true
+  fi
   # v3.36: grabar el kernel de Kira en un pendrive USB (lo haces tú; pide SI y tu contraseña).
   $SUDO tee /usr/local/bin/kira-usb >/dev/null <<KIRAUSB
 #!/usr/bin/env bash

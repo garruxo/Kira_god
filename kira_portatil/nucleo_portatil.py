@@ -735,6 +735,19 @@ def ejecutar(core, orden, paso):
         core.nueva_tarea()
     except Exception:
         pass
+    try:                                          # v3.93: lo de administrador SOLO desde la pantalla del portátil
+        import admin_kira as adm_
+        oa_ = adm_.orden(o)
+    except Exception:
+        oa_ = None
+    if oa_ is not None:
+        if oa_[0] == "ver":
+            return {"texto": adm_.leer_registro()}
+        if oa_[0] == "estado":
+            return {"texto": adm_.texto_estado()}
+        return {"texto": ("Eso es de administrador y solo lo hago desde la PANTALLA del portátil: pídemelo en la "
+                          "barra de KiraOS y Xubuntu te enseñará la orden en una ventana para que escribas tu "
+                          "contraseña. Desde aquí (el móvil o la red) no se puede.")}
     try:                                          # v3.84: «mejora el programa «X»: …» (Programando ▸ Mis programas)
         import catalogo_programas_kira as cpk_
         om_ = cpk_.orden_mejorar(o)

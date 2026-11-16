@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- v3.93: Kira superadministradora CON TU CONTRASEÑA. Cada orden de administrador pasa por esta ventana de Xubuntu,
+     que enseña la orden exacta. auth_admin_keep = recuerda la contraseña unos minutos. -->
+<policyconfig>
+  <vendor>Kira</vendor>
+  <action id="org.kira.admin">
+    <description>Kira quiere hacer algo como administrador</description>
+    <message>Kira quiere ejecutar como administrador: $(command_line)</message>
+    <icon_name>dialog-password</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/kira-admin</annotate>
+  </action>
+</policyconfig>

@@ -86,8 +86,8 @@ for frase in ("se superadministrador", "ponte de administrador", "activa el modo
     r = core._orden_superadmin(frase)
     ok(bool(r), "reconoce la petición de administrador: «%s»" % frase)
 r = core._orden_superadmin("se superadministrador")
-ok("solo cuando tú me lo pidas" in r.lower() and "contraseña" in r.lower() and "terminal" in r.lower(),
-   "KiraOS: admin SOLO cuando tú lo pidas, en la Terminal con tu contraseña; sola nunca")
+ok("solo cuando tú me lo pidas" in r.lower() and "contraseña" in r.lower() and "ventana" in r.lower()
+   and "nunca" in r.lower(), "KiraOS (v3.93): admin SOLO cuando tú lo pidas, con tu contraseña en una ventana; sola nunca")
 ok(core._orden_superadmin("hazme un juego de coches") is None
    and core._orden_superadmin("administra mi agenda") is None,
    "no se dispara con órdenes normales")

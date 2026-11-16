@@ -16,6 +16,12 @@ if [ -z "${KIRA_KIRAOS:-}" ]; then
   command -v xfsettingsd >/dev/null 2>&1 && xfsettingsd --daemon >/dev/null 2>&1
   # quien coloca las ventanas (para la pantalla completa y la ventanita de la clave de la WiFi)
   command -v xfwm4 >/dev/null 2>&1 && xfwm4 --compositor=off --daemon >/dev/null 2>&1
+  # v3.93: el «agente» de polkit, que enseña la ventana de la contraseña cuando Kira pide hacer algo de administrador
+  for ag in /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 \
+            /usr/libexec/polkit-gnome-authentication-agent-1 /usr/bin/xfce-polkit /usr/libexec/xfce-polkit \
+            /usr/lib/x86_64-linux-gnu/polkit-mate/polkit-mate-authentication-agent-1 /usr/bin/lxpolkit; do
+    if [ -x "$ag" ]; then "$ag" >/dev/null 2>&1 & break; fi
+  done
   # v3.06: esperar a que el gestor de ventanas esté listo (si Kira se abre antes, no ocupa toda la pantalla)
   for _ in $(seq 1 20); do
     if command -v xprop >/dev/null 2>&1; then
@@ -41,7 +47,9 @@ while true; do
 done
 
 if [ -n "${KIRA_ESCRITORIO:-}" ]; then exec $KIRA_ESCRITORIO; fi
-pkill -x xfwm4 >/dev/null 2>&1; pkill -x xfsettingsd >/dev/null 2>&1; sleep 0.5
+pkill -x xfwm4 >/dev/null 2>&1; pkill -x xfsettingsd >/dev/null 2>&1
+pkill -f polkit-gnome-authentication-agent-1 >/dev/null 2>&1; pkill -x xfce-polkit >/dev/null 2>&1; pkill -x lxpolkit >/dev/null 2>&1
+pkill -f polkit-mate-authentication-agent-1 >/dev/null 2>&1; sleep 0.5
 export KIRA_DESDE_KIRA=1                                   # para que Xubuntu no vuelva a abrir Kira él solo
 for e in xfce4-session startlxqt startlxde xterm; do
   command -v "$e" >/dev/null 2>&1 && exec "$e"

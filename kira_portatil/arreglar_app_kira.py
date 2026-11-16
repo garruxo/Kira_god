@@ -1735,24 +1735,26 @@ def pedir_terminal_kira(acceso, *, admin=None, correr=None):
                 " Si un programa se ve raro ahí, tienes un botón para abrirlo en la terminal de Xubuntu.")
 
 
-def pedir_permiso_terminal(ruta_permiso=None):
+def pedir_permiso_terminal(ruta_permiso=None, titulo="Permiso de administrador", aviso=None):
     """v3.91: botón «Dar permiso» de «Mis programas»: abre MI terminal con el guion del permiso de administrador
-    (`permiso_apps.sh`); te pide la contraseña UNA vez. Solo ese guion, nada más."""
+    (`permiso_apps.sh`); te pide la contraseña UNA vez. Solo ese guion, nada más. v3.93: también el de activar el
+    modo administrador (`modo_admin.sh`), con su título y su aviso."""
     import json
     ruta_permiso = ruta_permiso or os.path.join(os.path.dirname(os.path.abspath(__file__)), "permiso_apps.sh")
     if not os.path.isfile(ruta_permiso):
-        return {"ok": False, "texto": "No encuentro el guion del permiso (permiso_apps.sh)."}
+        return {"ok": False, "texto": f"No encuentro el guion ({os.path.basename(ruta_permiso)})."}
+    aviso = aviso or "Kira: voy a pedirte el permiso de administrador para instalar programas (solo apt/dpkg)."
     os.makedirs(REGISTROS, mode=0o700, exist_ok=True)
     guion = os.path.join(REGISTROS, "permiso_admin_terminal.sh")
     with open(guion, "w", encoding="utf-8") as f:
         f.write("#!/bin/bash\n"
-                "echo 'Kira: voy a pedirte el permiso de administrador para instalar programas (solo apt/dpkg).'\n"
+                f"echo {shlex.quote(aviso)}\n"
                 "echo 'Escribe tu contraseña cuando te la pida (no se ve al escribirla).'\n"
                 f"bash {shlex.quote(ruta_permiso)}\n"
                 "echo; read -r -p 'Pulsa Intro para cerrar… ' _\n")
     os.chmod(guion, 0o700)
-    d = {"guion": guion, "titulo": "Permiso de administrador", "orden": "bash " + shlex.quote(guion),
-         "pasos": ["dar el permiso de administrador"], "cuando": int(time.time())}
+    d = {"guion": guion, "titulo": str(titulo)[:60], "orden": "bash " + shlex.quote(guion),
+         "pasos": [str(titulo).lower()], "cuando": int(time.time())}
     tmp = _ruta_pendiente() + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False)

@@ -417,6 +417,7 @@ def _ajustes_grafica_vieja():
 
 def main(argv=None):
     _ajustes_grafica_vieja()
+    os.environ.setdefault("KIRA_ADMIN_PANTALLA", "1")   # v3.93: la pantalla SÍ puede enseñar la ventana de la contraseña
     try:                                          # v3.21: vuelve a poner lo que no se guarda solo (apagar la pantalla)
         import threading as _th
         import sistema_kira
