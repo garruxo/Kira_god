@@ -118,6 +118,7 @@ try:
     open(os.path.join(desc, "otro.zip.part"), "wb").write(b"x")
     ok(gb.ultimo_descargado().endswith("Programa-1.0-x86_64.AppImage"),
        "el último PROGRAMA de Descargas (ni fotos ni lo que aún se baja)")
+    os.remove(os.path.join(desc, "otro.zip.part"))     # v3.94: con una descarga a medias, Kira esperaría a que acabe
     instaladas.clear()
     r = npo.ejecutar(Core(), "instala lo que he descargado", lambda *a: None)
     ok(instaladas and instaladas[0][0].endswith(".AppImage") and "lo descargaste" not in r["texto"]

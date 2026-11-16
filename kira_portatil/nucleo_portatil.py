@@ -667,7 +667,21 @@ def _elegir_github(core, texto, pend, paso):
 def _instalar_descargado(core, paso):
     """v3.79: instala el último programa que el dueño descargó él mismo (carpeta Descargas)."""
     import github_buscar_kira as gb
-    ruta = gb.ultimo_descargado()
+    if gb.descargas_en_curso():                   # v3.94: el navegador aún lo está bajando → espero a que acabe
+        def _parar():
+            try:
+                return bool(core.cancelado())
+            except Exception:
+                return False
+        ruta, motivo = gb.esperar_descarga(al_paso=lambda t: paso(None, t), parar=_parar)
+        if motivo == "parada":
+            return {"texto": "Vale, dejo de esperar la descarga. Cuando acabe, dime «instala lo que he descargado».",
+                    "ok": False}
+        if motivo in ("atascada", "tope"):
+            return {"texto": ("La descarga del navegador parece atascada (lleva un rato sin avanzar). Mírala en el "
+                              "navegador y, cuando acabe, dime «instala lo que he descargado»."), "ok": False}
+    else:
+        ruta = gb.ultimo_descargado()
     if not ruta:
         return {"texto": ("No veo ningún programa en tu carpeta Descargas (AppImage, .deb, .tar.gz, .zip…). Si aún "
                           "se está descargando, espera a que acabe y vuelve a decírmelo."), "ok": True}

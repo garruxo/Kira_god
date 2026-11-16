@@ -185,7 +185,12 @@ _ORDEN_DESCARGADO = re.compile(
     r"(?:descargad[oa]|bajad[oa]|descargu[eé]|baj[eé])\b.*$|"
     r"^(?:kira[, ]+)?inst[aá]la(?:me)?\s+(?:lo\s+)?(?:[uú]ltimo\s+)?(?:que\s+)?(?:he\s+)?(?:descargad[oa]|descargu[eé]|"
     r"baj[eé])\b.*$|"
-    r"^(?:kira[, ]+)?inst[aá]la(?:me)?\s+lo\s+de\s+(?:la\s+carpeta\s+)?(?:descargas|downloads)$", re.I)
+    r"^(?:kira[, ]+)?inst[aá]la(?:me)?\s+lo\s+de\s+(?:la\s+carpeta\s+)?(?:descargas|downloads)$|"
+    # v3.94: lo que AÚN se está bajando en el navegador de Xubuntu
+    r"^(?:kira[, ]+)?inst[aá]la(?:me)?\s+(?:lo|el\s+archivo|el\s+programa|eso)\s+que\s+(?:estoy|est[aá]s?|se\s+est[aá])\s+"
+    r"(?:descargando|bajando)\b.*$|"
+    r"^(?:kira[, ]+)?cuando\s+(?:acabe|termine)\s+(?:de\s+)?(?:descargarse|bajarse|la\s+descarga)\s*,?\s*inst[aá]la(?:lo|la)\b.*$",
+    re.I)
 
 
 def es_orden_descargado(texto):
@@ -197,6 +202,75 @@ def es_orden_descargado(texto):
 def carpetas_descargas():
     casa = os.path.expanduser("~")
     return [os.path.join(casa, c) for c in ("Descargas", "Downloads") if os.path.isdir(os.path.join(casa, c))]
+
+
+_EN_CURSO = (".part", ".crdownload", ".download", ".tmp", ".opdownload")
+
+
+def _final_de(nombre):
+    for e in _EN_CURSO:
+        if nombre.endswith(e):
+            return nombre[:-len(e)]
+    return nombre
+
+
+def descargas_en_curso(carpetas=None, tipo_de=None):
+    """v3.94: lo que el navegador de Xubuntu está bajando AHORA en Descargas (Firefox «X.part», Chrome
+    «X.crdownload»…) y que parece un programa. [(ruta_parcial, nombre_final, bytes)]."""
+    if tipo_de is None:
+        import apps_externas_kira as aex
+        tipo_de = aex.tipo_archivo
+    r = []
+    for c in (carpetas if carpetas is not None else carpetas_descargas()):
+        try:
+            nombres = os.listdir(c)
+        except OSError:
+            continue
+        for n in nombres:
+            if n.startswith(".") or not n.endswith(_EN_CURSO):
+                continue
+            final = _final_de(n)
+            # Chrome pone «Sin confirmar 1234.crdownload» (sin el nombre): también vale, no sabemos el tipo aún
+            if tipo_de(final) == "" and not final.lower().startswith(("sin confirmar", "unconfirmed")):
+                continue
+            ruta = os.path.join(c, n)
+            try:
+                r.append((ruta, final, os.path.getsize(ruta)))
+            except OSError:
+                continue
+    return r
+
+
+def esperar_descarga(carpetas=None, tipo_de=None, al_paso=None, parar=None, tope=3600, quieta=300, cada=3.0,
+                     dormir=None):
+    """v3.94: si el navegador aún está bajando un programa, ESPERA a que acabe (mira que el «.part» desaparezca) y
+    devuelve (ruta_final | None, motivo). Para si `parar()` dice que sí, si pasa `tope` s, o si la descarga lleva
+    `quieta` s sin crecer (atascada)."""
+    import time as _t
+    dormir = dormir or _t.sleep
+    paso = al_paso or (lambda _t2: None)
+    parar = parar or (lambda: False)
+    inicio = _t.time()
+    ultimo_tam, ultimo_cambio = -1, _t.time()
+    nombre = ""
+    while True:
+        curso = descargas_en_curso(carpetas, tipo_de)
+        if not curso:
+            if nombre:
+                paso(f"Ya ha acabado de descargarse {nombre}.")
+            return ultimo_descargado(carpetas, tipo_de), "ok"
+        ruta, nombre, tam = max(curso, key=lambda x: x[2])
+        tot = sum(x[2] for x in curso)
+        if tot != ultimo_tam:
+            ultimo_tam, ultimo_cambio = tot, _t.time()
+            paso(f"Se está descargando {nombre} ({tot / 1048576:.1f} MB)… espero a que acabe para instalarlo.")
+        if parar():
+            return None, "parada"
+        if _t.time() - ultimo_cambio > quieta:
+            return None, "atascada"
+        if _t.time() - inicio > tope:
+            return None, "tope"
+        dormir(cada)
 
 
 def ultimo_descargado(carpetas=None, tipo_de=None):
@@ -211,11 +285,19 @@ def ultimo_descargado(carpetas=None, tipo_de=None):
             nombres = os.listdir(c)
         except OSError:
             continue
+        enc = set(nombres)
         for n in nombres:
-            if n.startswith(".") or n.endswith((".part", ".crdownload", ".download", ".tmp")):
+            if n.startswith(".") or n.endswith(_EN_CURSO):
                 continue
+            if any(n + e in enc for e in _EN_CURSO):    # v3.94: Firefox deja un archivo VACÍO con el nombre final
+                continue                                 # mientras baja «X.part»: aún no está
             ruta = os.path.join(c, n)
             if not os.path.isfile(ruta) or tipo_de(n) == "":
+                continue
+            try:
+                if os.path.getsize(ruta) == 0:
+                    continue
+            except OSError:
                 continue
             m = os.path.getmtime(ruta)
             if mejor is None or m > mejor[0]:
