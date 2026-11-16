@@ -691,6 +691,54 @@ def _instalar_descargado(core, paso):
     return r
 
 
+def _instalar_archivo_descargas(core, nombre, paso):
+    """v3.95: «instala el archivo X de las descargas» → busca ESE archivo en Descargas por su nombre (sin tildes ni
+    mayúsculas, con o sin extensión) y lo instala por el camino de siempre. Si aún se está bajando, espera; si hay
+    varios parecidos, los dice; si no hay ninguno, dice los que sí hay."""
+    import github_buscar_kira as gb
+    enc = gb.buscar_en_descargas(nombre)
+    listos, bajando = enc["listos"], enc["bajando"]
+    if not listos and bajando:
+        parcial = bajando[0][0]
+
+        def _parar():
+            try:
+                return bool(core.cancelado())
+            except Exception:
+                return False
+        ruta, motivo = gb.esperar_archivo(parcial, al_paso=lambda t: paso(None, t), parar=_parar)
+        if motivo == "parada":
+            return {"texto": f"Vale, dejo de esperar «{bajando[0][1]}». Cuando acabe, vuelve a decírmelo.", "ok": False}
+        if not ruta:
+            return {"texto": (f"La descarga de «{bajando[0][1]}» parece atascada o ha desaparecido. Mírala en el "
+                              "navegador y, cuando acabe, vuelve a decírmelo."), "ok": False}
+        listos = [ruta]
+    if not listos:
+        hay = gb.programas_en_descargas()
+        return {"texto": (f"No encuentro ningún programa que se llame «{nombre}» en tu carpeta Descargas."
+                          + (" Lo que hay es: " + ", ".join(hay) + ". Dime cuál, con «instala el archivo … de las "
+                             "descargas»." if hay else " Ahí no veo ningún programa (AppImage, .deb, .tar.gz, .zip…).")),
+                "ok": False}
+    if len(listos) > 1 and _nombre_igual(listos[0], nombre) is False:
+        nombres = [os.path.basename(x) for x in listos[:6]]
+        return {"texto": (f"Hay varios archivos que se parecen a «{nombre}» en Descargas: " + ", ".join(nombres) +
+                          ". Dime el nombre exacto del que quieres (por ejemplo «instala el archivo " + nombres[0] +
+                          " de las descargas»)."), "ok": False}
+    ruta = listos[0]
+    paso(0.0, f"Instalo {os.path.basename(ruta)} (de tus Descargas)…")
+    r = _instalar_app(core, ruta, paso, sin_versiones=True)
+    r["texto"] = f"De tus Descargas: «{os.path.basename(ruta)}». " + r.get("texto", "")
+    return r
+
+
+def _nombre_igual(ruta, nombre):
+    """¿El archivo se llama EXACTAMENTE así (con o sin extensión)? Si no, y hay varios parecidos, se pregunta."""
+    import github_buscar_kira as gb
+    b = os.path.basename(ruta)
+    q = gb._sin_tildes(nombre).strip()
+    return gb._sin_tildes(b) == q or gb._palabras_de(b) == gb._palabras_de(nombre)
+
+
 def _dependencias_app(core, nombre, paso):
     """v3.32: «descarga las dependencias de X» → busca y descarga lo que la app necesita (pip --user / npm, SIN
     administrador). Lo pide el dueño (no se hace sola). Lo del sistema (apt) necesita su contraseña, aparte."""
@@ -859,6 +907,9 @@ def ejecutar(core, orden, paso):
         return _buscar_github(n_gh, paso)
     if gb_.es_orden_descargado(o):                # v3.79: lo que bajaste TÚ con el navegador
         return _instalar_descargado(core, paso)
+    n_arch = gb_.es_orden_archivo(o)               # v3.95: «instala el archivo X de las descargas»
+    if n_arch:
+        return _instalar_archivo_descargas(core, n_arch, paso)
     import versiones_kira as vk_                   # v3.35: ¿contesta a «qué versión quieres?»?
     pend_v = vk_.pendiente()
     if pend_v and vk_.es_respuesta(o, pend_v["opciones"]):

@@ -199,6 +199,147 @@ def es_orden_descargado(texto):
     return bool(_ORDEN_DESCARGADO.match(re.sub(r"\s+", " ", str(texto or "")).strip().rstrip(" .!?")))
 
 
+# v3.95: «instala el archivo X de las descargas» (uno CONCRETO, por su nombre)
+_ORDEN_ARCHIVO = re.compile(
+    r"^(?:kira[, ]+)?(?:inst[aá]la(?:me)?|pon(?:me)?|abre\s+e\s+instala)\s+(?:el\s+|la\s+|lo\s+)?(?:archivo|fichero|programa|app|"
+    r"aplicaci[oó]n)?\s*[«\"']?(?P<n>.+?)[»\"']?\s+(?:que\s+(?:est[aá]|tengo)\s+)?(?:de|desde|en)\s+(?:la\s+carpeta\s+(?:de\s+)?)?"
+    r"(?:las\s+|mis\s+|la\s+)?(?:descargas|downloads)$", re.I)
+
+
+def es_orden_archivo(texto):
+    """«instala el archivo X de las descargas», «instala X de descargas», «instala «X» desde mis descargas» → el nombre
+    (o None). «instala lo de descargas» NO (eso es el último descargado). Puro."""
+    t = re.sub(r"\s+", " ", str(texto or "")).strip().rstrip(" .!?")
+    m = _ORDEN_ARCHIVO.match(t)
+    if not m:
+        return None
+    n = m.group("n").strip().strip("«»\"' ")
+    if not n or re.fullmatch(r"(?:lo|eso|esto|todo|algo|el|la)", n, re.I):
+        return None
+    return n[:120]
+
+
+def _sin_tildes(t):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(t)) if unicodedata.category(c) != "Mn").lower()
+
+
+def _palabras_de(t):
+    t = _sin_tildes(t)
+    for e in (".appimage", ".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".zip", ".deb", ".sh", ".run", ".exe", ".dmg"):
+        if t.endswith(e):
+            t = t[:-len(e)]
+    return [p for p in re.split(r"[^a-z0-9]+", t) if p]
+
+
+def buscar_en_descargas(nombre, carpetas=None, tipo_de=None):
+    """v3.95: los archivos de Descargas que encajan con `nombre` (sin tildes ni mayúsculas, con o sin extensión,
+    o con todas sus palabras). Devuelve {"listos": [rutas], "bajando": [(ruta_parcial, final, bytes)]}, lo mejor
+    primero. Solo programas (lo que `tipo_de` reconoce) y nunca el archivo vacío de una descarga a medias."""
+    if tipo_de is None:
+        import apps_externas_kira as aex
+        tipo_de = aex.tipo_archivo
+    quiero = _sin_tildes(nombre).strip()
+    pal = _palabras_de(nombre)
+
+    def puntos(n):
+        b = _sin_tildes(n)
+        if b == quiero:
+            return 3
+        if quiero and (b.startswith(quiero) or quiero in b):
+            return 2
+        if pal and all(p in _palabras_de(n) or p in b for p in pal):
+            return 1
+        return 0
+
+    listos, bajando = [], []
+    for c in (carpetas if carpetas is not None else carpetas_descargas()):
+        try:
+            nombres = os.listdir(c)
+        except OSError:
+            continue
+        enc = set(nombres)
+        for n in nombres:
+            if n.startswith("."):
+                continue
+            ruta = os.path.join(c, n)
+            if n.endswith(_EN_CURSO):
+                final = _final_de(n)
+                p = puntos(final)
+                if p:
+                    try:
+                        bajando.append((p, ruta, final, os.path.getsize(ruta)))
+                    except OSError:
+                        pass
+                continue
+            if any(n + e in enc for e in _EN_CURSO) or not os.path.isfile(ruta) or tipo_de(n) == "":
+                continue
+            try:
+                if os.path.getsize(ruta) == 0:
+                    continue
+                m = os.path.getmtime(ruta)
+            except OSError:
+                continue
+            p = puntos(n)
+            if p:
+                listos.append((p, m, ruta))
+    listos.sort(key=lambda x: (-x[0], -x[1]))
+    bajando.sort(key=lambda x: -x[0])
+    # si hay uno que encaja EXACTO, los flojos sobran
+    if listos and listos[0][0] >= 2:
+        listos = [x for x in listos if x[0] >= 2]
+    return {"listos": [x[2] for x in listos], "bajando": [x[1:] for x in bajando]}
+
+
+def esperar_archivo(ruta_parcial, al_paso=None, parar=None, tope=3600, quieta=300, cada=3.0, dormir=None):
+    """v3.95: espera a que acabe de bajarse ESE archivo (su «.part» desaparece). (ruta_final|None, motivo)."""
+    import time as _t
+    dormir = dormir or _t.sleep
+    paso = al_paso or (lambda _x: None)
+    parar = parar or (lambda: False)
+    final = os.path.join(os.path.dirname(ruta_parcial), _final_de(os.path.basename(ruta_parcial)))
+    inicio, ult_tam, ult_cambio = _t.time(), -1, _t.time()
+    while os.path.exists(ruta_parcial):
+        try:
+            tam = os.path.getsize(ruta_parcial)
+        except OSError:
+            tam = ult_tam
+        if tam != ult_tam:
+            ult_tam, ult_cambio = tam, _t.time()
+            paso(f"Se está descargando {os.path.basename(final)} ({tam / 1048576:.1f} MB)… espero a que acabe para "
+                 "instalarlo.")
+        if parar():
+            return None, "parada"
+        if _t.time() - ult_cambio > quieta:
+            return None, "atascada"
+        if _t.time() - inicio > tope:
+            return None, "tope"
+        dormir(cada)
+    if os.path.isfile(final) and os.path.getsize(final) > 0:
+        return final, "ok"
+    return None, "desaparecio"
+
+
+def programas_en_descargas(carpetas=None, tipo_de=None, maximo=8):
+    """Los nombres de los programas que hay en Descargas (lo más nuevo primero), para decírselos al dueño."""
+    if tipo_de is None:
+        import apps_externas_kira as aex
+        tipo_de = aex.tipo_archivo
+    r = []
+    for c in (carpetas if carpetas is not None else carpetas_descargas()):
+        try:
+            for n in os.listdir(c):
+                ruta = os.path.join(c, n)
+                if n.startswith(".") or n.endswith(_EN_CURSO) or not os.path.isfile(ruta) or tipo_de(n) == "":
+                    continue
+                if os.path.getsize(ruta) == 0:
+                    continue
+                r.append((os.path.getmtime(ruta), n))
+        except OSError:
+            continue
+    return [n for _m, n in sorted(r, reverse=True)[:maximo]]
+
+
 def carpetas_descargas():
     casa = os.path.expanduser("~")
     return [os.path.join(casa, c) for c in ("Descargas", "Downloads") if os.path.isdir(os.path.join(casa, c))]

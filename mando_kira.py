@@ -115,6 +115,8 @@ _DEL_PORTATIL = re.compile(
     r"^(?:por favor\s+)?(?:"
     r"instala(?:me)?\s+(?:lo que (?:he|has)?\s*(?:descargado|bajado)|lo ultimo que|el archivo que)|"
     r"(?:instala|descarga|baja|bajate)(?:me|te)?\s+.+\s+(?:de|desde)\s+github$|"
+    r"instala(?:me)?\s+.+\s+(?:de|desde|en)\s+(?:la\s+carpeta\s+(?:de\s+)?)?(?:las\s+|mis\s+)?(?:descargas|downloads)$|"
+    r"instala(?:me)?\s+lo que (?:estoy|esta|se esta)\s+(?:descargando|bajando)|"
     r"(?:instala|descarga|baja|consigue)(?:me|te)?\s+(?:las\s+)?(?:dependencias|librerias)\s+de\b|"
     r"(?:descarga|baja)(?:me|te)?\s+lo que (?:necesita|le falta)\b|"
     r"trabaja (?:con|dentro de)\s+\S+\s*:|abre el taller de\b|maneja\s+\S+\s+por dentro\b|"
