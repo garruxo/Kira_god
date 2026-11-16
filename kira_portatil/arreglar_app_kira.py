@@ -499,9 +499,15 @@ def ordenes_de_texto(texto, carpeta=None):
             if not (2 < len(l) < 200):
                 continue
             l = a_linux(l, carpeta)
-            if l and l not in sal:
+            if l and not _EMPAQUETADO.search(l) and l not in sal:   # v3.96: nada de empaquetar .deb (necesita debhelper + root)
                 sal.append(l)
     return sal[:80]
+
+
+# v3.96: construir un .deb (debian/rules, dpkg-buildpackage, debuild, dh, fakeroot…) NO es compilar el programa:
+# necesita debhelper y administrador. Se salta; se compila el código de verdad (src/, configure/make…).
+_EMPAQUETADO = re.compile(r"(?i)(^|[^\w])(dpkg-buildpackage|debuild|dh|dh_[a-z_]+|fakeroot|pdebuild|sbuild|"
+                          r"equivs-build|dpkg-deb)\b|debian/rules\b")
 
 
 DATOS = os.environ.get("KIRA_DATOS_NUCLEO", os.path.expanduser("~/kira_portatil/kira_datos"))
@@ -800,11 +806,40 @@ _SISTEMAS_CONSTRUIR = ("Makefile", "makefile", "CMakeLists.txt", "configure", "c
                        "Cargo.toml", "go.mod", "autogen.sh")
 
 
+_SUB_FUENTE = ("src", "source", "Source", "sources")
+_NO_SUB = {"debian", ".git", ".github", "node_modules", "__pycache__", ".venv", "venv", "tests", "test", "docs",
+           "doc", "examples", "contrib", "packaging", "pkg", "rpm"}
+
+
+def carpeta_construir(carpeta):
+    """La carpeta donde está el sistema de compilar: la raíz si lo tiene; si no, src/ (o el ÚNICO subdirectorio con
+    código). Así un programa cuya raíz solo trae debian/ (empaquetado) + README se compila en src/. PURO."""
+    if not carpeta or not os.path.isdir(carpeta):
+        return carpeta
+    tiene = lambda d: any(os.path.isfile(os.path.join(d, f)) for f in _SISTEMAS_CONSTRUIR)   # noqa: E731
+    if tiene(carpeta):
+        return carpeta
+    for sub in _SUB_FUENTE:
+        d = os.path.join(carpeta, sub)
+        if os.path.isdir(d) and tiene(d):
+            return d
+    try:
+        hijos = [os.path.join(carpeta, x) for x in os.listdir(carpeta)
+                 if os.path.isdir(os.path.join(carpeta, x)) and x not in _NO_SUB and not x.startswith(".")]
+    except OSError:
+        hijos = []
+    con = [h for h in hijos if tiene(h)]
+    if len(con) == 1:
+        return con[0]
+    return carpeta
+
+
 def necesita_construir(carpeta, lanzar=None):
     """¿Es un programa que hay que COMPILAR/INSTALAR por la terminal antes de usarlo? PURO."""
     if not carpeta or not os.path.isdir(carpeta):
         return False
-    hay = [f for f in _SISTEMAS_CONSTRUIR if os.path.isfile(os.path.join(carpeta, f))]
+    d = carpeta_construir(carpeta)
+    hay = [f for f in _SISTEMAS_CONSTRUIR if os.path.isfile(os.path.join(d, f))]
     if not hay:
         return False
     if not lanzar:
@@ -813,9 +848,13 @@ def necesita_construir(carpeta, lanzar=None):
 
 
 def pasos_por_defecto(carpeta):
-    """Si el README no dice cómo, lo normal de su sistema de compilar. Lista de líneas de terminal. PURO."""
-    j = lambda f: os.path.isfile(os.path.join(carpeta, f))     # noqa: E731
+    """Si el README no dice cómo, lo normal de su sistema de compilar. Lista de líneas de terminal. PURO.
+    v3.96: compila en la carpeta de código (p.ej. «cd src» si la raíz solo trae debian/ + README)."""
+    d = carpeta_construir(carpeta)
+    j = lambda f: os.path.isfile(os.path.join(d, f))           # noqa: E731
     p = []
+    if d != carpeta:
+        p.append("cd " + os.path.relpath(d, carpeta).replace("\\", "/"))
     if j(".gitmodules"):
         p.append("git submodule update --init --recursive")
     if j("autogen.sh") and not j("configure"):
@@ -869,7 +908,7 @@ def lanzador_construido(carpeta, desde, nombre=""):
     build/, target/release/, bin/. Devuelve [ruta] o None."""
     cand = []
     for raiz, dirs, fich in os.walk(carpeta):
-        dirs[:] = [d for d in dirs if d not in (".git", "CMakeFiles", "node_modules", "deps", "_deps", ".cargo")]
+        dirs[:] = [d for d in dirs if d not in (".git", "CMakeFiles", "node_modules", "deps", "_deps", ".cargo", "debian")]
         if raiz[len(carpeta):].count(os.sep) > 5:
             dirs[:] = []
             continue

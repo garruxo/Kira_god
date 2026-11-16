@@ -289,10 +289,11 @@ def _carpeta_id(nombre):
 
 
 _NO_MIRAR = {".git", ".github", ".gitlab", ".svn", ".hg", "node_modules", "__pycache__", ".venv", "venv", ".tox",
-             ".idea", ".vscode", "tests", "test", "docs", "doc", "examples", "CMakeFiles"}
+             ".idea", ".vscode", "tests", "test", "docs", "doc", "examples", "CMakeFiles",
+             "debian"}   # v3.96: debian/ es el EMPAQUETADO (debian/rules necesita debhelper); no es el programa
 _NO_PROGRAMA = re.compile(r"(?i)(\.(sample|so(\.\d+)*|a|o|txt|md|rst|desktop|json|ya?ml|toml|cfg|ini|png|jpe?g|svg|"
                           r"ico|html?|css|js|map|lock|pem|crt|log)$|^(configure|config\.(guess|sub|status)|install-sh|"
-                          r"missing|depcomp|compile|ltmain\.sh|libtool|test-driver|mkinstalldirs|gradlew(\.bat)?|mvnw)$)")
+                          r"missing|depcomp|compile|ltmain\.sh|libtool|test-driver|mkinstalldirs|gradlew(\.bat)?|mvnw|rules)$)")
 
 
 def _no_es_programa(nombre):
